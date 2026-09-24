@@ -1,0 +1,238 @@
+<!-- Panel protegido para administrar inventario, usuarios, reasignaciones y taller.
+  La plantilla muestra una sola sección activa para evitar mezclar formularios. -->
+<main class="admin-shell">
+  <header class="admin-header">
+    <div>
+      <p class="eyebrow">CONTROL ADMINISTRATIVO</p>
+      <h1>Panel de administrador</h1>
+      <p>Gestiona dispositivos, movimientos y usuarios del sistema.</p>
+    </div>
+    <div class="admin-header-actions">
+      <button type="button" class="refresh-button" (click)="loadData()">Refrescar panel</button>
+      <button type="button" class="logout-button" (click)="logout()">Cerrar sesión</button>
+    </div>
+  </header>
+
+  <nav class="admin-tabs" aria-label="Secciones administrativas">
+    <button type="button" [class.active]="activeSection === 'devices'"
+      (click)="selectSection('devices')">Dispositivos</button>
+    <button type="button" [class.active]="activeSection === 'reassignments'"
+      (click)="selectSection('reassignments')">Reasignaciones</button>
+    <button type="button" [class.active]="activeSection === 'users'" (click)="selectSection('users')">Usuarios</button>
+    <button type="button" [class.active]="activeSection === 'workshop'"
+      (click)="selectSection('workshop')">Taller</button>
+  </nav>
+
+  @if (message) { <p class="feedback success" role="status">{{ message }}</p> }
+  @if (errorMessage) { <p class="feedback error" role="alert">{{ errorMessage }}</p> }
+
+  <!-- Sección de dispositivos -->
+  @if (activeSection === 'devices') {
+  <section class="admin-section">
+    <form #deviceForm="ngForm" class="admin-form" (ngSubmit)="addDevice()">
+      <h2>Agregar dispositivo</h2>
+      <input [(ngModel)]="newDevice.CodigoInventario" name="codigo" placeholder="Código de inventario" required />
+      <input [(ngModel)]="newDevice.NoSerie" name="serie" placeholder="Número de serie" required />
+      <input [(ngModel)]="newDevice.Marca" name="marca" placeholder="Marca" required />
+      <input [(ngModel)]="newDevice.Modelo" name="modelo" placeholder="Modelo" required />
+      <select [(ngModel)]="newDevice.IdTipo" name="tipo" required>
+        <option [ngValue]="null">Tipo de dispositivo</option>
+        @for (type of deviceTypes; track type.IdTipo) { <option [ngValue]="type.IdTipo">{{ type.NombreTipo || 'Tipo ' +
+          type.IdTipo }}</option> }
+      </select>
+      <select [(ngModel)]="newDevice.Estado" name="estado" required>
+        <option value="DISPONIBLE">Disponible</option>
+        <option value="ASIGNADO">Asignado</option>
+      </select>
+      <select [(ngModel)]="newDevice.NumeroPagoAsignado" (ngModelChange)="setAreaFromPayment($event)" name="pago">
+        <option [ngValue]="null">Sin asignar</option>
+        @for (employee of employees; track employee.NoPago) { <option [ngValue]="employee.NoPago">{{ employee.NoPago }}
+          · {{ employee.NombreCompleto }}</option> }
+      </select>
+      <select [(ngModel)]="newDevice.IdArea" name="area">
+        <option [ngValue]="null">Sin área</option>
+        @for (area of areas; track area.IdArea) { <option [ngValue]="area.IdArea">{{ area.NombreArea }}</option> }
+      </select>
+      <button type="submit" [disabled]="deviceForm.invalid">{{ editingDeviceId === null ? 'Agregar dispositivo' :
+        'Guardar cambios' }}</button>
+      @if (editingDeviceId !== null) { <button type="button" class="secondary" (click)="cancelEdit()">Cancelar</button>
+      }
+    </form>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Código inventario</th>
+            <th>Número de serie</th>
+            <th>Marca</th>
+            <th>Modelo</th>
+            <th>Tipo</th>
+            <th>Estado</th>
+            <th>Número de pago</th>
+            <th>Asignado a</th>
+            <th>Área</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>@for (device of pagedDevices; track device.IdEquipo) { <tr>
+            <td>{{ device.IdEquipo }}</td>
+            <td>{{ device.CodigoInventario }}</td>
+            <td>{{ device.NoSerie }}</td>
+            <td>{{ device.Marca }}</td>
+            <td>{{ device.Modelo }}</td>
+            <td>{{ device.NombreTipo || device.IdTipo || '-' }}</td>
+            <td>{{ device.Estado }}</td>
+            <td>{{ device.NumeroPagoAsignado || '-' }}</td>
+            <td>{{ device.AsignadoA || 'Sin asignar' }}</td>
+            <td>{{ device.NombreArea || 'Sin área' }}</td>
+            <td><button type="button" class="secondary" (click)="editDevice(device)">Editar</button><button
+                type="button" class="danger" (click)="askRemoveDevice(device.IdEquipo)">Quitar</button></td>
+          </tr> }</tbody>
+      </table>
+    </div>
+    <nav class="pagination" aria-label="Paginación de dispositivos">
+      <button type="button" (click)="goToPage(currentPage - 1)" [disabled]="currentPage === 1">Anterior</button>
+      <span>Página {{ currentPage }} de {{ totalPages }} · {{ devices.length }} registros</span>
+      <button type="button" (click)="goToPage(currentPage + 1)"
+        [disabled]="currentPage === totalPages">Siguiente</button>
+    </nav>
+  </section>
+  }
+
+  <!-- Formulario y tabla de cambios de responsable. -->
+  @if (activeSection === 'reassignments') {
+  <section class="admin-section">
+    <form class="admin-form compact" (ngSubmit)="addReassignment()">
+      <h2>Registrar reasignación</h2>
+      <select [ngModel]="selectedInventoryCode" (ngModelChange)="selectDeviceForReassignment($event)" name="equipo"
+        required>
+        <option value="">Código de inventario</option>
+        @for (device of devices; track device.IdEquipo) { <option [value]="device.CodigoInventario">{{
+          device.CodigoInventario }} · {{ device.Marca }} {{ device.Modelo }}</option> }
+      </select>
+      <input [(ngModel)]="newReassignment.NoPagoNuevo" name="nuevoPago" placeholder="Número de Pago" />
+      <input [(ngModel)]="newReassignment.NombreNuevo" name="nuevoNombre" placeholder="Nombres y Apellidos" />
+      <input [(ngModel)]="newReassignment.Motivo" name="motivo" placeholder="Motivo del Cambio" required />
+      <button type="submit">Registrar reasignación</button>
+    </form>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Código inventario</th>
+            <th>Anterior</th>
+            <th>Nuevo</th>
+            <th>Fecha</th>
+            <th>Motivo</th>
+          </tr>
+        </thead>
+        <tbody>@for (item of reassignments; track item.IdReasignacion) { <tr>
+            <td>{{ getInventoryCode(item.IdEquipo) }}</td>
+            <td>{{ item.NoPagoAnterior }}</td>
+            <td>{{ item.NoPagoNuevo }}</td>
+            <td>{{ item.FechaCambio | date }}</td>
+            <td>{{ item.Motivo }}</td>
+          </tr> }</tbody>
+      </table>
+    </div>
+  </section>
+  }
+
+  <!-- Alta y eliminación de usuarios del sistema. -->
+  @if (activeSection === 'users') {
+  <section class="admin-section">
+    <form class="admin-form compact" (ngSubmit)="addUser()">
+      <h2>Agregar usuario</h2>
+      <input [(ngModel)]="newUser.Usuario" name="usuario" placeholder="Usuario" required />
+      <input [(ngModel)]="newUser.Password" name="password" type="password" placeholder="Contraseña" required />
+      <select [(ngModel)]="newUser.Rol" name="rol">
+        <option value="Admin">Admin</option>
+        <option value="UsuarioComun">UsuarioComun</option>
+        <option value="Taller">Taller</option>
+      </select>
+      <button type="submit">Agregar usuario</button>
+    </form>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Usuario</th>
+            <th>Rol</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>@for (user of users; track user.IdUsuario) { <tr>
+            <td>{{ user.IdUsuario }}</td>
+            <td>{{ user.Usuario }}</td>
+            <td>{{ user.Rol }}</td>
+            <td><button type="button" class="danger" (click)="askRemoveUser(user.IdUsuario)">Quitar</button></td>
+          </tr> }</tbody>
+      </table>
+    </div>
+  </section>
+  }
+
+  <!-- Modal para editar un equipo sin abandonar la sección actual. -->
+  @if (isEditDialogOpen) {
+  <div class="modal-backdrop" role="presentation" (click)="cancelEdit()">
+    <section class="edit-modal" role="dialog" aria-modal="true" aria-labelledby="edit-device-title"
+      (click)="$event.stopPropagation()">
+      <div class="modal-heading">
+        <div>
+          <p class="eyebrow">CORREGIR REGISTRO</p>
+          <h2 id="edit-device-title">Editar dispositivo</h2>
+        </div>
+        <button type="button" class="modal-close" aria-label="Cerrar edición" (click)="cancelEdit()">×</button>
+      </div>
+      <form class="modal-form" (ngSubmit)="saveEditedDevice()">
+        <input [(ngModel)]="newDevice.CodigoInventario" name="editCodigo" placeholder="Código de inventario" required />
+        <input [(ngModel)]="newDevice.NoSerie" name="editSerie" placeholder="Número de serie" required />
+        <input [(ngModel)]="newDevice.Marca" name="editMarca" placeholder="Marca" required />
+        <input [(ngModel)]="newDevice.Modelo" name="editModelo" placeholder="Modelo" required />
+        <select [(ngModel)]="newDevice.IdTipo" name="editTipo" required>
+          <option [ngValue]="null">Tipo de dispositivo</option>@for (type of deviceTypes; track type.IdTipo) { <option
+            [ngValue]="type.IdTipo">{{ type.NombreTipo }}</option> }
+        </select>
+        <select [(ngModel)]="newDevice.Estado" name="editEstado" required>
+          <option value="DISPONIBLE">Disponible</option>
+          <option value="ASIGNADO">Asignado</option>
+        </select>
+        <select [(ngModel)]="newDevice.NumeroPagoAsignado" name="editPago">
+          <option [ngValue]="null">Sin asignar</option>@for (employee of employees; track employee.NoPago) { <option
+            [ngValue]="employee.NoPago">{{ employee.NoPago }} · {{ employee.NombreCompleto }}</option> }
+        </select>
+        <select [(ngModel)]="newDevice.IdArea" name="editArea">
+          <option [ngValue]="null">Sin área</option>@for (area of areas; track area.IdArea) { <option
+            [ngValue]="area.IdArea">{{ area.NombreArea }}</option> }
+        </select>
+        <div class="modal-actions"><button type="button" class="secondary"
+            (click)="cancelEdit()">Cancelar</button><button type="submit">Guardar cambios</button></div>
+      </form>
+    </section>
+  </div>
+  }
+
+  <!-- Modal común de confirmación para quitar equipos o usuarios. -->
+  @if (isDeleteDialogOpen) {
+  <div class="modal-backdrop" role="presentation"
+    (click)="pendingDeviceId !== null ? cancelRemoveDevice() : cancelRemoveUser()">
+    <section class="delete-modal" role="dialog" aria-modal="true" aria-labelledby="delete-title"
+      (click)="$event.stopPropagation()">
+      <p class="eyebrow">CONFIRMAR ACCIÓN</p>
+      <h2 id="delete-title">¿Quieres quitar este registro?</h2>
+      <p>Esta acción eliminará el registro de la base de datos.</p>
+      <div class="modal-actions"><button type="button" class="secondary"
+          (click)="pendingDeviceId !== null ? cancelRemoveDevice() : cancelRemoveUser()">Cancelar</button><button
+          type="button" class="danger modal-danger"
+          (click)="pendingDeviceId !== null ? confirmRemoveDevice() : confirmRemoveUser()">Confirmar
+          eliminación</button></div>
+    </section>
+  </div>
+  }
+
+  @if (activeSection === 'workshop') {
+    <app-taller [embedded]="true" />
+  }
+</main>

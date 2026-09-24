@@ -1,0 +1,74 @@
+/* Estilos globales: tipografías, reset mínimo y acciones compartidas entre paneles.
+    Las clases de refresco y cierre de sesión se definen aquí para que mantengan
+    la misma apariencia en Admin, Inventario y Taller. */
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
+
+:root {
+    font-family: 'DM Sans', sans-serif;
+    color: #203238;
+    background: #edf4f2;
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; }
+button, input { font: inherit; }
+
+.refresh-button,
+.admin-shell .refresh-button,
+.inventory-shell .refresh-button,
+.workshop-shell .refresh-button {
+    padding: .78rem 1rem !important;
+    border: 0 !important;
+    border-radius: 5px !important;
+    color: #fff !important;
+    background: #276968 !important;
+    box-shadow: 0 4px 10px rgba(39, 105, 104, .14);
+    cursor: pointer;
+    font-weight: 700;
+    transition: background .2s, box-shadow .2s, transform .2s;
+}
+
+.refresh-button:hover:not(:disabled),
+.admin-shell .refresh-button:hover:not(:disabled),
+.inventory-shell .refresh-button:hover:not(:disabled),
+.workshop-shell .refresh-button:hover:not(:disabled) {
+    background: #1b5252 !important;
+    box-shadow: 0 6px 14px rgba(39, 105, 104, .2);
+    transform: translateY(-1px);
+}
+
+.refresh-button:disabled {
+    cursor: wait;
+    opacity: .65;
+}
+
+.admin-shell .logout-button,
+.inventory-shell .logout-button,
+.workshop-shell .logout-button {
+    padding: .72rem 1rem !important;
+    border: 1px solid #d99b93 !important;
+    border-radius: 6px !important;
+    color: #9b3f38 !important;
+    background: #fff !important;
+    box-shadow: 0 3px 8px rgba(155, 63, 56, .08);
+    cursor: pointer;
+    font-weight: 700;
+    transition: background .2s, border-color .2s, box-shadow .2s, transform .2s;
+}
+
+.admin-shell .logout-button:hover,
+.inventory-shell .logout-button:hover,
+.workshop-shell .logout-button:hover {
+    border-color: #bd5b52 !important;
+    background: #fcece9 !important;
+    box-shadow: 0 5px 12px rgba(155, 63, 56, .14);
+    transform: translateY(-1px);
+}
+
+.workshop-header-actions {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+}

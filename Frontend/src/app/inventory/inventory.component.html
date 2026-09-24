@@ -1,0 +1,169 @@
+<!-- Vista de inventario para consulta y operaciones de usuarios autorizados.
+    Las pestañas cambian el conjunto de datos que se solicita a la API. -->
+<main class="inventory-shell">
+    <header class="inventory-header">
+        <div>
+            <p class="eyebrow">CONTROL DE INVENTARIO</p>
+            <h1>Inventario</h1>
+            <p>Consulta dispositivos y registra nuevas operaciones.</p>
+        </div>
+        <div class="inventory-header-actions">
+            <button type="button" class="refresh-button" (click)="refreshPanel()">Refrescar panel</button>
+            <button type="button" class="logout-button" (click)="logout()">Cerrar sesión</button>
+        </div>
+    </header>
+
+    <nav class="inventory-tabs" aria-label="Secciones de inventario">
+        <button type="button" [class.active]="activeSection === 'devices'"
+            (click)="selectSection('devices')">Dispositivos</button>
+        <button type="button" [class.active]="activeSection === 'reassignments'"
+            (click)="selectSection('reassignments')">Reasignaciones</button>
+    </nav>
+
+    @if (message) { <p class="feedback success" role="status">{{ message }}</p> }
+    @if (errorMessage) { <p class="feedback error" role="alert">{{ errorMessage }}</p> }
+
+    <!-- Formulario, tabla y paginación de dispositivos. -->
+    @if (activeSection === 'devices') {
+    <section class="inventory-section">
+        <form class="inventory-form" (ngSubmit)="addDevice()">
+            <h2>Agregar dispositivo</h2>
+            <input [(ngModel)]="newDevice.CodigoInventario" name="codigo" placeholder="Código de inventario" required />
+            <input [(ngModel)]="newDevice.NoSerie" name="serie" placeholder="Número de serie" required />
+            <input [(ngModel)]="newDevice.Marca" name="marca" placeholder="Marca" required />
+            <input [(ngModel)]="newDevice.Modelo" name="modelo" placeholder="Modelo" required />
+            <select [(ngModel)]="newDevice.IdTipo" name="tipo" required>
+                <option [ngValue]="null">Tipo de dispositivo</option>@for (type of deviceTypes; track type.IdTipo) {
+                <option [ngValue]="type.IdTipo">{{ type.NombreTipo }}</option> }
+            </select>
+            <select [(ngModel)]="newDevice.Estado" name="estado" required>
+                <option value="DISPONIBLE">Disponible</option>
+                <option value="ASIGNADO">Asignado</option>
+            </select>
+            <select [(ngModel)]="newDevice.NumeroPagoAsignado" (ngModelChange)="setAreaFromPayment($event)" name="pago">
+                <option [ngValue]="null">Sin asignar</option>@for (employee of employees; track employee.NoPago) {
+                <option [ngValue]="employee.NoPago">{{ employee.NoPago }} · {{ employee.NombreCompleto }}</option> }
+            </select>
+            <select [(ngModel)]="newDevice.IdArea" name="area">
+                <option [ngValue]="null">Sin área</option>@for (area of areas; track area.IdArea) { <option
+                    [ngValue]="area.IdArea">{{ area.NombreArea }}</option> }
+            </select>
+            <button type="submit">Agregar dispositivo</button>
+        </form>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Código</th>
+                        <th>Serie</th>
+                        <th>Marca</th>
+                        <th>Modelo</th>
+                        <th>Tipo</th>
+                        <th>Estado</th>
+                        <th>Pago</th>
+                        <th>Asignado a</th>
+                        <th>Área</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>@for (device of pagedDevices; track device.IdEquipo) { <tr>
+                        <td>{{ device.IdEquipo }}</td>
+                        <td>{{ device.CodigoInventario }}</td>
+                        <td>{{ device.NoSerie }}</td>
+                        <td>{{ device.Marca }}</td>
+                        <td>{{ device.Modelo }}</td>
+                        <td>{{ device.NombreTipo || device.IdTipo || '-' }}</td>
+                        <td>{{ device.Estado }}</td>
+                        <td>{{ device.NumeroPagoAsignado || '-' }}</td>
+                        <td>{{ device.AsignadoA || 'Sin asignar' }}</td>
+                        <td>{{ device.NombreArea || 'Sin área' }}</td>
+                        <td><button type="button" class="secondary" (click)="editDevice(device)">Editar</button></td>
+                    </tr> }</tbody>
+            </table>
+        </div>
+        <nav class="pagination"><button type="button" (click)="goToPage(currentPage - 1)"
+                [disabled]="currentPage === 1">Anterior</button><span>Página {{ currentPage }} de {{ totalPages }} · {{
+                devices.length }} registros</span><button type="button" (click)="goToPage(currentPage + 1)"
+                [disabled]="currentPage === totalPages">Siguiente</button></nav>
+    </section>
+    }
+
+    <!-- Registro y consulta de reasignaciones. -->
+    @if (activeSection === 'reassignments') {
+    <section class="inventory-section">
+        <form class="inventory-form compact" (ngSubmit)="addReassignment()">
+            <h2>Registrar reasignación</h2>
+            <select [ngModel]="selectedInventoryCode" (ngModelChange)="selectDevice($event)" name="equipo" required>
+                <option value="">Código de inventario</option>@for (device of devices; track device.IdEquipo) { <option
+                    [value]="device.CodigoInventario">{{ device.CodigoInventario }} · {{ device.Marca }} {{
+                    device.Modelo }}</option> }
+            </select>
+            <input [(ngModel)]="newReassignment.NoPagoNuevo" name="pago" placeholder="Número de pago" />
+            <input [(ngModel)]="newReassignment.NombreNuevo" name="nombre" placeholder="Nombres y Apellidos" />
+            <input [(ngModel)]="newReassignment.Motivo" name="motivo" placeholder="Motivo" required />
+            <button type="submit">Registrar reasignación</button>
+        </form>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Código</th>
+                        <th>Anterior</th>
+                        <th>Nuevo</th>
+                        <th>Fecha</th>
+                        <th>Motivo</th>
+                    </tr>
+                </thead>
+                <tbody>@for (item of reassignments; track item.IdReasignacion) { <tr>
+                        <td>{{ getInventoryCode(item.IdEquipo) }}</td>
+                        <td>{{ item.NoPagoAnterior }}</td>
+                        <td>{{ item.NoPagoNuevo }}</td>
+                        <td>{{ item.FechaCambio | date }}</td>
+                        <td>{{ item.Motivo }}</td>
+                    </tr> }</tbody>
+            </table>
+        </div>
+    </section>
+    }
+
+    <!-- Edición modal de un dispositivo existente. -->
+    @if (isEditDialogOpen) {
+    <div class="modal-backdrop" role="presentation" (click)="cancelEdit()">
+        <section class="edit-modal" role="dialog" aria-modal="true" aria-labelledby="inventory-edit-title"
+            (click)="$event.stopPropagation()">
+            <div class="modal-heading">
+                <div>
+                    <p class="eyebrow">CORREGIR REGISTRO</p>
+                    <h2 id="inventory-edit-title">Editar dispositivo</h2>
+                </div><button type="button" class="modal-close" (click)="cancelEdit()">×</button>
+            </div>
+            <form class="modal-form" (ngSubmit)="saveEditedDevice()">
+                <input [(ngModel)]="newDevice.CodigoInventario" name="editCodigo" placeholder="Código de inventario"
+                    required />
+                <input [(ngModel)]="newDevice.NoSerie" name="editSerie" placeholder="Número de serie" required />
+                <input [(ngModel)]="newDevice.Marca" name="editMarca" placeholder="Marca" required />
+                <input [(ngModel)]="newDevice.Modelo" name="editModelo" placeholder="Modelo" required />
+                <select [(ngModel)]="newDevice.IdTipo" name="editTipo" required>
+                    <option [ngValue]="null">Tipo de dispositivo</option>@for (type of deviceTypes; track type.IdTipo) {
+                    <option [ngValue]="type.IdTipo">{{ type.NombreTipo }}</option> }
+                </select>
+                <select [(ngModel)]="newDevice.Estado" name="editEstado" required>
+                    <option value="DISPONIBLE">Disponible</option>
+                    <option value="ASIGNADO">Asignado</option>
+                </select>
+                <select [(ngModel)]="newDevice.NumeroPagoAsignado" name="editPago">
+                    <option [ngValue]="null">Sin asignar</option>@for (employee of employees; track employee.NoPago) {
+                    <option [ngValue]="employee.NoPago">{{ employee.NoPago }} · {{ employee.NombreCompleto }}</option> }
+                </select>
+                <select [(ngModel)]="newDevice.IdArea" name="editArea">
+                    <option [ngValue]="null">Sin área</option>@for (area of areas; track area.IdArea) { <option
+                        [ngValue]="area.IdArea">{{ area.NombreArea }}</option> }
+                </select>
+                <div class="modal-actions"><button type="button" class="secondary"
+                        (click)="cancelEdit()">Cancelar</button><button type="submit">Guardar cambios</button></div>
+            </form>
+        </section>
+    </div>
+    }
+</main>

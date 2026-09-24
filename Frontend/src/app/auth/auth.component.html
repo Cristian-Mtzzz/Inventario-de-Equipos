@@ -1,0 +1,37 @@
+<!-- Pantalla pública de autenticación; no requiere un token previo. -->
+<main class="auth-shell">
+  <header class="app-header">
+    <img class="brand-logo" src="/logo%20ihss.ico" alt="IHSS" />
+    <span class="header-title">Sistema Inventario</span>
+  </header>
+  <section class="form-panel">
+    <div class="form-wrap">
+      <p class="eyebrow">BIENVENIDO DE NUEVO</p>
+      <h2>Inicia sesion</h2>
+      <p class="form-intro">Ingresa tus datos para continuar al panel.</p>
+      <form [formGroup]="loginForm" (ngSubmit)="submitLogin()" novalidate>
+        <label for="userName">Usuario</label>
+        <input id="userName" type="text" formControlName="userName" autocomplete="username"
+          placeholder="Tu nombre de usuario" />
+        @if (loginForm.controls.userName.touched && loginForm.controls.userName.invalid) { <small
+          class="field-error">Ingresa tu nombre de usuario.</small> }
+        <label for="password">Contrasena</label>
+        <div class="password-field">
+          <input id="password" [type]="showPassword ? 'text' : 'password'" formControlName="password"
+            autocomplete="current-password" placeholder="Tu contrasena" />
+          <button type="button" class="password-toggle" (click)="showPassword = !showPassword"
+            [attr.aria-label]="showPassword ? 'Ocultar contrasena' : 'Mostrar contrasena'">{{ showPassword ? 'Ocultar' :
+            'Ver' }}</button>
+        </div>
+        @if (loginForm.controls.password.touched && loginForm.controls.password.invalid) { <small
+          class="field-error">Usa una contrasena de al menos 6 caracteres.</small> }
+        @if (errorMessage()) { <p class="error-banner" role="alert">{{ errorMessage() }}</p> }
+        <button class="submit-button" type="submit" [disabled]="isLoading()"><span>{{ isLoading() ? 'Validando...' :
+            'Entrar
+            al sistema' }}</span>@if (!isLoading()) { <span aria-hidden="true">&rarr;</span> }</button>
+      </form>
+      <p class="security-note"><span aria-hidden="true">&#9672;</span> Conexion segura y protegida</p>
+    </div>
+    <footer>© 2026 Sistema Inventario de Equipo <span>·</span> Acceso autorizado</footer>
+  </section>
+</main>

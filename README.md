@@ -1,59 +1,96 @@
 # SistemaInventario
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 22.1.8.
+Proyecto completo de control de inventario:
 
-## Development server
+- `Frontend`: aplicación Angular.
+- `Backend`: API ASP.NET Core y conexión Oracle.
 
-To start a local development server, run:
+## Ejecutar la API
 
-```bash
-ng serve
+```powershell
+Set-Location Backend/SistemaInventario.Api
+dotnet user-secrets init
+dotnet user-secrets set "ConnectionStrings:OracleConnection" "User Id=USUARIO;Password=CONTRASENA;Data Source=HIHSS"
+dotnet user-secrets set "Oracle:TnsAdmin" "C:\app\alexander\product\11.2.0\client_1\network\admin"
+dotnet user-secrets set "Jwt:Key" "una-clave-secreta-de-minimo-32-caracteres"
+dotnet run --launch-profile http
 ```
 
-Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
+## Ejecutar Angular
 
-## Code scaffolding
+En otra terminal:
 
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
-
-```bash
-ng generate component component-name
+```powershell
+Set-Location Frontend
+npm.cmd start
 ```
 
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
+Abre `http://localhost:4200/login`. El proxy de Angular conecta `/api` con `http://localhost:5074`.
 
-```bash
-ng generate --help
+## Verificar Oracle
+
+```powershell
+Invoke-RestMethod http://localhost:5074/api/health
 ```
 
-## Building
+La conexión usa el alias empresarial `HIHSS` definido en `C:\app\alexander\product\11.2.0\client_1\network\admin\tnsnames.ora`. La API usa la tabla existente `USUARIOS` con `ID_USUARIO`, `USUARIO`, `PASSWORD_HASH` y `ROL`. No crea ni modifica tablas. La validación usa `ORA_HASH(password, 4294967295) || ORA_HASH(usuario, 4294967295)`.
 
-To build the project run:
+## Módulo administrador
 
-```bash
-ng build
+Los usuarios con rol `Admin` pueden abrir `http://localhost:4200/admin` para agregar y quitar dispositivos, registrar reasignaciones y agregar o quitar usuarios. Las operaciones están protegidas por JWT y rol `Admin` bajo `/api/admin`.
+
+## Validar ambos proyectos
+
+```powershell
+dotnet build Backend/SistemaInventario.Api/SistemaInventario.Api.csproj
+Set-Location Frontend
+npm.cmd run build
+npm.cmd test -- --watch=false --no-progress
+```# SistemaInventario
+
+Frontend Angular y API ASP.NET Core para el login contra Oracle.
+
+## Configurar Oracle y JWT
+
+Desde `Backend/SistemaInventario.Api` ejecuta:
+
+```powershell
+dotnet user-secrets init
+dotnet user-secrets set "ConnectionStrings:OracleConnection" "User Id=INVENTARIO;Password=TU_PASSWORD;Data Source=localhost:1521/XEPDB1"
+dotnet user-secrets set "Jwt:Key" "una-clave-local-de-32-caracteres-o-mas"
 ```
 
-This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
+La API no crea ni modifica tablas. Usa la tabla empresarial `USUARIOS` que ya existe en Oracle y consulta `ID_USUARIO`, `USUARIO`, `PASSWORD_HASH` y `ROL`. La verificacion usa `ORA_HASH(password, 4294967295) || ORA_HASH(usuario, 4294967295)`, igual que la actualizacion existente de usuarios.
 
-## Running unit tests
+## Ejecutar en desarrollo
 
-To execute unit tests with the [Vitest](https://vitest.dev/) test runner, use the following command:
+Terminal 1, API:
 
-```bash
-ng test
+```powershell
+Set-Location Backend/SistemaInventario.Api
+dotnet run --launch-profile http
 ```
 
-## Running end-to-end tests
+Terminal 2, Angular:
 
-For end-to-end (e2e) testing, run:
-
-```bash
-ng e2e
+```powershell
+npm.cmd start
 ```
 
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
+Abre `http://localhost:4200/login`. El proxy de Angular redirige `/api` a `http://localhost:5074`.
 
-## Additional Resources
+## Verificar la conexion
 
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
+```powershell
+Invoke-RestMethod http://localhost:5074/api/health
+```
+
+Una respuesta correcta es `{ "status": "ok", "database": "oracle" }`. El login usa `POST /api/auth/login` y devuelve un JWT con el usuario y su rol.
+
+## Validacion
+
+```powershell
+dotnet build Backend/SistemaInventario.Api/SistemaInventario.Api.csproj
+npm.cmd run build
+npm.cmd test -- --watch=false --no-progress
+```

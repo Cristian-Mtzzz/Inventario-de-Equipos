@@ -1,0 +1,219 @@
+<!-- Vista de recepción y seguimiento del ciclo de reparación.
+  El mismo componente puede funcionar solo o dentro del panel Admin. -->
+<main class="workshop-shell">
+  @if (!embedded) {
+  <header class="workshop-header">
+    <div>
+      <p class="eyebrow">CONTROL DE TALLER</p>
+      <h1>Reparaciones</h1>
+      <p>Registra el ingreso, el detalle de reparación y la salida de cada equipo.</p>
+    </div>
+    <div class="workshop-header-actions">
+      <button type="button" class="refresh-button" (click)="refreshPanel()">Refrescar panel</button>
+      <button type="button" class="logout-button" (click)="logout()">Cerrar sesión</button>
+    </div>
+  </header>
+  }
+
+  @if (message) { <p class="feedback success" role="status">{{ message }}</p> }
+  @if (errorMessage) { <p class="feedback error" role="alert">{{ errorMessage }}</p> }
+
+  <section class="workshop-section">
+    <div class="workshop-actions">
+      <div>
+        <p class="eyebrow">OPERACIONES</p>
+        <h2>Seguimiento de reparaciones</h2>
+      </div>
+      <button type="button" (click)="openReceptionWindow()" [disabled]="isSaving">Registrar recepción</button>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Equipo</th>
+            <th>Serie</th>
+            <th>Dictamen</th>
+            <th>Tipo</th>
+            <th>Detalle de reparación</th>
+            <th>Ingreso</th>
+            <th>Salida</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          @if (isLoading) {
+          <tr>
+            <td colspan="8" class="empty">Cargando reparaciones...</td>
+          </tr>
+          } @else {
+          @for (item of maintenances; track item.IdReparacion) {
+          <tr>
+            <td>{{ item.CodigoInventario }} · {{ item.Marca }} {{ item.Modelo }}</td>
+            <td>{{ item.NoSerie }}</td>
+            <td>{{ item.Dictamen || 'Sin dictamen' }}</td>
+            <td>{{ item.TipoReparacion || 'Sin tipo' }}</td>
+            <td>{{ item.DetalleReparacion || 'Pendiente' }}</td>
+            <td>{{ item.FechaIngreso | date:'short' }}</td>
+            <td>{{ item.FechaSalida ? (item.FechaSalida | date:'short') : 'Pendiente' }}</td>
+            <td>
+              @if (isOpenMaintenance(item)) { <button type="button" class="secondary" (click)="openExitWindow(item)"
+                [disabled]="isSaving">Registrar salida</button> }
+              @if (isAdmin) { <button type="button" class="secondary" (click)="openEditWindow(item)"
+                [disabled]="isSaving">Editar</button><button type="button" class="danger"
+                (click)="deleteMaintenance(item)" [disabled]="isSaving">Eliminar</button> }
+              @if (!isOpenMaintenance(item)) { <span class="closed">Completado</span> }
+            </td>
+          </tr>
+          } @empty { <tr>
+            <td colspan="8" class="empty">Todavía no hay reparaciones registradas.</td>
+          </tr> }
+          }
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Modal de recepción: crea o reutiliza equipo, tipo y área. -->
+  @if (activeWindow === 'reception') {
+  <div class="modal-backdrop" role="presentation" (click)="closeWindow()">
+    <section class="workshop-modal" role="dialog" aria-modal="true" aria-labelledby="reception-title"
+      (click)="$event.stopPropagation()">
+      <div class="modal-heading">
+        <div>
+          <p class="eyebrow">RECEPCIÓN</p>
+          <h2 id="reception-title">Registrar ingreso al taller</h2>
+        </div><button type="button" class="modal-close" aria-label="Cerrar recepción" (click)="closeWindow()">×</button>
+      </div>
+      <form (ngSubmit)="saveReception()">
+        <label for="reception-inventory">Número de inventario</label>
+        <input id="reception-inventory" type="text" [(ngModel)]="reception.CodigoInventario" name="receptionInventory" placeholder="Ej. INV-0012" required />
+        <label for="reception-type">Tipo de dispositivo</label>
+        <select id="reception-type" [(ngModel)]="reception.TipoDispositivo" name="receptionType" required>
+          <option value="">Selecciona un tipo</option>
+          @for (type of deviceTypes; track type.IdTipo) { <option [value]="type.NombreTipo">{{ type.NombreTipo }}</option> }
+        </select>
+        <label for="reception-area">Área de origen / envío</label>
+        <input id="reception-area" type="text" [(ngModel)]="reception.AreaOrigen" name="receptionArea" placeholder="Ej. Administración, almacén, logística" required />
+        <label for="reception-date">Fecha y hora de ingreso</label>
+        <input id="reception-date" type="datetime-local" [(ngModel)]="reception.FechaIngreso" name="receptionDate" [readonly]="true" required />
+        <button type="submit" [disabled]="isSaving">{{ isSaving ? 'Guardando...' : 'Guardar recepción' }}</button>
+      </form>
+    </section>
+  </div>
+  }
+
+  <!-- Modal de ingreso tradicional a una reparación existente. -->
+  @if (activeWindow === 'entry') {
+  <div class="modal-backdrop" role="presentation" (click)="closeWindow()">
+    <section class="workshop-modal" role="dialog" aria-modal="true" aria-labelledby="entry-title"
+      (click)="$event.stopPropagation()">
+      <div class="modal-heading">
+        <div>
+          <p class="eyebrow">INGRESO A REPARACIÓN</p>
+          <h2 id="entry-title">Registrar ingreso</h2>
+        </div><button type="button" class="modal-close" aria-label="Cerrar ventana" (click)="closeWindow()">×</button>
+      </div>
+      <form (ngSubmit)="saveEntry()">
+        <label for="entry-device">Equipo</label>
+        <select id="entry-device" [(ngModel)]="entry.IdEquipo" name="entryDevice" required>
+          <option [ngValue]="0">Selecciona un equipo</option>
+          @for (device of devices; track device.IdEquipo) { <option [ngValue]="device.IdEquipo">{{
+            getDeviceLabel(device) }}</option> }
+        </select>
+        <label for="entry-date">Fecha de ingreso</label>
+        <input id="entry-date" type="datetime-local" [(ngModel)]="entry.FechaIngreso" name="entryDate" required />
+        <label for="entry-type">Tipo de reparación</label>
+        <input id="entry-type" type="text" [(ngModel)]="entry.TipoReparacion" name="entryType"
+          placeholder="Ej. Hardware, software o mantenimiento" />
+        <label for="entry-diagnosis">Dictamen</label>
+        <textarea id="entry-diagnosis" [(ngModel)]="entry.Dictamen" name="entryDiagnosis" rows="4"
+          placeholder="Describe la falla o dictamen inicial"></textarea>
+        <button type="submit" [disabled]="isSaving">{{ isSaving ? 'Guardando...' : 'Guardar ingreso' }}</button>
+      </form>
+    </section>
+  </div>
+  }
+
+  <!-- Modal para documentar la salida y trabajo realizado. -->
+  @if (activeWindow === 'exit' && selectedMaintenance) {
+  <div class="modal-backdrop" role="presentation" (click)="closeWindow()">
+    <section class="workshop-modal" role="dialog" aria-modal="true" aria-labelledby="exit-title"
+      (click)="$event.stopPropagation()">
+      <div class="modal-heading">
+        <div>
+          <p class="eyebrow">SALIDA DE REPARACIÓN</p>
+          <h2 id="exit-title">Registrar salida</h2>
+          <p class="modal-subtitle">{{ selectedMaintenance.CodigoInventario }} · {{ selectedMaintenance.Marca }} {{
+            selectedMaintenance.Modelo }}</p>
+        </div><button type="button" class="modal-close" aria-label="Cerrar ventana" (click)="closeWindow()">×</button>
+      </div>
+      <form (ngSubmit)="saveExit()">
+        <label for="exit-date">Fecha de salida</label>
+        <input id="exit-date" type="datetime-local" [(ngModel)]="exit.FechaSalida" name="exitDate" required />
+        <label for="exit-work">¿Qué se le hizo?</label>
+        <textarea id="exit-work" [(ngModel)]="exit.DetalleReparacion" name="exitWork" rows="5" required
+          placeholder="Describe la reparación, cambio o revisión realizada"></textarea>
+        <button type="submit" [disabled]="isSaving">{{ isSaving ? 'Guardando...' : 'Guardar salida' }}</button>
+      </form>
+    </section>
+  </div>
+  }
+
+  <!-- Edición administrativa completa de una reparación. -->
+  @if (activeWindow === 'edit' && selectedMaintenance) {
+  <div class="modal-backdrop" role="presentation" (click)="closeWindow()">
+    <section class="workshop-modal" role="dialog" aria-modal="true" aria-labelledby="edit-title"
+      (click)="$event.stopPropagation()">
+      <div class="modal-heading">
+        <div>
+          <p class="eyebrow">EDICIÓN ADMINISTRATIVA</p>
+          <h2 id="edit-title">Editar reparación</h2>
+          <p class="modal-subtitle">{{ selectedMaintenance.CodigoInventario }} · {{ selectedMaintenance.Marca }} {{
+            selectedMaintenance.Modelo }}</p>
+        </div><button type="button" class="modal-close" aria-label="Cerrar ventana" (click)="closeWindow()">×</button>
+      </div>
+      <form (ngSubmit)="saveEdit()">
+        <label for="edit-device">Equipo</label>
+        <select id="edit-device" [(ngModel)]="edit.IdEquipo" name="editDevice" required>
+          @for (device of devices; track device.IdEquipo) { <option [ngValue]="device.IdEquipo">{{
+            getDeviceLabel(device) }}</option> }
+        </select>
+        <label for="edit-entry-date">Fecha de ingreso</label>
+        <input id="edit-entry-date" type="datetime-local" [(ngModel)]="edit.FechaIngreso" name="editEntryDate"
+          required />
+        <label for="edit-type">Tipo de reparación</label>
+        <input id="edit-type" type="text" [(ngModel)]="edit.TipoReparacion" name="editType" />
+        <label for="edit-diagnosis">Dictamen</label>
+        <textarea id="edit-diagnosis" [(ngModel)]="edit.Dictamen" name="editDiagnosis" rows="3"></textarea>
+        <label for="edit-work">Detalle de reparación</label>
+        <textarea id="edit-work" [(ngModel)]="edit.DetalleReparacion" name="editWork" rows="4" required></textarea>
+        <label for="edit-exit-date">Fecha de salida</label>
+        <input id="edit-exit-date" type="datetime-local" [(ngModel)]="edit.FechaSalida" name="editExitDate" />
+        <button type="submit" [disabled]="isSaving">{{ isSaving ? 'Guardando...' : 'Guardar cambios' }}</button>
+      </form>
+    </section>
+  </div>
+  }
+
+  <!-- Confirmación modal antes de borrar una reparación. -->
+  @if (pendingDeleteMaintenance) {
+  <div class="modal-backdrop" role="presentation" (click)="cancelDeleteMaintenance()">
+    <section class="workshop-modal delete-modal" role="dialog" aria-modal="true" aria-labelledby="delete-maintenance-title"
+      (click)="$event.stopPropagation()">
+      <div class="modal-heading">
+        <div>
+          <p class="eyebrow">CONFIRMAR ACCIÓN</p>
+          <h2 id="delete-maintenance-title">¿Eliminar esta reparación?</h2>
+          <p class="modal-subtitle">Se eliminará el registro del equipo {{ pendingDeleteMaintenance.CodigoInventario }}.</p>
+        </div>
+        <button type="button" class="modal-close" aria-label="Cerrar confirmación" (click)="cancelDeleteMaintenance()">×</button>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="secondary" (click)="cancelDeleteMaintenance()">Cancelar</button>
+        <button type="button" class="danger modal-danger" (click)="confirmDeleteMaintenance()">Confirmar eliminación</button>
+      </div>
+    </section>
+  </div>
+  }
+</main>
