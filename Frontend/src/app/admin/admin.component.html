@@ -58,6 +58,23 @@
       @if (editingDeviceId !== null) { <button type="button" class="secondary" (click)="cancelEdit()">Cancelar</button>
       }
     </form>
+    <div class="filter-bar">
+      <input type="search" [(ngModel)]="searchTerm" (ngModelChange)="applyFilters()" name="adminSearch"
+        placeholder="Buscar por código o serie" />
+      <select [(ngModel)]="selectedBrand" (ngModelChange)="applyFilters()" name="adminBrand">
+        <option value="">Todas las marcas</option>
+        @for (brand of availableBrands; track brand) { <option [value]="brand">{{ brand }}</option> }
+      </select>
+      <select [(ngModel)]="selectedModel" (ngModelChange)="applyFilters()" name="adminModel">
+        <option value="">Todos los modelos</option>
+        @for (model of availableModels; track model) { <option [value]="model">{{ model }}</option> }
+      </select>
+      <select [(ngModel)]="selectedTypeId" (ngModelChange)="applyFilters()" name="adminType">
+        <option [ngValue]="null">Todos los tipos</option>
+        @for (type of deviceTypes; track type.IdTipo) { <option [ngValue]="type.IdTipo">{{ type.NombreTipo }}</option> }
+      </select>
+      <button type="button" class="secondary" (click)="clearFilters()">Limpiar</button>
+    </div>
     <div class="table-wrap">
       <table>
         <thead>
@@ -75,25 +92,31 @@
             <th>Acciones</th>
           </tr>
         </thead>
-        <tbody>@for (device of pagedDevices; track device.IdEquipo) { <tr>
-            <td>{{ device.IdEquipo }}</td>
-            <td>{{ device.CodigoInventario }}</td>
-            <td>{{ device.NoSerie }}</td>
-            <td>{{ device.Marca }}</td>
-            <td>{{ device.Modelo }}</td>
-            <td>{{ device.NombreTipo || device.IdTipo || '-' }}</td>
-            <td>{{ device.Estado }}</td>
-            <td>{{ device.NumeroPagoAsignado || '-' }}</td>
-            <td>{{ device.AsignadoA || 'Sin asignar' }}</td>
-            <td>{{ device.NombreArea || 'Sin área' }}</td>
-            <td><button type="button" class="secondary" (click)="editDevice(device)">Editar</button><button
-                type="button" class="danger" (click)="askRemoveDevice(device.IdEquipo)">Quitar</button></td>
-          </tr> }</tbody>
+        <tbody>
+          @if (filteredDevices.length === 0) {
+            <tr><td colspan="11">No se encontraron equipos con los filtros actuales.</td></tr>
+          } @else {
+            @for (device of pagedDevices; track device.IdEquipo) { <tr>
+              <td>{{ device.IdEquipo }}</td>
+              <td>{{ device.CodigoInventario }}</td>
+              <td>{{ device.NoSerie }}</td>
+              <td>{{ device.Marca }}</td>
+              <td>{{ device.Modelo }}</td>
+              <td>{{ device.NombreTipo || device.IdTipo || '-' }}</td>
+              <td>{{ device.Estado }}</td>
+              <td>{{ device.NumeroPagoAsignado || '-' }}</td>
+              <td>{{ device.AsignadoA || 'Sin asignar' }}</td>
+              <td>{{ device.NombreArea || 'Sin área' }}</td>
+              <td><button type="button" class="secondary" (click)="editDevice(device)">Editar</button><button
+                  type="button" class="danger" (click)="askRemoveDevice(device.IdEquipo)">Quitar</button></td>
+            </tr> }
+          }
+        </tbody>
       </table>
     </div>
     <nav class="pagination" aria-label="Paginación de dispositivos">
       <button type="button" (click)="goToPage(currentPage - 1)" [disabled]="currentPage === 1">Anterior</button>
-      <span>Página {{ currentPage }} de {{ totalPages }} · {{ devices.length }} registros</span>
+      <span>Página {{ currentPage }} de {{ totalPages }} · {{ filteredDevices.length }} registros</span>
       <button type="button" (click)="goToPage(currentPage + 1)"
         [disabled]="currentPage === totalPages">Siguiente</button>
     </nav>
@@ -153,6 +176,14 @@
       </select>
       <button type="submit">Agregar usuario</button>
     </form>
+    <div class="filter-bar">
+      <input type="search" [(ngModel)]="userSearchTerm" name="userSearch" placeholder="Buscar usuario" />
+      <select [(ngModel)]="selectedUserRole" name="userRoleFilter">
+        <option value="">Todos los roles</option>
+        @for (role of availableUserRoles; track role) { <option [value]="role">{{ role }}</option> }
+      </select>
+      <button type="button" class="secondary" (click)="clearUserFilters()">Limpiar</button>
+    </div>
     <div class="table-wrap">
       <table>
         <thead>
@@ -163,12 +194,18 @@
             <th></th>
           </tr>
         </thead>
-        <tbody>@for (user of users; track user.IdUsuario) { <tr>
-            <td>{{ user.IdUsuario }}</td>
-            <td>{{ user.Usuario }}</td>
-            <td>{{ user.Rol }}</td>
-            <td><button type="button" class="danger" (click)="askRemoveUser(user.IdUsuario)">Quitar</button></td>
-          </tr> }</tbody>
+        <tbody>
+          @if (filteredUsers.length === 0) {
+            <tr><td colspan="4">No se encontraron usuarios con los filtros actuales.</td></tr>
+          } @else {
+            @for (user of filteredUsers; track user.IdUsuario) { <tr>
+              <td>{{ user.IdUsuario }}</td>
+              <td>{{ user.Usuario }}</td>
+              <td>{{ user.Rol }}</td>
+              <td><button type="button" class="danger" (click)="askRemoveUser(user.IdUsuario)">Quitar</button></td>
+            </tr> }
+          }
+        </tbody>
       </table>
     </div>
   </section>

@@ -35,13 +35,20 @@ export class AuthService {
     this.currentUserSubject.next(null);
   }
 
+  isAuthenticated(): boolean {
+    const token = this.getToken();
+    const user = this.currentUserSubject.value ?? this.readUser();
+    return !!token && !!user;
+  }
+
   hasRole(roles: UserRole[]): boolean {
-    const currentUser = this.currentUserSubject.value;
+    const currentUser = this.currentUserSubject.value ?? this.readUser();
     return currentUser !== null && roles.includes(currentUser.Role);
   }
 
   getToken(): string | null {
-    return localStorage.getItem(AUTH_TOKEN_KEY);
+    const token = localStorage.getItem(AUTH_TOKEN_KEY);
+    return token && token.trim().length > 0 ? token : null;
   }
 
   private storeSession(loginResponse: LoginResponse): void {

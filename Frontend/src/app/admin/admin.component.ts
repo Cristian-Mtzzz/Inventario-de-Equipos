@@ -41,6 +41,12 @@ export class AdminComponent {
   readonly pageSize = 25;
   currentPage = 1;
   showAdminMenu = false;
+  searchTerm = '';
+  selectedBrand = '';
+  selectedModel = '';
+  selectedTypeId: number | null = null;
+  userSearchTerm = '';
+  selectedUserRole = '';
   @ViewChild(TallerComponent) workshopComponent?: TallerComponent;
 
   newDevice: CreateDevice = {
@@ -55,15 +61,48 @@ export class AdminComponent {
     this.loadData();
   }
 
+  get filteredDevices(): Device[] {
+    const normalizedSearch = this.searchTerm.trim().toLowerCase();
+    return this.devices.filter((device) => {
+      const matchesSearch = !normalizedSearch
+        || (device.CodigoInventario ?? '').toLowerCase().includes(normalizedSearch)
+        || (device.NoSerie ?? '').toLowerCase().includes(normalizedSearch);
+      const matchesBrand = !this.selectedBrand || device.Marca === this.selectedBrand;
+      const matchesModel = !this.selectedModel || device.Modelo === this.selectedModel;
+      const matchesType = this.selectedTypeId === null || device.IdTipo === this.selectedTypeId;
+
+      return matchesSearch && matchesBrand && matchesModel && matchesType;
+    });
+  }
+
   get totalPages(): number {
-    // Calcula al menos una página para que la navegación no quede sin controles.
-    return Math.max(1, Math.ceil(this.devices.length / this.pageSize));
+    return Math.max(1, Math.ceil(this.filteredDevices.length / this.pageSize));
   }
 
   get pagedDevices(): Device[] {
-    // Devuelve solo el bloque de dispositivos correspondiente a la página actual.
     const startIndex = (this.currentPage - 1) * this.pageSize;
-    return this.devices.slice(startIndex, startIndex + this.pageSize);
+    return this.filteredDevices.slice(startIndex, startIndex + this.pageSize);
+  }
+
+  get availableBrands(): string[] {
+    return [...new Set(this.devices.map((device) => device.Marca).filter(Boolean))].sort((first, second) => first.localeCompare(second));
+  }
+
+  get availableModels(): string[] {
+    return [...new Set(this.devices.map((device) => device.Modelo).filter(Boolean))].sort((first, second) => first.localeCompare(second));
+  }
+
+  get filteredUsers(): AdminUser[] {
+    const normalizedSearch = this.userSearchTerm.trim().toLowerCase();
+    return this.users.filter((user) => {
+      const matchesSearch = !normalizedSearch || user.Usuario.toLowerCase().includes(normalizedSearch);
+      const matchesRole = !this.selectedUserRole || user.Rol === this.selectedUserRole;
+      return matchesSearch && matchesRole;
+    });
+  }
+
+  get availableUserRoles(): string[] {
+    return [...new Set(this.users.map((user) => user.Rol).filter(Boolean))].sort((first, second) => first.localeCompare(second));
   }
 
   loadData(): void {
@@ -139,6 +178,23 @@ export class AdminComponent {
   goToPage(page: number): void {
     // Limita la página solicitada al rango válido antes de actualizar la tabla.
     this.currentPage = Math.min(Math.max(page, 1), this.totalPages);
+  }
+
+  applyFilters(): void {
+    this.currentPage = 1;
+  }
+
+  clearFilters(): void {
+    this.searchTerm = '';
+    this.selectedBrand = '';
+    this.selectedModel = '';
+    this.selectedTypeId = null;
+    this.currentPage = 1;
+  }
+
+  clearUserFilters(): void {
+    this.userSearchTerm = '';
+    this.selectedUserRole = '';
   }
 
   addDevice(): void {

@@ -50,6 +50,23 @@
             </select>
             <button type="submit">Agregar dispositivo</button>
         </form>
+        <div class="filter-bar">
+            <input type="search" [(ngModel)]="searchTerm" (ngModelChange)="applyFilters()" name="inventorySearch"
+                placeholder="Buscar por código o serie" />
+            <select [(ngModel)]="selectedBrand" (ngModelChange)="applyFilters()" name="inventoryBrand">
+                <option value="">Todas las marcas</option>
+                @for (brand of availableBrands; track brand) { <option [value]="brand">{{ brand }}</option> }
+            </select>
+            <select [(ngModel)]="selectedModel" (ngModelChange)="applyFilters()" name="inventoryModel">
+                <option value="">Todos los modelos</option>
+                @for (model of availableModels; track model) { <option [value]="model">{{ model }}</option> }
+            </select>
+            <select [(ngModel)]="selectedTypeId" (ngModelChange)="applyFilters()" name="inventoryType">
+                <option [ngValue]="null">Todos los tipos</option>
+                @for (type of deviceTypes; track type.IdTipo) { <option [ngValue]="type.IdTipo">{{ type.NombreTipo }}</option> }
+            </select>
+            <button type="button" class="secondary" (click)="clearFilters()">Limpiar</button>
+        </div>
         <div class="table-wrap">
             <table>
                 <thead>
@@ -67,24 +84,30 @@
                         <th>Acciones</th>
                     </tr>
                 </thead>
-                <tbody>@for (device of pagedDevices; track device.IdEquipo) { <tr>
-                        <td>{{ device.IdEquipo }}</td>
-                        <td>{{ device.CodigoInventario }}</td>
-                        <td>{{ device.NoSerie }}</td>
-                        <td>{{ device.Marca }}</td>
-                        <td>{{ device.Modelo }}</td>
-                        <td>{{ device.NombreTipo || device.IdTipo || '-' }}</td>
-                        <td>{{ device.Estado }}</td>
-                        <td>{{ device.NumeroPagoAsignado || '-' }}</td>
-                        <td>{{ device.AsignadoA || 'Sin asignar' }}</td>
-                        <td>{{ device.NombreArea || 'Sin área' }}</td>
-                        <td><button type="button" class="secondary" (click)="editDevice(device)">Editar</button></td>
-                    </tr> }</tbody>
+                <tbody>
+                    @if (filteredDevices.length === 0) {
+                        <tr><td colspan="11">No se encontraron equipos con los filtros actuales.</td></tr>
+                    } @else {
+                        @for (device of pagedDevices; track device.IdEquipo) { <tr>
+                            <td>{{ device.IdEquipo }}</td>
+                            <td>{{ device.CodigoInventario }}</td>
+                            <td>{{ device.NoSerie }}</td>
+                            <td>{{ device.Marca }}</td>
+                            <td>{{ device.Modelo }}</td>
+                            <td>{{ device.NombreTipo || device.IdTipo || '-' }}</td>
+                            <td>{{ device.Estado }}</td>
+                            <td>{{ device.NumeroPagoAsignado || '-' }}</td>
+                            <td>{{ device.AsignadoA || 'Sin asignar' }}</td>
+                            <td>{{ device.NombreArea || 'Sin área' }}</td>
+                            <td><button type="button" class="secondary" (click)="editDevice(device)">Editar</button></td>
+                        </tr> }
+                    }
+                </tbody>
             </table>
         </div>
         <nav class="pagination"><button type="button" (click)="goToPage(currentPage - 1)"
                 [disabled]="currentPage === 1">Anterior</button><span>Página {{ currentPage }} de {{ totalPages }} · {{
-                devices.length }} registros</span><button type="button" (click)="goToPage(currentPage + 1)"
+                filteredDevices.length }} registros</span><button type="button" (click)="goToPage(currentPage + 1)"
                 [disabled]="currentPage === totalPages">Siguiente</button></nav>
     </section>
     }

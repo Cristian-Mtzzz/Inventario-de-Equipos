@@ -29,6 +29,10 @@ export class InventoryComponent {
   currentPage = 1;
   message = '';
   errorMessage = '';
+  searchTerm = '';
+  selectedBrand = '';
+  selectedModel = '';
+  selectedTypeId: number | null = null;
 
   newDevice: CreateDevice = {
     CodigoInventario: '', NoSerie: '', Marca: '', Modelo: '', IdTipo: null,
@@ -43,15 +47,35 @@ export class InventoryComponent {
     this.loadDevices();
   }
 
+  get filteredDevices(): Device[] {
+    const normalizedSearch = this.searchTerm.trim().toLowerCase();
+    return this.devices.filter((device) => {
+      const matchesSearch = !normalizedSearch
+        || (device.CodigoInventario ?? '').toLowerCase().includes(normalizedSearch)
+        || (device.NoSerie ?? '').toLowerCase().includes(normalizedSearch);
+      const matchesBrand = !this.selectedBrand || device.Marca === this.selectedBrand;
+      const matchesModel = !this.selectedModel || device.Modelo === this.selectedModel;
+      const matchesType = this.selectedTypeId === null || device.IdTipo === this.selectedTypeId;
+
+      return matchesSearch && matchesBrand && matchesModel && matchesType;
+    });
+  }
+
   get pagedDevices(): Device[] {
-    // Proyecta la página visible sin modificar la lista completa.
     const startIndex = (this.currentPage - 1) * this.pageSize;
-    return this.devices.slice(startIndex, startIndex + this.pageSize);
+    return this.filteredDevices.slice(startIndex, startIndex + this.pageSize);
   }
 
   get totalPages(): number {
-    // Calcula el número de páginas según el tamaño configurado.
-    return Math.max(1, Math.ceil(this.devices.length / this.pageSize));
+    return Math.max(1, Math.ceil(this.filteredDevices.length / this.pageSize));
+  }
+
+  get availableBrands(): string[] {
+    return [...new Set(this.devices.map((device) => device.Marca).filter(Boolean))].sort((first, second) => first.localeCompare(second));
+  }
+
+  get availableModels(): string[] {
+    return [...new Set(this.devices.map((device) => device.Modelo).filter(Boolean))].sort((first, second) => first.localeCompare(second));
   }
 
   loadDevices(): void {
@@ -72,6 +96,18 @@ export class InventoryComponent {
       },
       error: () => this.errorMessage = 'No se pudo cargar el inventario. Verifica que la API esté activa.',
     });
+  }
+
+  applyFilters(): void {
+    this.currentPage = 1;
+  }
+
+  clearFilters(): void {
+    this.searchTerm = '';
+    this.selectedBrand = '';
+    this.selectedModel = '';
+    this.selectedTypeId = null;
+    this.currentPage = 1;
   }
 
   loadReassignments(): void {
