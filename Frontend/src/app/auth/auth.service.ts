@@ -28,6 +28,13 @@ export class AuthService {
     );
   }
 
+  changeInitialPassword(currentPassword: string, newPassword: string): Observable<void> {
+    return this.httpClient.post<void>('/api/auth/change-initial-password', {
+      CurrentPassword: currentPassword,
+      NewPassword: newPassword,
+    });
+  }
+
   logout(): void {
     // Elimina toda la sesión local y notifica a los guards/componentes.
     localStorage.removeItem(AUTH_TOKEN_KEY);
@@ -65,13 +72,19 @@ export class AuthService {
         userName?: string;
         fullName?: string;
         role?: UserRole;
-      }
+        estado?: string;
+        dominioP?: string;
+        dominio?: number;
+      }, mustChangePassword?: boolean; mustChange?: boolean;
     };
     const user = (response.User ?? response.user) as (AuthUser & {
       userId?: number | string;
       userName?: string;
       fullName?: string;
       role?: UserRole;
+      estado?: string;
+      dominioP?: string;
+      dominio?: number;
     }) | undefined;
 
     return {
@@ -81,7 +94,14 @@ export class AuthService {
         UserName: user?.UserName ?? user?.userName ?? '',
         FullName: user?.FullName ?? user?.fullName ?? '',
         Role: user?.Role ?? user?.role ?? 'UsuarioComun',
+        Estado: user?.Estado ?? user?.estado ?? 'ACTIVO',
+        DominioP: user?.DominioP ?? user?.dominioP ?? '',
+        Dominio: user?.Dominio ?? user?.dominio ?? 0,
       },
+      MustChangePassword: response.MustChangePassword
+        ?? response.mustChangePassword
+        ?? response.mustChange
+        ?? false,
     };
   }
 

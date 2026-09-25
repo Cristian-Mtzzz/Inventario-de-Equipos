@@ -144,8 +144,21 @@ public sealed class AdminController(IAdminService adminService) : ControllerBase
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> CreateUser(CreateAdminUserDto user, CancellationToken cancellationToken)
     {
-        await adminService.CreateUser(user, cancellationToken);
-        return NoContent();
+        var validationMessage = ValidateUser(user);
+        if (validationMessage is not null)
+        {
+            return BadRequest(new { Message = validationMessage });
+        }
+
+        try
+        {
+            await adminService.CreateUser(user, cancellationToken);
+            return NoContent();
+        }
+        catch (OracleException exception) when (exception.Number == 1)
+        {
+            return Conflict(new { Message = "Ya existe un usuario con ese nombre." });
+        }
     }
 
     [HttpDelete("users/{idUsuario:int}")]
@@ -177,5 +190,27 @@ public sealed class AdminController(IAdminService adminService) : ControllerBase
         return device.IdTipo is null
             ? "Selecciona un tipo de dispositivo."
             : null;
+    }
+
+    private static string? ValidateUser(CreateAdminUserDto user)
+    {
+        if (string.IsNullOrWhiteSpace(user.Usuario) || string.IsNullOrWhiteSpace(user.NombrePersona))
+        {
+            return "El usuario y el nombre de la persona son obligatorios.";
+        }
+
+        if (user.Dominio is not 0 and not 1)
+        {
+            return "El tipo de autenticación debe ser local o Active Directory.";
+        }
+
+        if (user.DominioP.Trim().ToUpperInvariant() is not ("BA" or "HE" or "HRN" or "IVM"))
+        {
+            return "El dominio debe ser BA, HE, HRN o IVM.";
+        }
+
+        return user.Estado.Trim().ToUpperInvariant() is "ACTIVO" or "INACTIVO"
+            ? null
+            : "El estado debe ser ACTIVO o INACTIVO.";
     }
 }

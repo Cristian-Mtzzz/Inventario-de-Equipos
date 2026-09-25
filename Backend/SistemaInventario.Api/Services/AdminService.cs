@@ -254,24 +254,46 @@ public sealed class AdminService(InventoryDbContext dbContext) : IAdminService
 
     public async Task<IReadOnlyList<AdminUserDto>> GetUsers(CancellationToken cancellationToken)
     {
-        const string sql = "SELECT ID_USUARIO, USUARIO, ROL FROM USUARIOS ORDER BY ID_USUARIO";
+        const string sql = """
+            SELECT ID_USUARIO, USUARIO, NOMBRE_PERSONA, FECHA_EXPIRACION,
+                   ESTADO, DOMINIOP, DOMINIO, ROL, CLAVE_SEGURA
+            FROM USUARIOS
+            ORDER BY ID_USUARIO
+            """;
         return await ReadList(sql, reader => new AdminUserDto(
             reader.GetInt32(reader.GetOrdinal("ID_USUARIO")),
-            reader.GetString(reader.GetOrdinal("USUARIO")),
-            reader.GetString(reader.GetOrdinal("ROL"))), cancellationToken);
+            ReadString(reader, "USUARIO"),
+            ReadString(reader, "NOMBRE_PERSONA"),
+            ReadNullableDate(reader, "FECHA_EXPIRACION"),
+            ReadString(reader, "ESTADO"),
+            ReadString(reader, "DOMINIOP"),
+            Convert.ToInt32(reader.GetValue(reader.GetOrdinal("DOMINIO"))),
+            ReadString(reader, "ROL"),
+            ReadString(reader, "CLAVE_SEGURA")), cancellationToken);
     }
 
     public Task CreateUser(CreateAdminUserDto user, CancellationToken cancellationToken) =>
         Execute("""
-            INSERT INTO USUARIOS (ID_USUARIO, USUARIO, PASSWORD_HASH, ROL)
+            INSERT INTO USUARIOS
+                (ID_USUARIO, USUARIO, NOMBRE_PERSONA, FECHA_EXPIRACION,
+                 ESTADO, PASSWORD_HASH, ROL, DOMINIOP, DOMINIO, CLAVE_SEGURA)
             SELECT NVL(MAX(ID_USUARIO), 0) + 1,
                    :usuario,
+                   :nombrePersona,
+                   :fechaExpiracion,
+                   :estado,
                    ORA_HASH(:password, 4294967295) || ORA_HASH(:usuarioHash, 4294967295),
-                   :rol
+                   :rol,
+                   :dominioP,
+                   :dominio,
+                   '0'
             FROM USUARIOS
             """, cancellationToken,
-            ("usuario", user.Usuario), ("password", user.Password),
-            ("usuarioHash", user.Usuario), ("rol", user.Rol));
+            ("usuario", user.Usuario.Trim()), ("nombrePersona", user.NombrePersona.Trim()),
+            ("fechaExpiracion", user.FechaExpiracion), ("estado", user.Estado.Trim()),
+            ("password", "1234"), ("usuarioHash", user.Usuario.Trim()),
+            ("rol", user.Rol.Trim()), ("dominioP", user.DominioP.Trim().ToUpperInvariant()),
+            ("dominio", user.Dominio));
 
     public Task DeleteUser(int idUsuario, CancellationToken cancellationToken) =>
         Execute("DELETE FROM USUARIOS WHERE ID_USUARIO = :idUsuario", cancellationToken,
@@ -356,7 +378,13 @@ public sealed class AdminService(InventoryDbContext dbContext) : IAdminService
         {
             var parameter = command.CreateParameter();
             parameter.ParameterName = name;
-            parameter.DbType = value is int ? DbType.Int32 : DbType.String;
+            parameter.DbType = value switch
+            {
+                int => DbType.Int32,
+                DateTime => DbType.Date,
+                null => DbType.String,
+                _ => DbType.String,
+            };
             parameter.Value = value ?? DBNull.Value;
             parameter.Size = 256;
             command.Parameters.Add(parameter);
@@ -405,5 +433,11 @@ public sealed class AdminService(InventoryDbContext dbContext) : IAdminService
     {
         var ordinal = reader.GetOrdinal(column);
         return reader.IsDBNull(ordinal) ? null : Convert.ToString(reader.GetValue(ordinal));
+    }
+
+    private static DateTime? ReadNullableDate(DbDataReader reader, string column)
+    {
+        var ordinal = reader.GetOrdinal(column);
+        return reader.IsDBNull(ordinal) ? null : Convert.ToDateTime(reader.GetValue(ordinal));
     }
 }

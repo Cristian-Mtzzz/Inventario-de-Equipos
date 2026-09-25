@@ -8,6 +8,10 @@ export const routes: Routes = [
 	{ path: '', pathMatch: 'full', redirectTo: 'login' },
 	{ path: 'login', component: AuthComponent },
 	{
+		path: 'change-password',
+		loadComponent: () => import('./auth/change-password.component').then((module) => module.ChangePasswordComponent),
+	},
+	{
 		path: 'admin',
 		canActivate: [authGuard],
 		data: { roles: ['Admin'] },

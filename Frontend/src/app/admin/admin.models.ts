@@ -69,13 +69,23 @@ export interface CreateReassignment {
 export interface AdminUser {
   IdUsuario: number;
   Usuario: string;
+  NombrePersona: string;
+  FechaExpiracion: string | null;
+  Estado: string;
+  DominioP: string;
+  Dominio: number;
   Rol: string;
+  ClaveSegura: string;
 }
 
-// Datos necesarios para crear un usuario y asignarle un rol.
+// Datos necesarios para crear un usuario; la contraseña inicial se genera en backend.
 export interface CreateAdminUser {
   Usuario: string;
-  Password: string;
+  NombrePersona: string;
+  FechaExpiracion: string | null;
+  Estado: string;
+  DominioP: string;
+  Dominio: number;
   Rol: string;
 }
 

@@ -439,6 +439,18 @@ table .danger {
     gap: .75rem;
 }
 
+.user-field {
+    display: flex;
+    flex-direction: column;
+    gap: .35rem;
+}
+
+.user-field label {
+    color: #294649;
+    font-size: .76rem;
+    font-weight: 700;
+}
+
 .modal-actions {
     grid-column: 1 / -1;
     display: flex;
@@ -461,6 +473,27 @@ table .danger {
     border: 1px solid #b9d1ca;
     color: #276968;
     background: #fff;
+}
+
+.add-user-button {
+    width: fit-content;
+    margin-bottom: 1rem;
+    padding: .75rem 1rem;
+    border: 0;
+    border-radius: 5px;
+    color: #fff;
+    background: #276968;
+    cursor: pointer;
+    font-weight: 700;
+}
+
+.add-user-button:hover {
+    background: #1b5252;
+}
+
+.modal-feedback {
+    grid-column: 1 / -1;
+    margin: 0;
 }
 
 .delete-modal {

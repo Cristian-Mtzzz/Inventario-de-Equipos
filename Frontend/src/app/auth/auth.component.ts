@@ -18,7 +18,7 @@ export class AuthComponent {
   private readonly formBuilder = inject(FormBuilder);
   readonly loginForm = this.formBuilder.nonNullable.group({
     userName: ['', [Validators.required]],
-    password: ['', [Validators.required, Validators.minLength(6)]],
+    password: ['', [Validators.required, Validators.minLength(4)]],
   });
   readonly isLoading = signal(false);
   readonly errorMessage = signal('');
@@ -52,13 +52,15 @@ export class AuthComponent {
         this.isLoading.set(false);
       }),
     ).subscribe({
-      next: ({ User }) => this.router.navigateByUrl(
-        User.Role === 'Admin'
-          ? '/admin'
-          : User.Role === 'Taller'
-            ? '/taller'
-            : '/inventario',
-      ),
+      next: (loginResponse) => loginResponse.MustChangePassword
+        ? this.router.navigateByUrl('/change-password')
+        : this.router.navigateByUrl(
+          loginResponse.User.Role === 'Admin'
+            ? '/admin'
+            : loginResponse.User.Role === 'Taller'
+              ? '/taller'
+              : '/inventario',
+        ),
     });
   }
 

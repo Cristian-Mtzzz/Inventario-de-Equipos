@@ -13,10 +13,14 @@ export interface AuthUser {
   UserName: string;
   FullName: string;
   Role: UserRole;
+  Estado: string;
+  DominioP: string;
+  Dominio: number;
 }
 
 // Respuesta normalizada: token JWT y usuario autenticado.
 export interface LoginResponse {
   Token: string;
   User: AuthUser;
+  MustChangePassword: boolean;
 }

@@ -195,18 +195,7 @@
   <!-- Alta y eliminación de usuarios del sistema. -->
   @if (activeSection === 'users') {
   <section class="admin-section">
-    <!-- Estos valores indican al navegador que se trata de un alta nueva, no de un login guardado. -->
-    <form class="admin-form compact" autocomplete="off" (ngSubmit)="addUser()">
-      <h2>Agregar usuario</h2>
-      <input [(ngModel)]="newUser.Usuario" name="usuario" autocomplete="new-username" placeholder="Usuario" required />
-      <input [(ngModel)]="newUser.Password" name="password" type="password" autocomplete="new-password" placeholder="Contraseña" required />
-      <select [(ngModel)]="newUser.Rol" name="rol">
-        <option value="Admin">Admin</option>
-        <option value="UsuarioComun">UsuarioComun</option>
-        <option value="Taller">Taller</option>
-      </select>
-      <button type="submit">Agregar usuario</button>
-    </form>
+    <button type="button" class="add-user-button" (click)="openUserDialog()">Añadir usuario</button>
     <div class="filter-bar">
       <input type="search" [(ngModel)]="userSearchTerm" name="userSearch" placeholder="Buscar usuario" />
       <select [(ngModel)]="selectedUserRole" name="userRoleFilter">
@@ -221,6 +210,10 @@
           <tr>
             <th>ID</th>
             <th>Usuario</th>
+            <th>Nombre</th>
+            <th>Dominio</th>
+            <th>Autenticación</th>
+            <th>Estado</th>
             <th>Rol</th>
             <th></th>
           </tr>
@@ -228,12 +221,16 @@
         <tbody>
           @if (filteredUsers.length === 0) {
           <tr>
-            <td colspan="4">No se encontraron usuarios con los filtros actuales.</td>
+            <td colspan="8">No se encontraron usuarios con los filtros actuales.</td>
           </tr>
           } @else {
           @for (user of filteredUsers; track user.IdUsuario) { <tr>
             <td>{{ user.IdUsuario }}</td>
             <td>{{ user.Usuario }}</td>
+            <td>{{ user.NombrePersona }}</td>
+            <td>{{ user.DominioP }}</td>
+            <td>{{ user.Dominio === 1 ? 'Active Directory' : 'Local' }}</td>
+            <td>{{ user.Estado }}</td>
             <td>{{ user.Rol }}</td>
             <td><button type="button" class="danger" (click)="askRemoveUser(user.IdUsuario)">Quitar</button></td>
           </tr> }
@@ -242,6 +239,71 @@
       </table>
     </div>
   </section>
+  }
+
+  @if (isUserDialogOpen) {
+  <div class="modal-backdrop" role="presentation" (click)="closeUserDialog()">
+    <section class="edit-modal" role="dialog" aria-modal="true" aria-labelledby="create-user-title"
+      (click)="$event.stopPropagation()">
+      <div class="modal-heading">
+        <div>
+          <p class="eyebrow">NUEVO REGISTRO</p>
+          <h2 id="create-user-title">Agregar usuario</h2>
+        </div>
+        <button type="button" class="modal-close" aria-label="Cerrar ventana" (click)="closeUserDialog()">×</button>
+      </div>
+      <form class="modal-form" autocomplete="off" (ngSubmit)="addUser()">
+        <div class="user-field">
+          <label for="modalUsuario">Usuario:</label>
+          <input id="modalUsuario" [(ngModel)]="newUser.Usuario" name="modalUsuario" autocomplete="new-username" placeholder="Usuario" required />
+        </div>
+        <div class="user-field">
+          <label for="modalNombrePersona">Nombre de la persona:</label>
+          <input id="modalNombrePersona" [(ngModel)]="newUser.NombrePersona" name="modalNombrePersona" placeholder="Nombre completo" required />
+        </div>
+        <div class="user-field">
+          <label for="modalFechaExpiracion">Fecha de expiración:</label>
+          <input id="modalFechaExpiracion" [(ngModel)]="newUser.FechaExpiracion" name="modalFechaExpiracion" type="date" />
+        </div>
+        <div class="user-field">
+          <label for="modalEstado">Estado:</label>
+          <select id="modalEstado" [(ngModel)]="newUser.Estado" name="modalEstado" required>
+            <option value="ACTIVO">Activo</option>
+            <option value="INACTIVO">Inactivo</option>
+          </select>
+        </div>
+        <div class="user-field">
+          <label for="modalDominioP">Dominio IHSS:</label>
+          <select id="modalDominioP" [(ngModel)]="newUser.DominioP" name="modalDominioP" required>
+            <option value="BA">BA</option>
+            <option value="HE">HE</option>
+            <option value="HRN">HRN</option>
+            <option value="IVM">IVM</option>
+          </select>
+        </div>
+        <div class="user-field">
+          <label for="modalDominio">Tipo de autenticación:</label>
+          <select id="modalDominio" [(ngModel)]="newUser.Dominio" name="modalDominio" required>
+            <option [ngValue]="0">Usuario local</option>
+            <option [ngValue]="1">Active Directory</option>
+          </select>
+        </div>
+        <div class="user-field">
+          <label for="modalRol">Tipo de usuario:</label>
+          <select id="modalRol" [(ngModel)]="newUser.Rol" name="modalRol">
+            <option value="Admin">Admin</option>
+            <option value="UsuarioComun">UsuarioComun</option>
+            <option value="Taller">Taller</option>
+          </select>
+        </div>
+        @if (errorMessage) { <p class="feedback error modal-feedback" role="alert">{{ errorMessage }}</p> }
+        <div class="modal-actions">
+          <button type="button" class="secondary" (click)="closeUserDialog()">Cancelar</button>
+          <button type="submit">Añadir usuario</button>
+        </div>
+      </form>
+    </section>
+  </div>
   }
 
   <!-- Modal para editar un equipo sin abandonar la sección actual. -->

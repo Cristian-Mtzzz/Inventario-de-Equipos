@@ -36,6 +36,7 @@ export class AdminComponent {
   editingCodigoInventario = '';
   editingNoSerie = '';
   isEditDialogOpen = false;
+  isUserDialogOpen = false;
   pendingDeviceId: number | null = null;
   pendingUserId: number | null = null;
   pendingReassignmentId: number | null = null;
@@ -62,7 +63,10 @@ export class AdminComponent {
   reassignmentBuildingId = 0;
   reassignmentAreas: Area[] = [];
   selectedInventoryCode = '';
-  newUser: CreateAdminUser = { Usuario: '', Password: '', Rol: 'UsuarioComun' };
+  newUser: CreateAdminUser = {
+    Usuario: '', NombrePersona: '', FechaExpiracion: null, Estado: 'ACTIVO',
+    DominioP: 'BA', Dominio: 0, Rol: 'UsuarioComun',
+  };
 
   constructor() {
     this.loadData();
@@ -434,16 +438,38 @@ export class AdminComponent {
   }
 
   addUser(): void {
-    // Crea un usuario con el rol seleccionado desde el panel.
+    // La contraseña inicial se genera en backend y nunca se captura en pantalla.
     this.clearMessages();
-    this.adminService.createUser(this.newUser).subscribe({
+    if (!this.newUser.Usuario.trim() || !this.newUser.NombrePersona.trim()) {
+      this.errorMessage = 'El usuario y el nombre de la persona son obligatorios.';
+      return;
+    }
+    // El input de fecha envía '' cuando queda vacío; el backend solo acepta null.
+    const userToCreate: CreateAdminUser = {
+      ...this.newUser,
+      FechaExpiracion: this.newUser.FechaExpiracion?.trim() || null,
+    };
+    this.adminService.createUser(userToCreate).subscribe({
       next: () => {
         this.message = 'Usuario agregado correctamente.';
-        this.newUser = { Usuario: '', Password: '', Rol: 'UsuarioComun' };
+        this.isUserDialogOpen = false;
+        this.newUser = {
+          Usuario: '', NombrePersona: '', FechaExpiracion: null, Estado: 'ACTIVO',
+          DominioP: 'BA', Dominio: 0, Rol: 'UsuarioComun',
+        };
         this.loadData();
       },
-      error: () => this.errorMessage = 'No se pudo agregar el usuario.',
+      error: (error) => this.errorMessage = this.getErrorMessage(error, 'No se pudo agregar el usuario.'),
     });
+  }
+
+  openUserDialog(): void {
+    this.clearMessages();
+    this.isUserDialogOpen = true;
+  }
+
+  closeUserDialog(): void {
+    this.isUserDialogOpen = false;
   }
 
   askRemoveUser(idUsuario: number): void {

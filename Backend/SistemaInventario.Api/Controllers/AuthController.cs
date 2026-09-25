@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SistemaInventario.Api.Models;
 using SistemaInventario.Api.Services;
@@ -10,6 +12,7 @@ namespace SistemaInventario.Api.Controllers;
 public sealed class AuthController(IAuthService authService) : ControllerBase
 {
     [HttpPost("login")]
+    [AllowAnonymous]
     // Valida las credenciales contra Oracle; una respuesta nula se convierte en 401.
     public async Task<ActionResult<LoginResponseDto>> AuthenticateUser(
         LoginRequestDto loginRequest,
@@ -19,5 +22,24 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
         return loginResponse is null
             ? Unauthorized(new { Message = "Credenciales invalidas." })
             : Ok(loginResponse);
+    }
+
+    [HttpPost("change-initial-password")]
+    [Authorize(Policy = "PasswordChange")]
+    public async Task<IActionResult> ChangeInitialPassword(
+        ChangePasswordDto request,
+        CancellationToken cancellationToken)
+    {
+        var userIdValue = User.FindFirstValue("sub")
+            ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!int.TryParse(userIdValue, out var userId))
+        {
+            return Unauthorized();
+        }
+
+        var changed = await authService.ChangeInitialPassword(userId, request, cancellationToken);
+        return changed
+            ? NoContent()
+            : BadRequest(new { Message = "La contraseña actual no es válida o ya fue actualizada." });
     }
 }

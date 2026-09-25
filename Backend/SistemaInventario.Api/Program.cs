@@ -66,7 +66,14 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ClockSkew = TimeSpan.Zero,
         };
     });
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("PasswordChange", policy => policy.RequireAuthenticatedUser());
+    options.DefaultPolicy = new Microsoft.AspNetCore.Authorization.AuthorizationPolicyBuilder()
+        .RequireAuthenticatedUser()
+        .RequireAssertion(context => !context.User.HasClaim("must_change_password", "true"))
+        .Build();
+});
 builder.Services.AddCors(options => options.AddPolicy(AngularCorsPolicy, policy =>
     policy.WithOrigins("http://localhost:4200", "http://127.0.0.1:4200")
         .AllowAnyHeader()

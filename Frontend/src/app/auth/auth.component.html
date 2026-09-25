@@ -25,7 +25,7 @@
             'Ver' }}</button>
         </div>
         @if (loginForm.controls.password.touched && loginForm.controls.password.invalid) { <small
-          class="field-error">Usa una contrasena de al menos 6 caracteres.</small> }
+          class="field-error">Usa una contrasena de al menos 4 caracteres.</small> }
         @if (errorMessage()) { <p class="error-banner" role="alert">{{ errorMessage() }}</p> }
         <button class="submit-button" type="submit" [disabled]="isLoading()"><span>{{ isLoading() ? 'Validando...' :
             'Entrar

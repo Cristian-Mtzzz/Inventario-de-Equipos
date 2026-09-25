@@ -6,4 +6,5 @@ namespace SistemaInventario.Api.Services;
 public interface IAuthService
 {
     Task<LoginResponseDto?> AuthenticateUser(LoginRequestDto loginRequest, CancellationToken cancellationToken);
+    Task<bool> ChangeInitialPassword(int userId, ChangePasswordDto request, CancellationToken cancellationToken);
 }

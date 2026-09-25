@@ -143,11 +143,18 @@ export class AdminService {
   getUsers(): Observable<AdminUser[]> {
     // Consulta los usuarios que el administrador puede gestionar.
     return this.httpClient.get<Array<AdminUser & {
-      idUsuario?: number; usuario?: string; rol?: string;
+      idUsuario?: number; usuario?: string; nombrePersona?: string; fechaExpiracion?: string | null;
+      estado?: string; dominioP?: string; dominio?: number; rol?: string; claveSegura?: string;
     }>>(`${API_ADMIN_URL}/users`).pipe(map((users) => users.map((user) => ({
       IdUsuario: user.IdUsuario ?? user.idUsuario ?? 0,
       Usuario: user.Usuario ?? user.usuario ?? '',
+      NombrePersona: user.NombrePersona ?? user.nombrePersona ?? '',
+      FechaExpiracion: user.FechaExpiracion ?? user.fechaExpiracion ?? null,
+      Estado: user.Estado ?? user.estado ?? '',
+      DominioP: user.DominioP ?? user.dominioP ?? '',
+      Dominio: user.Dominio ?? user.dominio ?? 0,
       Rol: user.Rol ?? user.rol ?? '',
+      ClaveSegura: user.ClaveSegura ?? user.claveSegura ?? '0',
     }))));
   }
 

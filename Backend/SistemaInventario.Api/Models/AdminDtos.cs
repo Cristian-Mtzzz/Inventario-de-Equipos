@@ -56,10 +56,26 @@ public sealed record CreateReassignmentDto(
     int IdArea);
 
 // Usuario que se muestra en la administración, sin exponer la contraseña.
-public sealed record AdminUserDto(int IdUsuario, string Usuario, string Rol);
+public sealed record AdminUserDto(
+    int IdUsuario,
+    string Usuario,
+    string NombrePersona,
+    DateTime? FechaExpiracion,
+    string Estado,
+    string DominioP,
+    int Dominio,
+    string Rol,
+    string ClaveSegura);
 
-// Datos mínimos para dar de alta un usuario con su rol.
-public sealed record CreateAdminUserDto(string Usuario, string Password, string Rol);
+// Datos permitidos para dar de alta un usuario. La contraseña inicial se genera en el backend.
+public sealed record CreateAdminUserDto(
+    string Usuario,
+    string NombrePersona,
+    DateTime? FechaExpiracion,
+    string Estado,
+    string DominioP,
+    int Dominio,
+    string Rol);
 
 // Catálogo de áreas donde puede ubicarse un equipo.
 public sealed record AreaDto(int IdArea, string NombreArea);
