@@ -14,8 +14,12 @@ public sealed record DeviceDto(
     string? NumeroPagoAsignado,
     int? IdArea,
     string? NombreArea,
-    string? AsignadoA);
+    string? AsignadoA,
+    string? NombreAsignado,
+    int? IdEdificio,
+    string? NombreEdificio);
 
+// Datos permitidos para crear o editar un equipo; no incluye campos calculados.
 public sealed record CreateDeviceDto(
     string CodigoInventario,
     string NoSerie,
@@ -24,12 +28,16 @@ public sealed record CreateDeviceDto(
     int? IdTipo,
     string Estado,
     string? NumeroPagoAsignado,
+    string? NombreAsignado,
     int? IdArea);
 
+// Catálogo utilizado por los selectores de tipo de dispositivo.
 public sealed record DeviceTypeDto(int IdTipo, string NombreTipo);
 
+// Catálogo de empleados disponible para asignar un equipo.
 public sealed record EmployeeDto(string NoPago, string NombreCompleto, int? IdArea);
 
+// Registro histórico de un cambio de responsable.
 public sealed record ReassignmentDto(
     int IdReasignacion,
     int IdEquipo,
@@ -38,14 +46,23 @@ public sealed record ReassignmentDto(
     DateTime FechaCambio,
     string Motivo);
 
+// Datos necesarios para registrar una nueva reasignación.
 public sealed record CreateReassignmentDto(
     int IdEquipo,
     string? NoPagoNuevo,
     string? NombreNuevo,
-    string Motivo);
+    string Motivo,
+    int IdEdificio,
+    int IdArea);
 
+// Usuario que se muestra en la administración, sin exponer la contraseña.
 public sealed record AdminUserDto(int IdUsuario, string Usuario, string Rol);
 
+// Datos mínimos para dar de alta un usuario con su rol.
 public sealed record CreateAdminUserDto(string Usuario, string Password, string Rol);
 
+// Catálogo de áreas donde puede ubicarse un equipo.
 public sealed record AreaDto(int IdArea, string NombreArea);
+
+// Edificio disponible para filtrar los departamentos/áreas del formulario.
+public sealed record BuildingDto(int IdEdificio, string NombreEdificio);

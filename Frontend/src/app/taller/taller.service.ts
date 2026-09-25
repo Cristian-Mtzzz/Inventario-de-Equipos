@@ -9,7 +9,7 @@ const API_DEVICES_URL = '/api/admin/devices';
 // Cliente HTTP de recepción y mantenimiento; adapta la respuesta de Oracle al frontend.
 @Injectable({ providedIn: 'root' })
 export class TallerService {
-  constructor(private readonly httpClient: HttpClient) {}
+  constructor(private readonly httpClient: HttpClient) { }
 
   getDevices(): Observable<WorkshopDevice[]> {
     return this.httpClient.get<Array<WorkshopDevice & {

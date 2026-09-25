@@ -1,5 +1,6 @@
 using System.Data;
 using System.Data.Common;
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using SistemaInventario.Api.Data;
 using SistemaInventario.Api.Models;
@@ -38,9 +39,10 @@ public sealed class TallerService(InventoryDbContext dbContext) : ITallerService
         // La recepción crea o reutiliza catálogos y registra el equipo dentro de una transacción.
         if (string.IsNullOrWhiteSpace(reception.CodigoInventario)
             || string.IsNullOrWhiteSpace(reception.TipoDispositivo)
-            || string.IsNullOrWhiteSpace(reception.AreaOrigen))
+            || reception.IdEdificio <= 0
+            || reception.IdArea <= 0)
         {
-            throw new InvalidOperationException("El equipo, tipo y área de origen son obligatorios.");
+            throw new InvalidOperationException("El equipo, tipo, edificio y departamento de origen son obligatorios.");
         }
 
         await dbContext.Database.OpenConnectionAsync(cancellationToken);
@@ -50,9 +52,7 @@ public sealed class TallerService(InventoryDbContext dbContext) : ITallerService
             var connection = dbContext.Database.GetDbConnection();
             var codigo = reception.CodigoInventario.Trim();
             var tipo = reception.TipoDispositivo.Trim();
-            var area = reception.AreaOrigen.Trim();
-
-            var areaId = await GetOrCreateArea(connection, transaction, area, cancellationToken);
+            var areaId = await GetAreaForBuilding(connection, transaction, reception.IdEdificio, reception.IdArea, cancellationToken);
             var tipoId = await GetOrCreateDeviceType(connection, transaction, tipo, cancellationToken);
             var idEquipo = await GetDeviceIdByCode(connection, transaction, codigo, cancellationToken);
 
@@ -239,27 +239,23 @@ public sealed class TallerService(InventoryDbContext dbContext) : ITallerService
         return command;
     }
 
-    private async Task<int> GetOrCreateArea(DbConnection connection, DbTransaction? transaction, string nombreArea, CancellationToken cancellationToken)
+    private static async Task<int> GetAreaForBuilding(
+        DbConnection connection,
+        DbTransaction? transaction,
+        int idEdificio,
+        int idArea,
+        CancellationToken cancellationToken)
     {
         var existingId = await GetScalar<int?>(connection, transaction, """
-            SELECT ID_AREA
-            FROM AREAS
-            WHERE UPPER(TRIM(NOMBRE_AREA)) = UPPER(TRIM(:nombreArea))
-            """, cancellationToken, ("nombreArea", nombreArea));
+            SELECT DEPARTAMENTO_IHSS_ID
+            FROM DEPARTAMENTO_IHSS
+            WHERE DEPARTAMENTO_IHSS_ID = :idArea
+              AND EDIFICIO_ID = :idEdificio
+            """, cancellationToken, ("idArea", idArea), ("idEdificio", idEdificio));
 
-        if (existingId is > 0) return existingId.Value;
-
-        await Execute(connection, transaction, """
-            INSERT INTO AREAS (ID_AREA, NOMBRE_AREA)
-            SELECT NVL(MAX(ID_AREA), 0) + 1, :nombreArea
-            FROM AREAS
-            """, cancellationToken, ("nombreArea", nombreArea));
-
-        return await GetScalar<int>(connection, transaction, """
-            SELECT ID_AREA
-            FROM AREAS
-            WHERE UPPER(TRIM(NOMBRE_AREA)) = UPPER(TRIM(:nombreArea))
-            """, cancellationToken, ("nombreArea", nombreArea));
+        return existingId is > 0
+            ? existingId.Value
+            : throw new InvalidOperationException("El departamento no pertenece al edificio seleccionado.");
     }
 
     private async Task<int> GetOrCreateDeviceType(DbConnection connection, DbTransaction? transaction, string tipoDispositivo, CancellationToken cancellationToken)
@@ -298,7 +294,10 @@ public sealed class TallerService(InventoryDbContext dbContext) : ITallerService
     {
         await using var command = CreateCommand(connection, transaction, sql, parameters);
         var result = await command.ExecuteScalarAsync(cancellationToken);
-        return result is DBNull or null ? default! : (T)result;
+        if (result is DBNull or null) return default!;
+
+        var targetType = Nullable.GetUnderlyingType(typeof(T)) ?? typeof(T);
+        return (T)Convert.ChangeType(result, targetType, CultureInfo.InvariantCulture);
     }
 
     private static MaintenanceDto ReadMaintenance(DbDataReader reader) => new(

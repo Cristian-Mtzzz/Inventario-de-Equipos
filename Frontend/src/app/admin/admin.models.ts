@@ -11,9 +11,12 @@ export interface Device {
   NombreTipo: string | null;
   Estado: string;
   NumeroPagoAsignado: string | null;
+  NombreAsignado: string | null;
   IdArea: number | null;
   NombreArea: string | null;
   AsignadoA: string | null;
+  IdEdificio: number | null;
+  NombreEdificio: string | null;
 }
 
 // Datos mínimos que se envían al crear o editar un equipo.
@@ -25,6 +28,7 @@ export interface CreateDevice {
   IdTipo: number | null;
   Estado: string;
   NumeroPagoAsignado: string | null;
+  NombreAsignado: string | null;
   IdArea: number | null;
 }
 
@@ -32,6 +36,13 @@ export interface CreateDevice {
 export interface Area {
   IdArea: number;
   NombreArea: string;
+  IdEdificio: number;
+}
+
+// Edificio utilizado para limitar el catálogo de áreas disponibles.
+export interface Building {
+  IdEdificio: number;
+  NombreEdificio: string;
 }
 
 // Registro histórico de una reasignación ya guardada.
@@ -50,6 +61,8 @@ export interface CreateReassignment {
   NoPagoNuevo: string | null;
   NombreNuevo: string;
   Motivo: string;
+  IdEdificio: number;
+  IdArea: number;
 }
 
 // Usuario listado en la administración, sin exponer su contraseña.

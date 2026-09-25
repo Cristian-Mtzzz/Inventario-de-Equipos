@@ -9,6 +9,8 @@ using SistemaInventario.Api.Models;
 
 namespace SistemaInventario.Api.Services;
 
+// Servicio de autenticación: consulta las credenciales en Oracle y crea el JWT
+// que el frontend utiliza para conservar la sesión y aplicar permisos por rol.
 public sealed class AuthService(
     InventoryDbContext dbContext,
     IConfiguration configuration) : IAuthService

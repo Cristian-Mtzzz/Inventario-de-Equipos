@@ -5,7 +5,7 @@ import { finalize } from 'rxjs';
 import { Router } from '@angular/router';
 import { AuthService } from '../auth/auth.service';
 import { AdminService } from '../admin/admin.service';
-import { DeviceType } from '../admin/admin.models';
+import { Area, Building, DeviceType } from '../admin/admin.models';
 import { Maintenance, MaintenanceEditRequest, MaintenanceEntryRequest, MaintenanceExitRequest, ReceptionEntryRequest, WorkshopDevice } from './taller.models';
 import { TallerService } from './taller.service';
 
@@ -27,17 +27,21 @@ export class TallerComponent {
   devices: WorkshopDevice[] = [];
   maintenances: Maintenance[] = [];
   deviceTypes: DeviceType[] = [];
+  buildings: Building[] = [];
+  receptionAreas: Area[] = [];
   selectedMaintenance: Maintenance | null = null;
   pendingDeleteMaintenance: Maintenance | null = null;
   activeWindow: 'reception' | 'entry' | 'exit' | 'edit' | null = null;
   isLoading = false;
   isSaving = false;
+  isLoadingReceptionAreas = false;
   message = '';
   errorMessage = '';
   reception: ReceptionEntryRequest = {
     CodigoInventario: '',
     TipoDispositivo: '',
-    AreaOrigen: '',
+    IdEdificio: 0,
+    IdArea: 0,
     FechaIngreso: this.getCurrentDateTime(),
   };
   entry: MaintenanceEntryRequest = { IdEquipo: 0, Dictamen: '', TipoReparacion: '', FechaIngreso: this.getCurrentDateTime() };
@@ -47,11 +51,12 @@ export class TallerComponent {
   constructor() { this.loadData(); }
 
   loadData(): void {
-    // Refresca en paralelo equipos, reparaciones y tipos disponibles.
+    // Refresca en paralelo las tablas y datos de equipos, reparaciones y tipos disponibles.
     this.errorMessage = '';
     this.loadDevices();
     this.loadMaintenances();
     this.loadDeviceTypes();
+    this.loadBuildings();
   }
 
   loadDeviceTypes(): void {
@@ -60,6 +65,28 @@ export class TallerComponent {
       next: (types) => this.deviceTypes = types,
       error: () => this.deviceTypes = [],
     });
+  }
+
+  loadBuildings(): void {
+    // Carga los edificios para filtrar después los departamentos de recepción.
+    this.adminService.getBuildings().subscribe({
+      next: (buildings) => this.buildings = buildings,
+      error: () => this.buildings = [],
+    });
+  }
+
+  selectReceptionBuilding(idEdificio: number): void {
+    // Cada edificio limita el catálogo de departamentos que puede elegir el usuario.
+    this.reception.IdEdificio = idEdificio;
+    this.reception.IdArea = 0;
+    this.receptionAreas = [];
+    this.isLoadingReceptionAreas = idEdificio > 0;
+    if (idEdificio > 0) {
+      this.adminService.getAreas(idEdificio).pipe(finalize(() => this.isLoadingReceptionAreas = false)).subscribe({
+        next: (areas) => this.receptionAreas = areas,
+        error: () => this.errorMessage = 'No se pudieron cargar los departamentos del edificio.',
+      });
+    }
   }
 
   loadDevices(): void {
@@ -94,9 +121,11 @@ export class TallerComponent {
     this.reception = {
       CodigoInventario: '',
       TipoDispositivo: '',
-      AreaOrigen: '',
+      IdEdificio: 0,
+      IdArea: 0,
       FechaIngreso: this.getCurrentDateTime(),
     };
+    this.receptionAreas = [];
     this.activeWindow = 'reception';
   }
 
@@ -104,8 +133,8 @@ export class TallerComponent {
     // Valida y registra la recepción con la fecha/hora generada por el sistema.
     this.message = '';
     this.errorMessage = '';
-    if (!this.reception.CodigoInventario.trim() || !this.reception.TipoDispositivo.trim() || !this.reception.AreaOrigen.trim() || !this.reception.FechaIngreso) {
-      this.errorMessage = 'Completa el número de inventario, tipo de dispositivo, área de origen y la fecha de ingreso.';
+    if (!this.reception.CodigoInventario.trim() || !this.reception.TipoDispositivo.trim() || this.reception.IdEdificio <= 0 || this.reception.IdArea <= 0 || !this.reception.FechaIngreso) {
+      this.errorMessage = 'Completa el número de inventario, tipo, edificio, departamento y fecha de ingreso.';
       return;
     }
 

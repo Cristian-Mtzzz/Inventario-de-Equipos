@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
-import { map, Observable, shareReplay } from 'rxjs';
-import { AdminUser, Area, CreateAdminUser, CreateDevice, CreateReassignment, Device, DeviceType, Employee, Reassignment } from './admin.models';
+import { catchError, map, Observable, shareReplay, throwError } from 'rxjs';
+import { AdminUser, Area, Building, CreateAdminUser, CreateDevice, CreateReassignment, Device, DeviceType, Employee, Reassignment } from './admin.models';
 
 const API_ADMIN_URL = '/api/admin';
 
@@ -13,15 +13,16 @@ export class AdminService {
   private areasCache$?: Observable<Area[]>;
   private employeesCache$?: Observable<Employee[]>;
 
-  constructor(private readonly httpClient: HttpClient) {}
+  constructor(private readonly httpClient: HttpClient) { }
 
   getDevices(): Observable<Device[]> {
     // Obtiene equipos y transforma nombres de propiedades para el modelo del frontend.
     return this.httpClient.get<Array<Device & {
       idEquipo?: number; codigoInventario?: string; noSerie?: string; marca?: string;
       modelo?: string; idTipo?: number | null; estado?: string;
-      numeroPagoAsignado?: string | null; idArea?: number | null;
+      numeroPagoAsignado?: string | null; nombreAsignado?: string | null; idArea?: number | null;
       nombreTipo?: string | null; nombreArea?: string | null; asignadoA?: string | null;
+      idEdificio?: number | null; nombreEdificio?: string | null;
     }>>(`${API_ADMIN_URL}/devices`).pipe(map((devices) => devices.map((device) => ({
       IdEquipo: device.IdEquipo ?? device.idEquipo ?? 0,
       CodigoInventario: device.CodigoInventario ?? device.codigoInventario ?? '',
@@ -32,9 +33,12 @@ export class AdminService {
       NombreTipo: device.NombreTipo ?? device.nombreTipo ?? null,
       Estado: device.Estado ?? device.estado ?? '',
       NumeroPagoAsignado: device.NumeroPagoAsignado ?? device.numeroPagoAsignado ?? null,
+      NombreAsignado: device.NombreAsignado ?? device.nombreAsignado ?? null,
       IdArea: device.IdArea ?? device.idArea ?? null,
       NombreArea: device.NombreArea ?? device.nombreArea ?? null,
       AsignadoA: device.AsignadoA ?? device.asignadoA ?? null,
+      IdEdificio: device.IdEdificio ?? device.idEdificio ?? null,
+      NombreEdificio: device.NombreEdificio ?? device.nombreEdificio ?? null,
     }))));
   }
 
@@ -51,17 +55,25 @@ export class AdminService {
     return this.deviceTypesCache$;
   }
 
-  getAreas(): Observable<Area[]> {
-    // Obtiene áreas para asociarlas a equipos y reasignaciones.
-    if (this.areasCache$) return this.areasCache$;
-    this.areasCache$ = this.httpClient.get<Array<Area & { idArea?: number; nombreArea?: string }>>(`${API_ADMIN_URL}/areas`).pipe(
+  getBuildings(): Observable<Building[]> {
+    // Obtiene el catálogo de edificios que controla el filtro de áreas.
+    return this.httpClient.get<Array<Building & { idEdificio?: number; nombreEdificio?: string }>>(`${API_ADMIN_URL}/buildings`).pipe(
+      map((buildings) => buildings.map((building) => ({
+        IdEdificio: building.IdEdificio ?? building.idEdificio ?? 0,
+        NombreEdificio: building.NombreEdificio ?? building.nombreEdificio ?? '',
+      }))),
+    );
+  }
+
+  getAreas(idEdificio: number): Observable<Area[]> {
+    // Consulta únicamente los departamentos pertenecientes al edificio elegido.
+    return this.httpClient.get<Array<Area & { idArea?: number; nombreArea?: string; idEdificio?: number }>>(`${API_ADMIN_URL}/areas/${idEdificio}`).pipe(
       map((areas) => areas.map((area) => ({
         IdArea: area.IdArea ?? area.idArea ?? 0,
         NombreArea: area.NombreArea ?? area.nombreArea ?? '',
+        IdEdificio: area.IdEdificio ?? area.idEdificio ?? idEdificio,
       }))),
-      shareReplay({ bufferSize: 1, refCount: false }),
     );
-    return this.areasCache$;
   }
 
   getEmployees(): Observable<Employee[]> {
@@ -88,6 +100,17 @@ export class AdminService {
     return this.httpClient.put<void>(`${API_ADMIN_URL}/devices/${idEquipo}`, device);
   }
 
+  updateDeviceByIdentifier(codigoInventario: string, noSerie: string, idEquipo: number, device: CreateDevice): Observable<void> {
+    // Usa los identificadores originales para editar aunque código o serie cambien.
+    const params = new URLSearchParams({ codigoInventario, noSerie });
+    return this.httpClient.put<void>(`${API_ADMIN_URL}/devices/by-identifier?${params}`, device).pipe(
+      // Permite trabajar mientras se reinicia una API que todavía solo expone la ruta por ID.
+      catchError((error) => error.status === 404 || error.status === 405
+        ? this.updateDevice(idEquipo, device)
+        : throwError(() => error)),
+    );
+  }
+
   deleteDevice(idEquipo: number): Observable<void> {
     // Solicita eliminar el equipo y sus relaciones permitidas.
     return this.httpClient.delete<void>(`${API_ADMIN_URL}/devices/${idEquipo}`);
@@ -111,6 +134,10 @@ export class AdminService {
   createReassignment(reassignment: CreateReassignment): Observable<void> {
     // Registra el cambio de responsable y permite nombre sin número de pago.
     return this.httpClient.post<void>(`${API_ADMIN_URL}/reassignments`, reassignment);
+  }
+
+  deleteReassignment(idReasignacion: number): Observable<void> {
+    return this.httpClient.delete<void>(`${API_ADMIN_URL}/reassignments/${idReasignacion}`);
   }
 
   getUsers(): Observable<AdminUser[]> {

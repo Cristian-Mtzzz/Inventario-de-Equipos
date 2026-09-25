@@ -37,7 +37,8 @@ export interface MaintenanceEntryRequest {
 export interface ReceptionEntryRequest {
   CodigoInventario: string;
   TipoDispositivo: string;
-  AreaOrigen: string;
+  IdEdificio: number;
+  IdArea: number;
   FechaIngreso: string;
 }
 

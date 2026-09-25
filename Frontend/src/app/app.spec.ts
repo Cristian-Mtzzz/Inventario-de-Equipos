@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { provideRouter, Router } from '@angular/router';
+import { ActivatedRouteSnapshot, provideRouter, Router, RouterStateSnapshot } from '@angular/router';
 import { App } from './app';
 import { authGuard } from './auth/auth.guard';
 import { AuthUser, UserRole } from './auth/auth.models';
@@ -31,9 +31,10 @@ describe('App', () => {
   it('should redirect to login when there is no active session', () => {
     const router = TestBed.inject(Router);
     const route = { data: { roles: ['Admin'] as UserRole[] } };
+    const navigationState = {} as RouterStateSnapshot;
 
     TestBed.runInInjectionContext(() => {
-      expect(authGuard(route as any)).toEqual(router.createUrlTree(['/login']));
+      expect(authGuard(route as unknown as ActivatedRouteSnapshot, navigationState)).toEqual(router.createUrlTree(['/login']));
     });
   });
 
@@ -49,8 +50,9 @@ describe('App', () => {
     localStorage.setItem('sistema_inventario_user', JSON.stringify(user));
 
     const route = { data: { roles: ['Admin'] as UserRole[] } };
+    const navigationState = {} as RouterStateSnapshot;
     TestBed.runInInjectionContext(() => {
-      expect(authGuard(route as any)).toBeTrue();
+      expect(authGuard(route as unknown as ActivatedRouteSnapshot, navigationState)).toBe(true);
     });
   });
 });

@@ -27,7 +27,8 @@ public sealed class TallerController(ITallerService tallerService) : ControllerB
     {
         if (string.IsNullOrWhiteSpace(reception.CodigoInventario)) return BadRequest(new { Message = "Ingresa el número de inventario." });
         if (string.IsNullOrWhiteSpace(reception.TipoDispositivo)) return BadRequest(new { Message = "Indica el tipo de dispositivo." });
-        if (string.IsNullOrWhiteSpace(reception.AreaOrigen)) return BadRequest(new { Message = "Indica el área de origen o envío del equipo." });
+        if (reception.IdEdificio <= 0) return BadRequest(new { Message = "Selecciona el edificio de origen." });
+        if (reception.IdArea <= 0) return BadRequest(new { Message = "Selecciona el departamento de origen." });
         if (reception.FechaIngreso == default) return BadRequest(new { Message = "La fecha de ingreso es obligatoria." });
 
         await tallerService.RegisterReception(reception, cancellationToken);

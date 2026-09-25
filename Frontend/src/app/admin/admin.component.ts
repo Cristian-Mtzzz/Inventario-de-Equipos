@@ -2,10 +2,10 @@ import { Component, ViewChild, inject } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
-import { forkJoin, Observable, retry } from 'rxjs';
+import { finalize, forkJoin, Observable, retry } from 'rxjs';
 import { AuthService } from '../auth/auth.service';
 import { AdminService } from './admin.service';
-import { AdminUser, Area, CreateAdminUser, CreateDevice, CreateReassignment, Device, DeviceType, Employee, Reassignment } from './admin.models';
+import { AdminUser, Area, Building, CreateAdminUser, CreateDevice, CreateReassignment, Device, DeviceType, Reassignment } from './admin.models';
 import { TallerComponent } from '../taller/taller.component';
 
 type AdminSection = 'devices' | 'reassignments' | 'users' | 'workshop';
@@ -28,12 +28,17 @@ export class AdminComponent {
   reassignments: Reassignment[] = [];
   users: AdminUser[] = [];
   areas: Area[] = [];
+  isLoadingAreas = false;
+  buildings: Building[] = [];
+  selectedBuildingId: number | null = null;
   deviceTypes: DeviceType[] = [];
-  employees: Employee[] = [];
   editingDeviceId: number | null = null;
+  editingCodigoInventario = '';
+  editingNoSerie = '';
   isEditDialogOpen = false;
   pendingDeviceId: number | null = null;
   pendingUserId: number | null = null;
+  pendingReassignmentId: number | null = null;
   isDeleteDialogOpen = false;
   message = '';
   errorMessage = '';
@@ -51,9 +56,11 @@ export class AdminComponent {
 
   newDevice: CreateDevice = {
     CodigoInventario: '', NoSerie: '', Marca: '', Modelo: '', IdTipo: null,
-    Estado: 'DISPONIBLE', NumeroPagoAsignado: null, IdArea: null,
+    Estado: 'DISPONIBLE', NumeroPagoAsignado: null, NombreAsignado: null, IdArea: null,
   };
-  newReassignment: CreateReassignment = { IdEquipo: 0, NoPagoNuevo: null, NombreNuevo: '', Motivo: '' };
+  newReassignment: CreateReassignment = { IdEquipo: 0, NoPagoNuevo: null, NombreNuevo: '', Motivo: '', IdEdificio: 0, IdArea: 0 };
+  reassignmentBuildingId = 0;
+  reassignmentAreas: Area[] = [];
   selectedInventoryCode = '';
   newUser: CreateAdminUser = { Usuario: '', Password: '', Rol: 'UsuarioComun' };
 
@@ -113,8 +120,7 @@ export class AdminComponent {
       forkJoin({
         devices: this.adminService.getDevices(),
         deviceTypes: this.adminService.getDeviceTypes(),
-        employees: this.adminService.getEmployees(),
-        areas: this.adminService.getAreas(),
+        buildings: this.adminService.getBuildings(),
       }).pipe(retry({ count: 3, delay: 1000 })).subscribe({
         next: (data) => {
           this.devices = data.devices;
@@ -127,8 +133,7 @@ export class AdminComponent {
               if (!currentType?.NombreTipo && type.NombreTipo) typesById.set(type.IdTipo, type);
             });
           this.deviceTypes = [...typesById.values()].sort((first, second) => first.NombreTipo.localeCompare(second.NombreTipo));
-          this.employees = data.employees;
-          this.areas = data.areas;
+          this.buildings = data.buildings;
           this.currentPage = Math.min(this.currentPage, this.totalPages);
           this.isLoading = false;
         },
@@ -197,6 +202,31 @@ export class AdminComponent {
     this.selectedUserRole = '';
   }
 
+  selectBuilding(idEdificio: number | null): void {
+    const buildingId = Number(idEdificio);
+    this.selectedBuildingId = buildingId || null;
+    this.newDevice.IdArea = null;
+    this.areas = [];
+    this.isLoadingAreas = buildingId > 0;
+    if (buildingId > 0) {
+      this.adminService.getAreas(buildingId).pipe(finalize(() => this.isLoadingAreas = false)).subscribe({
+        next: (areas) => this.areas = areas,
+        error: () => this.errorMessage = 'No se pudieron cargar las áreas del edificio.',
+      });
+    }
+  }
+
+  handleDeviceStateChange(state: string): void {
+    // Un equipo disponible no puede conservar responsable, pago ni área asignada.
+    if (state === 'DISPONIBLE') {
+      this.newDevice.NumeroPagoAsignado = null;
+      this.newDevice.NombreAsignado = null;
+      this.newDevice.IdArea = null;
+      this.selectedBuildingId = null;
+      this.areas = [];
+    }
+  }
+
   addDevice(): void {
     // Decide entre crear o actualizar según exista un ID en edición.
     this.clearMessages();
@@ -214,7 +244,7 @@ export class AdminComponent {
           ? 'Dispositivo agregado correctamente.'
           : 'Dispositivo actualizado correctamente.';
         this.editingDeviceId = null;
-        this.newDevice = { CodigoInventario: '', NoSerie: '', Marca: '', Modelo: '', IdTipo: null, Estado: 'DISPONIBLE', NumeroPagoAsignado: null, IdArea: null };
+        this.newDevice = { CodigoInventario: '', NoSerie: '', Marca: '', Modelo: '', IdTipo: null, Estado: 'DISPONIBLE', NumeroPagoAsignado: null, NombreAsignado: null, IdArea: null };
         this.loadData();
       },
       error: (error) => this.errorMessage = error.error?.Message
@@ -226,6 +256,13 @@ export class AdminComponent {
   editDevice(device: Device): void {
     // Copia el equipo seleccionado al formulario para convertirlo en modo edición.
     this.editingDeviceId = device.IdEquipo;
+    this.editingCodigoInventario = device.CodigoInventario;
+    this.editingNoSerie = device.NoSerie;
+    this.selectedBuildingId = device.Estado === 'DISPONIBLE' ? null : device.IdEdificio;
+    this.areas = [];
+    if (this.selectedBuildingId !== null) {
+      this.adminService.getAreas(this.selectedBuildingId).subscribe((areas) => this.areas = areas);
+    }
     this.newDevice = {
       CodigoInventario: device.CodigoInventario,
       NoSerie: device.NoSerie,
@@ -234,6 +271,7 @@ export class AdminComponent {
       IdTipo: device.IdTipo,
       Estado: device.Estado,
       NumeroPagoAsignado: device.NumeroPagoAsignado,
+      NombreAsignado: device.NombreAsignado,
       IdArea: device.IdArea,
     };
     this.activeSection = 'devices';
@@ -244,8 +282,12 @@ export class AdminComponent {
   cancelEdit(): void {
     // Cancela la edición y restaura el formulario a su estado inicial.
     this.editingDeviceId = null;
+    this.editingCodigoInventario = '';
+    this.editingNoSerie = '';
+    this.selectedBuildingId = null;
+    this.areas = [];
     this.isEditDialogOpen = false;
-    this.newDevice = { CodigoInventario: '', NoSerie: '', Marca: '', Modelo: '', IdTipo: null, Estado: 'DISPONIBLE', NumeroPagoAsignado: null, IdArea: null };
+    this.newDevice = { CodigoInventario: '', NoSerie: '', Marca: '', Modelo: '', IdTipo: null, Estado: 'DISPONIBLE', NumeroPagoAsignado: null, NombreAsignado: null, IdArea: null };
   }
 
   saveEditedDevice(): void {
@@ -260,25 +302,15 @@ export class AdminComponent {
     });
   }
 
-  setAreaFromPayment(noPago: string | null): void {
-    const employee = this.employees.find((item) => item.NoPago === noPago);
-    if (!noPago) {
-      this.newDevice.Estado = 'DISPONIBLE';
-      this.newDevice.IdArea = null;
-      return;
-    }
-    if (employee?.IdArea !== null && employee?.IdArea !== undefined) {
-      this.newDevice.IdArea = employee.IdArea;
-    }
-  }
-
   private normalizeDevice(device: CreateDevice): CreateDevice {
     const numeroPago = device.NumeroPagoAsignado?.trim() || null;
+    const nombreAsignado = device.NombreAsignado?.trim() || null;
     return {
       ...device,
       NumeroPagoAsignado: numeroPago,
-      Estado: numeroPago ? device.Estado : 'DISPONIBLE',
-      IdArea: numeroPago ? device.IdArea : null,
+      NombreAsignado: nombreAsignado,
+      Estado: device.Estado,
+      IdArea: device.Estado === 'DISPONIBLE' ? null : device.IdArea,
     };
   }
 
@@ -296,6 +328,7 @@ export class AdminComponent {
     // Guarda el equipo pendiente para que el HTML abra el modal de confirmación.
     this.pendingDeviceId = idEquipo;
     this.pendingUserId = null;
+    this.pendingReassignmentId = null;
     this.isDeleteDialogOpen = true;
   }
 
@@ -316,13 +349,55 @@ export class AdminComponent {
     this.isDeleteDialogOpen = false;
   }
 
+  askRemoveReassignment(idReasignacion: number): void {
+    this.pendingDeviceId = null;
+    this.pendingUserId = null;
+    this.pendingReassignmentId = idReasignacion;
+    this.isDeleteDialogOpen = true;
+  }
+
+  confirmRemoveReassignment(): void {
+    if (this.pendingReassignmentId === null) return;
+    const idReasignacion = this.pendingReassignmentId;
+    this.pendingReassignmentId = null;
+    this.isDeleteDialogOpen = false;
+    this.adminService.deleteReassignment(idReasignacion).subscribe({
+      next: () => { this.message = 'Reasignación eliminada.'; this.loadData(); },
+      error: (error) => this.errorMessage = this.getErrorMessage(error, 'No se pudo eliminar la reasignación.'),
+    });
+  }
+
+  cancelRemoveReassignment(): void {
+    this.pendingReassignmentId = null;
+    this.isDeleteDialogOpen = false;
+  }
+
+  cancelPendingDelete(): void {
+    if (this.pendingDeviceId !== null) this.cancelRemoveDevice();
+    else if (this.pendingUserId !== null) this.cancelRemoveUser();
+    else this.cancelRemoveReassignment();
+  }
+
+  confirmPendingDelete(): void {
+    if (this.pendingDeviceId !== null) this.confirmRemoveDevice();
+    else if (this.pendingUserId !== null) this.confirmRemoveUser();
+    else this.confirmRemoveReassignment();
+  }
+
   addReassignment(): void {
     // Guarda el nuevo responsable y actualiza también la colección de dispositivos.
     this.clearMessages();
+    if (!this.newReassignment.IdEquipo || this.reassignmentBuildingId <= 0 || this.newReassignment.IdArea <= 0) {
+      this.errorMessage = 'Selecciona el equipo, edificio y departamento de la reasignación.';
+      return;
+    }
+    this.newReassignment.IdEdificio = this.reassignmentBuildingId;
     this.adminService.createReassignment(this.newReassignment).subscribe({
       next: () => {
         this.message = 'Reasignación registrada correctamente.';
-        this.newReassignment = { IdEquipo: 0, NoPagoNuevo: null, NombreNuevo: '', Motivo: '' };
+        this.newReassignment = { IdEquipo: 0, NoPagoNuevo: null, NombreNuevo: '', Motivo: '', IdEdificio: 0, IdArea: 0 };
+        this.reassignmentBuildingId = 0;
+        this.reassignmentAreas = [];
         this.selectedInventoryCode = '';
         this.loadData();
         this.adminService.getDevices().subscribe({
@@ -338,6 +413,20 @@ export class AdminComponent {
     this.selectedInventoryCode = codigoInventario;
     const device = this.devices.find((item) => item.CodigoInventario === codigoInventario);
     this.newReassignment.IdEquipo = device?.IdEquipo ?? 0;
+  }
+
+  selectReassignmentBuilding(idEdificio: number): void {
+    const buildingId = Number(idEdificio);
+    this.reassignmentBuildingId = buildingId;
+    this.newReassignment.IdArea = 0;
+    this.reassignmentAreas = [];
+    this.isLoadingAreas = buildingId > 0;
+    if (buildingId > 0) {
+      this.adminService.getAreas(buildingId).pipe(finalize(() => this.isLoadingAreas = false)).subscribe({
+        next: (areas) => this.reassignmentAreas = areas,
+        error: () => this.errorMessage = 'No se pudieron cargar los departamentos del edificio.',
+      });
+    }
   }
 
   getInventoryCode(idEquipo: number): string {
@@ -360,6 +449,7 @@ export class AdminComponent {
   askRemoveUser(idUsuario: number): void {
     this.pendingUserId = idUsuario;
     this.pendingDeviceId = null;
+    this.pendingReassignmentId = null;
     this.isDeleteDialogOpen = true;
   }
 

@@ -18,7 +18,7 @@ export class AuthService {
     return this.currentUser$.subscribe((user) => subscriber.next(user !== null));
   });
 
-  constructor(private readonly httpClient: HttpClient) {}
+  constructor(private readonly httpClient: HttpClient) { }
 
   login(loginRequest: LoginRequest): Observable<LoginResponse> {
     // Normaliza y guarda la respuesta exitosa del endpoint de login.
@@ -59,12 +59,14 @@ export class AuthService {
 
   private normalizeLoginResponse(loginResponse: LoginResponse): LoginResponse {
     // Acepta propiedades PascalCase o camelCase para tolerar distintas serializaciones.
-    const response = loginResponse as LoginResponse & { token?: string; user?: AuthUser & {
-      userId?: number | string;
-      userName?: string;
-      fullName?: string;
-      role?: UserRole;
-    } };
+    const response = loginResponse as LoginResponse & {
+      token?: string; user?: AuthUser & {
+        userId?: number | string;
+        userName?: string;
+        fullName?: string;
+        role?: UserRole;
+      }
+    };
     const user = (response.User ?? response.user) as (AuthUser & {
       userId?: number | string;
       userName?: string;

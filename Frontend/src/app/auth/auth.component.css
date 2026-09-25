@@ -69,7 +69,10 @@ h2 {
   font-size: .95rem;
 }
 
-form { display: flex; flex-direction: column; }
+form {
+  display: flex;
+  flex-direction: column;
+}
 
 label {
   margin: 0 0 .55rem;
@@ -78,7 +81,9 @@ label {
   font-weight: 700;
 }
 
-label:not(:first-child) { margin-top: 1.35rem; }
+label:not(:first-child) {
+  margin-top: 1.35rem;
+}
 
 input {
   width: 100%;
@@ -95,8 +100,13 @@ input:focus {
   box-shadow: 0 0 0 3px rgba(57, 123, 120, .12);
 }
 
-.password-field { position: relative; }
-.password-field input { padding-right: 4rem; }
+.password-field {
+  position: relative;
+}
+
+.password-field input {
+  padding-right: 4rem;
+}
 
 .password-toggle {
   position: absolute;
@@ -146,7 +156,10 @@ input:focus {
   transform: translateY(-1px);
 }
 
-.submit-button:disabled { cursor: wait; opacity: .65; }
+.submit-button:disabled {
+  cursor: wait;
+  opacity: .65;
+}
 
 .security-note {
   margin: 2rem 0 0;
@@ -155,7 +168,10 @@ input:focus {
   text-align: center;
 }
 
-.security-note span { margin-right: .3rem; color: #397b78; }
+.security-note span {
+  margin-right: .3rem;
+  color: #397b78;
+}
 
 footer {
   color: #9aa8a5;
@@ -163,9 +179,18 @@ footer {
   text-align: center;
 }
 
-footer span { margin: 0 .5rem; color: #cad3d0; }
+footer span {
+  margin: 0 .5rem;
+  color: #cad3d0;
+}
 
 @media (max-width: 520px) {
-  .app-header { height: 68px; }
-  .form-panel { min-height: calc(100dvh - 68px); padding-top: 2.5rem; }
+  .app-header {
+    height: 68px;
+  }
+
+  .form-panel {
+    min-height: calc(100dvh - 68px);
+    padding-top: 2.5rem;
+  }
 }

@@ -3,7 +3,7 @@ import { CanActivateFn, Router } from '@angular/router';
 import { UserRole } from './auth.models';
 import { AuthService } from './auth.service';
 
-// Impide abrir módulos protegidos sin token y sin el rol requerido.
+// Impide abrir módulos protegidos sin credenciales  y sin el rol requerido.
 export const authGuard: CanActivateFn = (route) => {
   const authService = inject(AuthService);
   const router = inject(Router);

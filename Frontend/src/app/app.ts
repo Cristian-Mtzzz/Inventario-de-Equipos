@@ -7,5 +7,5 @@ import { RouterOutlet } from '@angular/router';
   styleUrl: './app.css',
   templateUrl: './app.html',
 })
-// Componente raíz: solo aloja el outlet de navegación.
-export class App {}
+// Componente raíz: aloja el outlet donde Angular inserta login y módulos protegidos.
+export class App { }

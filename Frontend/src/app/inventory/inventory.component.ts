@@ -2,10 +2,10 @@ import { DatePipe } from '@angular/common';
 import { Component, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
-import { forkJoin } from 'rxjs';
+import { finalize, forkJoin } from 'rxjs';
 import { AuthService } from '../auth/auth.service';
 import { AdminService } from '../admin/admin.service';
-import { Area, CreateDevice, CreateReassignment, Device, DeviceType, Employee, Reassignment } from '../admin/admin.models';
+import { Area, Building, CreateDevice, CreateReassignment, Device, DeviceType, Reassignment } from '../admin/admin.models';
 
 @Component({
   selector: 'app-inventory',
@@ -22,8 +22,10 @@ export class InventoryComponent {
   devices: Device[] = [];
   reassignments: Reassignment[] = [];
   areas: Area[] = [];
+  isLoadingAreas = false;
+  buildings: Building[] = [];
+  selectedBuildingId: number | null = null;
   deviceTypes: DeviceType[] = [];
-  employees: Employee[] = [];
   activeSection: 'devices' | 'reassignments' = 'devices';
   pageSize = 25;
   currentPage = 1;
@@ -36,15 +38,25 @@ export class InventoryComponent {
 
   newDevice: CreateDevice = {
     CodigoInventario: '', NoSerie: '', Marca: '', Modelo: '', IdTipo: null,
-    Estado: 'DISPONIBLE', NumeroPagoAsignado: null, IdArea: null,
+    Estado: 'DISPONIBLE', NumeroPagoAsignado: null, NombreAsignado: null, IdArea: null,
   };
-  newReassignment: CreateReassignment = { IdEquipo: 0, NoPagoNuevo: null, NombreNuevo: '', Motivo: '' };
+  newReassignment: CreateReassignment = { IdEquipo: 0, NoPagoNuevo: null, NombreNuevo: '', Motivo: '', IdEdificio: 0, IdArea: 0 };
+  reassignmentBuildingId = 0;
+  reassignmentAreas: Area[] = [];
   selectedInventoryCode = '';
   editingDeviceId: number | null = null;
+  editingCodigoInventario = '';
+  editingNoSerie = '';
   isEditDialogOpen = false;
+  pendingDeleteDeviceId: number | null = null;
+  isDeleteDialogOpen = false;
 
   constructor() {
     this.loadDevices();
+  }
+
+  get canRemoveDevices(): boolean {
+    return this.authService.hasRole(['Admin']);
   }
 
   get filteredDevices(): Device[] {
@@ -86,12 +98,10 @@ export class InventoryComponent {
         this.currentPage = Math.min(this.currentPage, this.totalPages);
         forkJoin({
           deviceTypes: this.adminService.getDeviceTypes(),
-          employees: this.adminService.getEmployees(),
-          areas: this.adminService.getAreas(),
+          buildings: this.adminService.getBuildings(),
         }).subscribe((data) => {
           this.deviceTypes = data.deviceTypes;
-          this.employees = data.employees;
-          this.areas = data.areas;
+          this.buildings = data.buildings;
         });
       },
       error: () => this.errorMessage = 'No se pudo cargar el inventario. Verifica que la API esté activa.',
@@ -108,6 +118,31 @@ export class InventoryComponent {
     this.selectedModel = '';
     this.selectedTypeId = null;
     this.currentPage = 1;
+  }
+
+  selectBuilding(idEdificio: number | null): void {
+    const buildingId = Number(idEdificio);
+    this.selectedBuildingId = buildingId || null;
+    this.newDevice.IdArea = null;
+    this.areas = [];
+    this.isLoadingAreas = buildingId > 0;
+    if (buildingId > 0) {
+      this.adminService.getAreas(buildingId).pipe(finalize(() => this.isLoadingAreas = false)).subscribe({
+        next: (areas) => this.areas = areas,
+        error: () => this.errorMessage = 'No se pudieron cargar las áreas del edificio.',
+      });
+    }
+  }
+
+  handleDeviceStateChange(state: string): void {
+    // Un equipo disponible no puede conservar responsable, pago ni área asignada.
+    if (state === 'DISPONIBLE') {
+      this.newDevice.NumeroPagoAsignado = null;
+      this.newDevice.NombreAsignado = null;
+      this.newDevice.IdArea = null;
+      this.selectedBuildingId = null;
+      this.areas = [];
+    }
   }
 
   loadReassignments(): void {
@@ -139,7 +174,7 @@ export class InventoryComponent {
     this.adminService.createDevice(this.newDevice).subscribe({
       next: () => {
         this.message = 'Dispositivo agregado correctamente.';
-        this.newDevice = { CodigoInventario: '', NoSerie: '', Marca: '', Modelo: '', IdTipo: null, Estado: 'DISPONIBLE', NumeroPagoAsignado: null, IdArea: null };
+        this.newDevice = { CodigoInventario: '', NoSerie: '', Marca: '', Modelo: '', IdTipo: null, Estado: 'DISPONIBLE', NumeroPagoAsignado: null, NombreAsignado: null, IdArea: null };
         this.loadDevices();
       },
       error: (error) => this.errorMessage = error.error?.Message ?? 'No se pudo agregar el dispositivo.',
@@ -149,6 +184,13 @@ export class InventoryComponent {
   editDevice(device: Device): void {
     // Coloca los datos seleccionados en el formulario modal de edición.
     this.editingDeviceId = device.IdEquipo;
+    this.editingCodigoInventario = device.CodigoInventario;
+    this.editingNoSerie = device.NoSerie;
+    this.selectedBuildingId = device.Estado === 'DISPONIBLE' ? null : device.IdEdificio;
+    this.areas = [];
+    if (this.selectedBuildingId !== null) {
+      this.adminService.getAreas(this.selectedBuildingId).subscribe((areas) => this.areas = areas);
+    }
     this.newDevice = {
       CodigoInventario: device.CodigoInventario,
       NoSerie: device.NoSerie,
@@ -157,6 +199,7 @@ export class InventoryComponent {
       IdTipo: device.IdTipo,
       Estado: device.Estado,
       NumeroPagoAsignado: device.NumeroPagoAsignado,
+      NombreAsignado: device.NombreAsignado,
       IdArea: device.IdArea,
     };
     this.isEditDialogOpen = true;
@@ -177,7 +220,32 @@ export class InventoryComponent {
 
   cancelEdit(): void {
     this.editingDeviceId = null;
+    this.editingCodigoInventario = '';
+    this.editingNoSerie = '';
+    this.selectedBuildingId = null;
+    this.areas = [];
     this.isEditDialogOpen = false;
+  }
+
+  askRemoveDevice(idEquipo: number): void {
+    this.pendingDeleteDeviceId = idEquipo;
+    this.isDeleteDialogOpen = true;
+  }
+
+  confirmRemoveDevice(): void {
+    if (this.pendingDeleteDeviceId === null) return;
+    const idEquipo = this.pendingDeleteDeviceId;
+    this.pendingDeleteDeviceId = null;
+    this.isDeleteDialogOpen = false;
+    this.adminService.deleteDevice(idEquipo).subscribe({
+      next: () => { this.message = 'Dispositivo eliminado.'; this.loadDevices(); },
+      error: (error) => this.errorMessage = error.error?.Message ?? error.error?.message ?? 'No se pudo quitar el dispositivo.',
+    });
+  }
+
+  cancelRemoveDevice(): void {
+    this.pendingDeleteDeviceId = null;
+    this.isDeleteDialogOpen = false;
   }
 
   selectDevice(codigoInventario: string): void {
@@ -185,18 +253,34 @@ export class InventoryComponent {
     this.newReassignment.IdEquipo = this.devices.find((device) => device.CodigoInventario === codigoInventario)?.IdEquipo ?? 0;
   }
 
-  setAreaFromPayment(noPago: string | null): void {
-    const employee = this.employees.find((item) => item.NoPago === noPago);
-    if (employee?.IdArea !== null && employee?.IdArea !== undefined) this.newDevice.IdArea = employee.IdArea;
+  selectReassignmentBuilding(idEdificio: number): void {
+    const buildingId = Number(idEdificio);
+    this.reassignmentBuildingId = buildingId;
+    this.newReassignment.IdArea = 0;
+    this.reassignmentAreas = [];
+    this.isLoadingAreas = buildingId > 0;
+    if (buildingId > 0) {
+      this.adminService.getAreas(buildingId).pipe(finalize(() => this.isLoadingAreas = false)).subscribe({
+        next: (areas) => this.reassignmentAreas = areas,
+        error: () => this.errorMessage = 'No se pudieron cargar los departamentos del edificio.',
+      });
+    }
   }
 
   addReassignment(): void {
     // Envía una reasignación y refresca ambas tablas al terminar.
     this.clearMessages();
+    if (!this.newReassignment.IdEquipo || this.reassignmentBuildingId <= 0 || this.newReassignment.IdArea <= 0) {
+      this.errorMessage = 'Selecciona el equipo, edificio y departamento de la reasignación.';
+      return;
+    }
+    this.newReassignment.IdEdificio = this.reassignmentBuildingId;
     this.adminService.createReassignment(this.newReassignment).subscribe({
       next: () => {
         this.message = 'Reasignación registrada correctamente.';
-        this.newReassignment = { IdEquipo: 0, NoPagoNuevo: null, NombreNuevo: '', Motivo: '' };
+        this.newReassignment = { IdEquipo: 0, NoPagoNuevo: null, NombreNuevo: '', Motivo: '', IdEdificio: 0, IdArea: 0 };
+        this.reassignmentBuildingId = 0;
+        this.reassignmentAreas = [];
         this.selectedInventoryCode = '';
         this.loadDevices();
         this.loadReassignments();

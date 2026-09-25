@@ -29,10 +29,15 @@ public sealed class AdminController(IAdminService adminService) : ControllerBase
     public async Task<ActionResult<IReadOnlyList<EmployeeDto>>> GetEmployees(CancellationToken cancellationToken) =>
         Ok(await adminService.GetEmployees(cancellationToken));
 
-    [HttpGet("areas")]
-    [Authorize(Roles = "Admin,UsuarioComun")]
-    public async Task<ActionResult<IReadOnlyList<AreaDto>>> GetAreas(CancellationToken cancellationToken) =>
-        Ok(await adminService.GetAreas(cancellationToken));
+    [HttpGet("buildings")]
+    [Authorize(Roles = "Admin,UsuarioComun,Taller")]
+    public async Task<ActionResult<IReadOnlyList<BuildingDto>>> GetBuildings(CancellationToken cancellationToken) =>
+        Ok(await adminService.GetBuildings(cancellationToken));
+
+    [HttpGet("areas/{idEdificio:int}")]
+    [Authorize(Roles = "Admin,UsuarioComun,Taller")]
+    public async Task<ActionResult<IReadOnlyList<AreaDto>>> GetAreas(int idEdificio, CancellationToken cancellationToken) =>
+        Ok(await adminService.GetAreas(idEdificio, cancellationToken));
 
     [HttpPost("devices")]
     [Authorize(Roles = "Admin,UsuarioComun")]
@@ -63,13 +68,44 @@ public sealed class AdminController(IAdminService adminService) : ControllerBase
         return NoContent();
     }
 
+    [HttpPut("devices/by-identifier")]
+    [Authorize(Roles = "Admin,UsuarioComun")]
+    // Actualiza usando el código o la serie originales, aunque el usuario los modifique.
+    public async Task<IActionResult> UpdateDeviceByIdentifier(
+        [FromQuery] string? codigoInventario,
+        [FromQuery] string? noSerie,
+        CreateDeviceDto device,
+        CancellationToken cancellationToken)
+    {
+        var validationMessage = ValidateDevice(device);
+        if (validationMessage is not null)
+        {
+            return BadRequest(new { Message = validationMessage });
+        }
+
+        if (string.IsNullOrWhiteSpace(codigoInventario) && string.IsNullOrWhiteSpace(noSerie))
+        {
+            return BadRequest(new { Message = "Indica el código de inventario o el número de serie original." });
+        }
+
+        await adminService.UpdateDeviceByIdentifier(codigoInventario, noSerie, device, cancellationToken);
+        return NoContent();
+    }
+
     [HttpDelete("devices/{idEquipo:int}")]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Admin,UsuarioComun")]
     // Elimina el equipo y sus reasignaciones relacionadas.
     public async Task<IActionResult> DeleteDevice(int idEquipo, CancellationToken cancellationToken)
     {
-        await adminService.DeleteDevice(idEquipo, cancellationToken);
-        return NoContent();
+        try
+        {
+            await adminService.DeleteDevice(idEquipo, cancellationToken);
+            return NoContent();
+        }
+        catch (OracleException exception) when (exception.Number == 2292)
+        {
+            return Conflict(new { Message = "No se puede quitar el dispositivo porque tiene otros registros relacionados." });
+        }
     }
 
     [HttpGet("reassignments")]
@@ -82,7 +118,20 @@ public sealed class AdminController(IAdminService adminService) : ControllerBase
     // Cambia el responsable sin exigir que exista un número de pago.
     public async Task<IActionResult> CreateReassignment(CreateReassignmentDto reassignment, CancellationToken cancellationToken)
     {
+        if (reassignment.IdEquipo <= 0 || reassignment.IdEdificio <= 0 || reassignment.IdArea <= 0)
+        {
+            return BadRequest(new { Message = "Selecciona el equipo, edificio y departamento de la reasignación." });
+        }
+
         await adminService.CreateReassignment(reassignment, cancellationToken);
+        return NoContent();
+    }
+
+    [HttpDelete("reassignments/{idReasignacion:int}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> DeleteReassignment(int idReasignacion, CancellationToken cancellationToken)
+    {
+        await adminService.DeleteReassignment(idReasignacion, cancellationToken);
         return NoContent();
     }
 

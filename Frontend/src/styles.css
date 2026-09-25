@@ -1,19 +1,27 @@
 /* Estilos globales: tipografías, reset mínimo y acciones compartidas entre paneles.
     Las clases de refresco y cierre de sesión se definen aquí para que mantengan
     la misma apariencia en Admin, Inventario y Taller. */
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
-
 :root {
-    font-family: 'DM Sans', sans-serif;
+    font-family: 'Segoe UI', sans-serif;
     color: #203238;
     background: #edf4f2;
     font-synthesis: none;
     text-rendering: optimizeLegibility;
 }
 
-* { box-sizing: border-box; }
-body { margin: 0; min-width: 320px; }
-button, input { font: inherit; }
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    min-width: 320px;
+}
+
+button,
+input {
+    font: inherit;
+}
 
 .refresh-button,
 .admin-shell .refresh-button,

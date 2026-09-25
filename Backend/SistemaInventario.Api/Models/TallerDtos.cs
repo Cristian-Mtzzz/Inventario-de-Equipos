@@ -32,7 +32,8 @@ public sealed record CreateMaintenanceEntryDto(
 public sealed record CreateReceptionEntryDto(
     string CodigoInventario,
     string TipoDispositivo,
-    string AreaOrigen,
+    int IdEdificio,
+    int IdArea,
     DateTime FechaIngreso);
 
 public sealed record CreateMaintenanceExitDto(

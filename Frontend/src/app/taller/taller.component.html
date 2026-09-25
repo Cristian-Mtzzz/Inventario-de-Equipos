@@ -86,17 +86,31 @@
         </div><button type="button" class="modal-close" aria-label="Cerrar recepción" (click)="closeWindow()">×</button>
       </div>
       <form (ngSubmit)="saveReception()">
+        @if (errorMessage) { <p class="feedback error" role="alert">{{ errorMessage }}</p> }
         <label for="reception-inventory">Número de inventario</label>
-        <input id="reception-inventory" type="text" [(ngModel)]="reception.CodigoInventario" name="receptionInventory" placeholder="Ej. INV-0012" required />
+        <input id="reception-inventory" type="text" [(ngModel)]="reception.CodigoInventario" name="receptionInventory"
+          placeholder="Ej. INV-0012" required />
         <label for="reception-type">Tipo de dispositivo</label>
         <select id="reception-type" [(ngModel)]="reception.TipoDispositivo" name="receptionType" required>
           <option value="">Selecciona un tipo</option>
-          @for (type of deviceTypes; track type.IdTipo) { <option [value]="type.NombreTipo">{{ type.NombreTipo }}</option> }
+          @for (type of deviceTypes; track type.IdTipo) { <option [value]="type.NombreTipo">{{ type.NombreTipo }}
+          </option> }
         </select>
-        <label for="reception-area">Área de origen / envío</label>
-        <input id="reception-area" type="text" [(ngModel)]="reception.AreaOrigen" name="receptionArea" placeholder="Ej. Administración, almacén, logística" required />
+        <label for="reception-building">Edificio de origen</label>
+        <select id="reception-building" [(ngModel)]="reception.IdEdificio"
+          (ngModelChange)="selectReceptionBuilding($event)" name="receptionBuilding" required>
+          <option [ngValue]="0">Selecciona un edificio</option>
+          @for (building of buildings; track building.IdEdificio) { <option [ngValue]="building.IdEdificio">{{ building.NombreEdificio }}</option> }
+        </select>
+        <label for="reception-area">Departamento de origen / envío</label>
+        <select id="reception-area" [(ngModel)]="reception.IdArea" name="receptionArea"
+          [disabled]="reception.IdEdificio <= 0 || isLoadingReceptionAreas" required>
+          <option [ngValue]="0">{{ isLoadingReceptionAreas ? 'Cargando departamentos...' : 'Selecciona un departamento' }}</option>
+          @for (area of receptionAreas; track area.IdArea) { <option [ngValue]="area.IdArea">{{ area.NombreArea }}</option> }
+        </select>
         <label for="reception-date">Fecha y hora de ingreso</label>
-        <input id="reception-date" type="datetime-local" [(ngModel)]="reception.FechaIngreso" name="receptionDate" [readonly]="true" required />
+        <input id="reception-date" type="datetime-local" [(ngModel)]="reception.FechaIngreso" name="receptionDate"
+          [readonly]="true" required />
         <button type="submit" [disabled]="isSaving">{{ isSaving ? 'Guardando...' : 'Guardar recepción' }}</button>
       </form>
     </section>
@@ -199,19 +213,22 @@
   <!-- Confirmación modal antes de borrar una reparación. -->
   @if (pendingDeleteMaintenance) {
   <div class="modal-backdrop" role="presentation" (click)="cancelDeleteMaintenance()">
-    <section class="workshop-modal delete-modal" role="dialog" aria-modal="true" aria-labelledby="delete-maintenance-title"
-      (click)="$event.stopPropagation()">
+    <section class="workshop-modal delete-modal" role="dialog" aria-modal="true"
+      aria-labelledby="delete-maintenance-title" (click)="$event.stopPropagation()">
       <div class="modal-heading">
         <div>
           <p class="eyebrow">CONFIRMAR ACCIÓN</p>
           <h2 id="delete-maintenance-title">¿Eliminar esta reparación?</h2>
-          <p class="modal-subtitle">Se eliminará el registro del equipo {{ pendingDeleteMaintenance.CodigoInventario }}.</p>
+          <p class="modal-subtitle">Se eliminará el registro del equipo {{ pendingDeleteMaintenance.CodigoInventario }}.
+          </p>
         </div>
-        <button type="button" class="modal-close" aria-label="Cerrar confirmación" (click)="cancelDeleteMaintenance()">×</button>
+        <button type="button" class="modal-close" aria-label="Cerrar confirmación"
+          (click)="cancelDeleteMaintenance()">×</button>
       </div>
       <div class="modal-actions">
         <button type="button" class="secondary" (click)="cancelDeleteMaintenance()">Cancelar</button>
-        <button type="button" class="danger modal-danger" (click)="confirmDeleteMaintenance()">Confirmar eliminación</button>
+        <button type="button" class="danger modal-danger" (click)="confirmDeleteMaintenance()">Confirmar
+          eliminación</button>
       </div>
     </section>
   </div>
