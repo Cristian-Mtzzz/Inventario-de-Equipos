@@ -5,12 +5,13 @@ import { Router } from '@angular/router';
 import { finalize, forkJoin } from 'rxjs';
 import { AuthService } from '../auth/auth.service';
 import { AdminService } from '../admin/admin.service';
-import { Area, Building, CreateDevice, CreateReassignment, Device, DeviceType, Reassignment } from '../admin/admin.models';
+import { Area, Building, CreateDevice, CreateReassignment, Device, DeviceOption, DeviceType, Reassignment } from '../admin/admin.models';
+import { EmployeeSearchDialogComponent } from '../admin/employee-search-dialog.component';
 
 // Componente de inventario que permite consultar, filtrar, paginar y gestionar dispositivos y reasignaciones.
 @Component({
   selector: 'app-inventory',
-  imports: [DatePipe, FormsModule],
+  imports: [DatePipe, FormsModule, EmployeeSearchDialogComponent],
   templateUrl: './inventory.component.html',
   styleUrl: './inventory.component.css',
 })
@@ -21,11 +22,18 @@ export class InventoryComponent {
   private readonly authService = inject(AuthService);
   private readonly router = inject(Router);
   devices: Device[] = [];
+  totalDeviceCount = 0;
+  isLoadingDevices = false;
   reassignments: Reassignment[] = [];
   areas: Area[] = [];
   isLoadingAreas = false;
   buildings: Building[] = [];
   selectedBuildingId: number | null = null;
+  selectedRegionId: number | null = null;
+  selectedRegionalFilterId: number | null = null;
+  selectedBuildingFilterId: number | null = null;
+  selectedAreaFilterId: number | null = null;
+  filterAreas: Area[] = [];
   deviceTypes: DeviceType[] = [];
   activeSection: 'devices' | 'reassignments' = 'devices';
   pageSize = 25;
@@ -36,6 +44,11 @@ export class InventoryComponent {
   selectedBrand = '';
   selectedModel = '';
   selectedTypeId: number | null = null;
+  private deviceFilterTimer: ReturnType<typeof setTimeout> | null = null;
+  private deviceRequestId = 0;
+  showEmployeeSearch = false;
+  deviceOptions: DeviceOption[] = [];
+  deviceOptionSearch = '';
 
   // Modelo para el nuevo dispositivo que se va a agregar al inventario.
   newDevice: CreateDevice = {
@@ -56,6 +69,13 @@ export class InventoryComponent {
   isDeleteDialogOpen = false;
 
   constructor() {
+    forkJoin({
+      deviceTypes: this.adminService.getDeviceTypes(),
+      buildings: this.adminService.getBuildings(),
+    }).subscribe((data) => {
+      this.deviceTypes = data.deviceTypes;
+      this.buildings = data.buildings;
+    });
     this.loadDevices();
   }
 
@@ -65,77 +85,141 @@ export class InventoryComponent {
   }
 
   // Propiedad que devuelve los dispositivos filtrados según los criterios de búsqueda y filtros aplicados.
-  get filteredDevices(): Device[] {
-    const normalizedSearch = this.searchTerm.trim().toLowerCase();
-    return this.devices.filter((device) => {
-      const matchesSearch = !normalizedSearch
-        || (device.CodigoInventario ?? '').toLowerCase().includes(normalizedSearch)
-        || (device.NoSerie ?? '').toLowerCase().includes(normalizedSearch);
-      const matchesBrand = !this.selectedBrand || device.Marca === this.selectedBrand;
-      const matchesModel = !this.selectedModel || device.Modelo === this.selectedModel;
-      const matchesType = this.selectedTypeId === null || device.IdTipo === this.selectedTypeId;
-
-      return matchesSearch && matchesBrand && matchesModel && matchesType;
-    });
-  }
+  get filteredDevices(): Device[] { return this.devices; }
 
   // Propiedad que devuelve los dispositivos de la página actual según la paginación.
   get pagedDevices(): Device[] {
-    const startIndex = (this.currentPage - 1) * this.pageSize;
-    return this.filteredDevices.slice(startIndex, startIndex + this.pageSize);
+    return this.devices;
   }
 
   // Propiedad que devuelve el número total de páginas según los dispositivos filtrados y el tamaño de página.
   get totalPages(): number {
-    return Math.max(1, Math.ceil(this.filteredDevices.length / this.pageSize));
+    return Math.max(1, Math.ceil(this.totalDeviceCount / this.pageSize));
   }
 
-  // Propiedad que devuelve las marcas disponibles en el inventario.
-  get availableBrands(): string[] {
-    return [...new Set(this.devices.map((device) => device.Marca).filter(Boolean))].sort((first, second) => first.localeCompare(second));
+  get regionalOptions(): { IdRegional: number; NombreRegional: string }[] {
+    const regions = new Map<number, string>();
+    this.buildings.forEach((building) => {
+      if (building.IdRegional !== null && building.NombreRegional) regions.set(building.IdRegional, building.NombreRegional);
+    });
+    return [...regions].map(([IdRegional, NombreRegional]) => ({ IdRegional, NombreRegional }));
   }
 
-  // Propiedad que devuelve los modelos disponibles en el inventario.
-  get availableModels(): string[] {
-    return [...new Set(this.devices.map((device) => device.Modelo).filter(Boolean))].sort((first, second) => first.localeCompare(second));
+  get filterBuildings(): Building[] {
+    return this.selectedRegionalFilterId === null
+      ? this.buildings
+      : this.buildings.filter((building) => building.IdRegional === this.selectedRegionalFilterId);
   }
-  // Método que carga los dispositivos y los catálogos necesarios para los formularios de inventario.
+
+  get deviceFormBuildings(): Building[] {
+    return this.selectedRegionId === null
+      ? this.buildings
+      : this.buildings.filter((building) => building.IdRegional === this.selectedRegionId);
+  }
+  // Método que carga los dispositivos y los catálogos necesarios para los formularios de inventario
+
   loadDevices(): void {
+    this.isLoadingDevices = true;
+    const requestId = ++this.deviceRequestId;
+    this.adminService.getDevices({
+      Page: this.currentPage,
+      SearchTerm: this.searchTerm,
+      Brand: this.selectedBrand,
+      Model: this.selectedModel,
+      TypeId: this.selectedTypeId,
+      RegionalId: this.selectedRegionalFilterId,
+      BuildingId: this.selectedBuildingFilterId,
+      AreaId: this.selectedAreaFilterId,
+    }).subscribe({
 
-    this.adminService.getDevices().subscribe({
-      next: (devices) => {
-        this.devices = devices;
-        this.currentPage = Math.min(this.currentPage, this.totalPages);
-        forkJoin({
-          deviceTypes: this.adminService.getDeviceTypes(),
-          buildings: this.adminService.getBuildings(),
-        }).subscribe((data) => {
-          this.deviceTypes = data.deviceTypes;
-          this.buildings = data.buildings;
-        });
+      next: (result) => {
+        if (requestId !== this.deviceRequestId) return;
+        this.devices = result.Items;
+        this.totalDeviceCount = result.TotalCount;
+        this.currentPage = result.Page;
+        this.isLoadingDevices = false;
       },
-      error: () => this.errorMessage = 'No se pudo cargar el inventario. Verifica que la API esté activa.',
+      error: () => {
+        if (requestId !== this.deviceRequestId) return;
+        this.errorMessage = 'No se pudo cargar el inventario. Verifica que la API esté activa.';
+        this.isLoadingDevices = false;
+      },
     });
   }
 
-  // Método que aplica los filtros de búsqueda y selección de marca, modelo y tipo.
+  // Método que aplica los filtros de búsqueda y selección de marca, modelo y tipo
   applyFilters(): void {
     this.currentPage = 1;
+    if (this.deviceFilterTimer) clearTimeout(this.deviceFilterTimer);
+    this.deviceFilterTimer = setTimeout(() => {
+      this.deviceFilterTimer = null;
+      this.loadDevices();
+    }, 250);
   }
 
-  // Método que limpia los filtros de búsqueda y selección de marca, modelo y tipo.
+  // Método que limpia los filtros de búsqueda y selección de marca, modelo y tipo
   clearFilters(): void {
     this.searchTerm = '';
     this.selectedBrand = '';
     this.selectedModel = '';
     this.selectedTypeId = null;
+    this.selectedRegionalFilterId = null;
+    this.selectedBuildingFilterId = null;
+    this.selectedAreaFilterId = null;
+    this.filterAreas = [];
     this.currentPage = 1;
+    if (this.deviceFilterTimer) clearTimeout(this.deviceFilterTimer);
+    this.loadDevices();
+  }
+//filtro de región
+  selectRegionalFilter(idRegional: number | null): void {
+    this.selectedRegionalFilterId = idRegional;
+    this.selectedBuildingFilterId = null;
+    this.selectedAreaFilterId = null;
+    this.filterAreas = [];
+    this.applyFilters();
   }
 
-  // Método que se ejecuta al seleccionar un edificio, cargando sus áreas correspondientes.
+  //filtro de edificio
+  selectBuildingFilter(idEdificio: number | null): void {
+    this.selectedBuildingFilterId = idEdificio;
+    this.selectedAreaFilterId = null;
+    this.filterAreas = [];
+    if (idEdificio !== null) {
+      this.adminService.getAreas(idEdificio).subscribe({
+        next: (areas) => this.filterAreas = areas,
+        error: () => this.errorMessage = 'No se pudieron cargar las áreas del edificio.',
+      });
+    }
+    this.applyFilters();
+  }
+
+  //filtro de región
+  selectDeviceRegion(idRegional: number | null): void {
+    this.selectedRegionId = idRegional;
+    this.selectedBuildingId = null;
+    this.newDevice.IdArea = null;
+    this.areas = [];
+  }
+
+  searchDeviceOptions(): void {
+    this.selectedInventoryCode = '';
+    this.newReassignment.IdEquipo = 0;
+    if (this.deviceOptionSearch.trim().length < 2) {
+      this.deviceOptions = [];
+      return;
+    }
+    this.adminService.searchDeviceOptions(this.deviceOptionSearch.trim()).subscribe({
+      next: (options) => this.deviceOptions = options,
+      error: () => this.errorMessage = 'No se pudieron buscar dispositivos.',
+    });
+  }
+
+  // Método que se ejecuta al seleccionar un edificvio y carga las areas ancladas a ese edificio
   selectBuilding(idEdificio: number | null): void {
     const buildingId = Number(idEdificio);
     this.selectedBuildingId = buildingId || null;
+    this.selectedRegionId = this.buildings.find((building) => building.IdEdificio === this.selectedBuildingId)?.IdRegional ?? null;
     this.newDevice.IdArea = null;
     this.areas = [];
     this.isLoadingAreas = buildingId > 0;
@@ -147,20 +231,21 @@ export class InventoryComponent {
     }
   }
 
-  // Método que maneja los cambios en el estado del dispositivo, ajustando los campos relacionados según corresponda.
+  // Método que maneja los cambios en el estado del dispositivo, ajustando los campos relacionados 
   handleDeviceStateChange(state: string): void {
-    // Un equipo disponible no puede conservar responsable, pago ni área asignada.
+    // si un equipo esta disponible, no puede tener nombre, numero de pago ni area en la que esta asignada
     if (state === 'DISPONIBLE') {
       this.newDevice.NumeroPagoAsignado = null;
       this.newDevice.NombreAsignado = null;
       this.newDevice.IdArea = null;
       this.selectedBuildingId = null;
+      this.selectedRegionId = null;
       this.areas = [];
     }
   }
 
   loadReassignments(): void {
-    // Carga el historial que se muestra en la pestaña Reasignaciones.
+    // Carga el historial de reasignaciones que se cargan en la pestaña de reasignaciones
     this.adminService.getReassignments().subscribe({
       next: (items) => this.reassignments = items,
       error: () => this.errorMessage = 'No se pudieron cargar las reasignaciones.',
@@ -168,7 +253,7 @@ export class InventoryComponent {
   }
 
   selectSection(section: 'devices' | 'reassignments'): void {
-    // Cambia de pestaña y solicita únicamente los datos necesarios.
+    // Cambia de pestaña y solicita únicamente los datos necesarios
     this.activeSection = section;
     this.message = '';
     this.errorMessage = '';
@@ -177,13 +262,13 @@ export class InventoryComponent {
   }
 
   refreshPanel(): void {
-    // Repite la carga de la pestaña activa y limpia mensajes anteriores.
+    // Repite la carga de la pestaña activa y limpia mensajes anteriores
     this.message = '';
     this.errorMessage = '';
     this.selectSection(this.activeSection);
   }
 
-  // Método que agrega un nuevo dispositivo al inventario.
+  // metodo que agrega un nuevo dispositivo al inventario 
   addDevice(): void {
     this.clearMessages();
     this.adminService.createDevice(this.newDevice).subscribe({
@@ -197,16 +282,17 @@ export class InventoryComponent {
   }
 
   editDevice(device: Device): void {
-    // Coloca los datos seleccionados en el formulario modal de edición.
+    // Coloca los datos seleccionados en el formulario modal de editar
     this.editingDeviceId = device.IdEquipo;
     this.editingCodigoInventario = device.CodigoInventario;
     this.editingNoSerie = device.NoSerie;
     this.selectedBuildingId = device.Estado === 'DISPONIBLE' ? null : device.IdEdificio;
+    this.selectedRegionId = device.IdRegional;
     this.areas = [];
     if (this.selectedBuildingId !== null) {
       this.adminService.getAreas(this.selectedBuildingId).subscribe((areas) => this.areas = areas);
     }
-    // Copia los datos del dispositivo seleccionado al formulario de edición.
+    // Copia los datos del dispositivo seleccionado al formulario de editar
     this.newDevice = {
       CodigoInventario: device.CodigoInventario,
       NoSerie: device.NoSerie,
@@ -221,7 +307,7 @@ export class InventoryComponent {
     this.isEditDialogOpen = true;
   }
 
-  // Método que guarda los cambios realizados en un dispositivo existente.
+  // Método que guarda los cambios realizados en un dispositivo que ya existe
   saveEditedDevice(): void {
     if (this.editingDeviceId === null) return;
     this.adminService.updateDevice(this.editingDeviceId, this.newDevice).subscribe({
@@ -234,12 +320,13 @@ export class InventoryComponent {
     });
   }
 
-  // Método que cancela la edición de un dispositivo y restablece el formulario.
+  // Método que cancela la edición de un dispositivo y restablece el formulario
   cancelEdit(): void {
     this.editingDeviceId = null;
     this.editingCodigoInventario = '';
     this.editingNoSerie = '';
     this.selectedBuildingId = null;
+    this.selectedRegionId = null;
     this.areas = [];
     this.isEditDialogOpen = false;
   }
@@ -271,7 +358,7 @@ export class InventoryComponent {
   // Método que se ejecuta al seleccionar un dispositivo, actualizando la reasignación con su ID.
   selectDevice(codigoInventario: string): void {
     this.selectedInventoryCode = codigoInventario;
-    this.newReassignment.IdEquipo = this.devices.find((device) => device.CodigoInventario === codigoInventario)?.IdEquipo ?? 0;
+    this.newReassignment.IdEquipo = this.deviceOptions.find((device) => device.CodigoInventario === codigoInventario)?.IdEquipo ?? 0;
   }
 
   // Método que se ejecuta al seleccionar un edificio para la reasignación, cargando sus áreas correspondientes.  
@@ -318,7 +405,9 @@ export class InventoryComponent {
 
   // Método que navega a una página específica de la lista de dispositivos.
   goToPage(page: number): void {
+    if (this.deviceFilterTimer) clearTimeout(this.deviceFilterTimer);
     this.currentPage = Math.min(Math.max(page, 1), this.totalPages);
+    this.loadDevices();
   }
 
   logout(): void {

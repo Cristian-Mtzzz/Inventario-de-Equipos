@@ -5,14 +5,15 @@ import { Router } from '@angular/router';
 import { finalize, forkJoin, Observable, retry } from 'rxjs';
 import { AuthService } from '../auth/auth.service';
 import { AdminService } from './admin.service';
-import { AdminUser, Area, Building, CreateAdminUser, CreateDevice, CreateReassignment, Device, DeviceType, Reassignment } from './admin.models';
+import { AdminUser, Area, Building, CreateAdminUser, CreateDevice, CreateReassignment, Device, DeviceOption, DeviceType, Reassignment, UpdateAdminUser } from './admin.models';
 import { TallerComponent } from '../taller/taller.component';
+import { EmployeeSearchDialogComponent } from './employee-search-dialog.component';
 
 type AdminSection = 'devices' | 'reassignments' | 'users' | 'workshop';
 
 @Component({
   selector: 'app-admin',
-  imports: [DatePipe, FormsModule, TallerComponent],
+  imports: [DatePipe, FormsModule, TallerComponent, EmployeeSearchDialogComponent],
   templateUrl: './admin.component.html',
   styleUrl: './admin.component.css',
 })
@@ -25,18 +26,28 @@ export class AdminComponent {
   private readonly router = inject(Router);
   activeSection: AdminSection = 'devices';
   devices: Device[] = [];
+  totalDeviceCount = 0;
   reassignments: Reassignment[] = [];
   users: AdminUser[] = [];
   areas: Area[] = [];
   isLoadingAreas = false;
   buildings: Building[] = [];
   selectedBuildingId: number | null = null;
+  selectedRegionId: number | null = null;
+  selectedRegionalFilterId: number | null = null;
+  selectedBuildingFilterId: number | null = null;
+  selectedAreaFilterId: number | null = null;
+  filterAreas: Area[] = [];
   deviceTypes: DeviceType[] = [];
   editingDeviceId: number | null = null;
   editingCodigoInventario = '';
   editingNoSerie = '';
   isEditDialogOpen = false;
   isUserDialogOpen = false;
+  editingUserId: number | null = null;
+  pendingPasswordResetUserId: number | null = null;
+  pendingPasswordResetUserName = '';
+  isPasswordResetDialogOpen = false;
   pendingDeviceId: number | null = null;
   pendingUserId: number | null = null;
   pendingReassignmentId: number | null = null;
@@ -51,6 +62,11 @@ export class AdminComponent {
   selectedBrand = '';
   selectedModel = '';
   selectedTypeId: number | null = null;
+  private deviceFilterTimer: ReturnType<typeof setTimeout> | null = null;
+  private deviceRequestId = 0;
+  showEmployeeSearch = false;
+  deviceOptions: DeviceOption[] = [];
+  deviceOptionSearch = '';
   userSearchTerm = '';
   selectedUserRole = '';
   @ViewChild(TallerComponent) workshopComponent?: TallerComponent;
@@ -74,36 +90,35 @@ export class AdminComponent {
   }
 
   // Métodos auxiliares para el filtrado y paginación de dispositivos y usuarios.
-  get filteredDevices(): Device[] {
-    const normalizedSearch = this.searchTerm.trim().toLowerCase();
-    return this.devices.filter((device) => {
-      const matchesSearch = !normalizedSearch
-        || (device.CodigoInventario ?? '').toLowerCase().includes(normalizedSearch)
-        || (device.NoSerie ?? '').toLowerCase().includes(normalizedSearch);
-      const matchesBrand = !this.selectedBrand || device.Marca === this.selectedBrand;
-      const matchesModel = !this.selectedModel || device.Modelo === this.selectedModel;
-      const matchesType = this.selectedTypeId === null || device.IdTipo === this.selectedTypeId;
-
-      return matchesSearch && matchesBrand && matchesModel && matchesType;
-    });
-  }
+  get filteredDevices(): Device[] { return this.devices; }
 
   // Métodos para la paginación de dispositivos.
   get totalPages(): number {
-    return Math.max(1, Math.ceil(this.filteredDevices.length / this.pageSize));
+    return Math.max(1, Math.ceil(this.totalDeviceCount / this.pageSize));
   }
   // Fin de los métodos para la paginación de dispositivos.
   get pagedDevices(): Device[] {
-    const startIndex = (this.currentPage - 1) * this.pageSize;
-    return this.filteredDevices.slice(startIndex, startIndex + this.pageSize);
-  }
-    // Fin de los métodos auxiliares para el filtrado de marcas y modelos.
-  get availableBrands(): string[] {
-    return [...new Set(this.devices.map((device) => device.Marca).filter(Boolean))].sort((first, second) => first.localeCompare(second));
+    return this.devices;
   }
 
-  get availableModels(): string[] {
-    return [...new Set(this.devices.map((device) => device.Modelo).filter(Boolean))].sort((first, second) => first.localeCompare(second));
+  get regionalOptions(): { IdRegional: number; NombreRegional: string }[] {
+    const regions = new Map<number, string>();
+    this.buildings.forEach((building) => {
+      if (building.IdRegional !== null && building.NombreRegional) regions.set(building.IdRegional, building.NombreRegional);
+    });
+    return [...regions].map(([IdRegional, NombreRegional]) => ({ IdRegional, NombreRegional }));
+  }
+
+  get filterBuildings(): Building[] {
+    return this.selectedRegionalFilterId === null
+      ? this.buildings
+      : this.buildings.filter((building) => building.IdRegional === this.selectedRegionalFilterId);
+  }
+
+  get deviceFormBuildings(): Building[] {
+    return this.selectedRegionId === null
+      ? this.buildings
+      : this.buildings.filter((building) => building.IdRegional === this.selectedRegionId);
   }
   // Métodos auxiliares para el filtrado de usuarios.
   get filteredUsers(): AdminUser[] {
@@ -126,24 +141,18 @@ export class AdminComponent {
     this.errorMessage = '';
     if (this.activeSection === 'devices') {
       forkJoin({
-        devices: this.adminService.getDevices(),
         deviceTypes: this.adminService.getDeviceTypes(),
         buildings: this.adminService.getBuildings(),
       }).pipe(retry({ count: 3, delay: 1000 })).subscribe({
         next: (data) => {
-          this.devices = data.devices;
           const typesById = new Map<number, DeviceType>();
-          [...data.deviceTypes, ...this.devices
-            .filter((device) => device.IdTipo !== null && device.NombreTipo)
-            .map((device) => ({ IdTipo: device.IdTipo!, NombreTipo: device.NombreTipo! }))]
-            .forEach((type) => {
+          data.deviceTypes.forEach((type) => {
               const currentType = typesById.get(type.IdTipo);
               if (!currentType?.NombreTipo && type.NombreTipo) typesById.set(type.IdTipo, type);
             });
           this.deviceTypes = [...typesById.values()].sort((first, second) => first.NombreTipo.localeCompare(second.NombreTipo));
           this.buildings = data.buildings;
-          this.currentPage = Math.min(this.currentPage, this.totalPages);
-          this.isLoading = false;
+          this.loadDevicePage();
         },
         error: () => this.showLoadError(),
       });
@@ -191,11 +200,18 @@ export class AdminComponent {
 
   goToPage(page: number): void {
     // Limita la página solicitada al rango válido antes de actualizar la tabla.
+    if (this.deviceFilterTimer) clearTimeout(this.deviceFilterTimer);
     this.currentPage = Math.min(Math.max(page, 1), this.totalPages);
+    this.loadDevicePage();
   }
 
   applyFilters(): void {
     this.currentPage = 1;
+    if (this.deviceFilterTimer) clearTimeout(this.deviceFilterTimer);
+    this.deviceFilterTimer = setTimeout(() => {
+      this.deviceFilterTimer = null;
+      this.loadDevicePage();
+    }, 250);
   }
 
   // Limpia los filtros aplicados a la lista de dispositivos.
@@ -204,7 +220,81 @@ export class AdminComponent {
     this.selectedBrand = '';
     this.selectedModel = '';
     this.selectedTypeId = null;
+    this.selectedRegionalFilterId = null;
+    this.selectedBuildingFilterId = null;
+    this.selectedAreaFilterId = null;
+    this.filterAreas = [];
     this.currentPage = 1;
+    if (this.deviceFilterTimer) clearTimeout(this.deviceFilterTimer);
+    this.loadDevicePage();
+  }
+
+  loadDevicePage(): void {
+    if (this.activeSection !== 'devices') return;
+    this.isLoading = true;
+    const requestId = ++this.deviceRequestId;
+    this.adminService.getDevices({
+      Page: this.currentPage,
+      SearchTerm: this.searchTerm,
+      Brand: this.selectedBrand,
+      Model: this.selectedModel,
+      TypeId: this.selectedTypeId,
+      RegionalId: this.selectedRegionalFilterId,
+      BuildingId: this.selectedBuildingFilterId,
+      AreaId: this.selectedAreaFilterId,
+    }).subscribe({
+      next: (result) => {
+        if (requestId !== this.deviceRequestId) return;
+        this.devices = result.Items;
+        this.totalDeviceCount = result.TotalCount;
+        this.currentPage = result.Page;
+        this.isLoading = false;
+      },
+      error: () => {
+        if (requestId === this.deviceRequestId) this.showLoadError();
+      },
+    });
+  }
+
+  selectRegionalFilter(idRegional: number | null): void {
+    this.selectedRegionalFilterId = idRegional;
+    this.selectedBuildingFilterId = null;
+    this.selectedAreaFilterId = null;
+    this.filterAreas = [];
+    this.applyFilters();
+  }
+
+  selectBuildingFilter(idEdificio: number | null): void {
+    this.selectedBuildingFilterId = idEdificio;
+    this.selectedAreaFilterId = null;
+    this.filterAreas = [];
+    if (idEdificio !== null) {
+      this.adminService.getAreas(idEdificio).subscribe({
+        next: (areas) => this.filterAreas = areas,
+        error: () => this.errorMessage = 'No se pudieron cargar las áreas del edificio.',
+      });
+    }
+    this.applyFilters();
+  }
+
+  selectDeviceRegion(idRegional: number | null): void {
+    this.selectedRegionId = idRegional;
+    this.selectedBuildingId = null;
+    this.newDevice.IdArea = null;
+    this.areas = [];
+  }
+
+  searchDeviceOptions(): void {
+    this.selectedInventoryCode = '';
+    this.newReassignment.IdEquipo = 0;
+    if (this.deviceOptionSearch.trim().length < 2) {
+      this.deviceOptions = [];
+      return;
+    }
+    this.adminService.searchDeviceOptions(this.deviceOptionSearch.trim()).subscribe({
+      next: (options) => this.deviceOptions = options,
+      error: () => this.errorMessage = 'No se pudieron buscar dispositivos.',
+    });
   }
 
   // Limpia los filtros aplicados a la lista de usuarios.
@@ -218,6 +308,7 @@ export class AdminComponent {
   selectBuilding(idEdificio: number | null): void {
     const buildingId = Number(idEdificio);
     this.selectedBuildingId = buildingId || null;
+    this.selectedRegionId = this.buildings.find((building) => building.IdEdificio === this.selectedBuildingId)?.IdRegional ?? null;
     this.newDevice.IdArea = null;
     this.areas = [];
     this.isLoadingAreas = buildingId > 0;
@@ -236,6 +327,7 @@ export class AdminComponent {
       this.newDevice.NombreAsignado = null;
       this.newDevice.IdArea = null;
       this.selectedBuildingId = null;
+      this.selectedRegionId = null;
       this.areas = [];
     }
   }
@@ -272,6 +364,7 @@ export class AdminComponent {
     this.editingCodigoInventario = device.CodigoInventario;
     this.editingNoSerie = device.NoSerie;
     this.selectedBuildingId = device.Estado === 'DISPONIBLE' ? null : device.IdEdificio;
+    this.selectedRegionId = device.IdRegional;
     this.areas = [];
     if (this.selectedBuildingId !== null) {
       this.adminService.getAreas(this.selectedBuildingId).subscribe((areas) => this.areas = areas);
@@ -298,6 +391,7 @@ export class AdminComponent {
     this.editingCodigoInventario = '';
     this.editingNoSerie = '';
     this.selectedBuildingId = null;
+    this.selectedRegionId = null;
     this.areas = [];
     this.isEditDialogOpen = false;
     this.newDevice = { CodigoInventario: '', NoSerie: '', Marca: '', Modelo: '', IdTipo: null, Estado: 'DISPONIBLE', NumeroPagoAsignado: null, NombreAsignado: null, IdArea: null };
@@ -420,10 +514,6 @@ export class AdminComponent {
         this.reassignmentAreas = [];
         this.selectedInventoryCode = '';
         this.loadData();
-        this.adminService.getDevices().subscribe({
-          next: (devices) => this.devices = devices,
-          error: () => this.errorMessage = 'La reasignación se guardó, pero no se pudo refrescar la tabla de dispositivos.',
-        });
       },
       error: () => this.errorMessage = 'No se pudo registrar la reasignación.',
     });
@@ -432,7 +522,7 @@ export class AdminComponent {
   // Selecciona un dispositivo para reasignación y actualiza el modelo correspondiente.
   selectDeviceForReassignment(codigoInventario: string): void {
     this.selectedInventoryCode = codigoInventario;
-    const device = this.devices.find((item) => item.CodigoInventario === codigoInventario);
+    const device = this.deviceOptions.find((item) => item.CodigoInventario === codigoInventario);
     this.newReassignment.IdEquipo = device?.IdEquipo ?? 0;
   }
 
@@ -473,6 +563,7 @@ export class AdminComponent {
       next: () => {
         this.message = 'Usuario agregado correctamente.';
         this.isUserDialogOpen = false;
+        this.editingUserId = null;
         this.newUser = {
           Usuario: '', NombrePersona: '', FechaExpiracion: null, Estado: 'ACTIVO',
           DominioP: 'BA', Dominio: 0, Rol: 'UsuarioComun',
@@ -482,15 +573,69 @@ export class AdminComponent {
       error: (error) => this.errorMessage = this.getErrorMessage(error, 'No se pudo agregar el usuario.'),
     });
   }
-  // Abre el diálogo para agregar un nuevo usuario.
+  // Abre el diálogo para agregar un nuevo usuariio o editar uno existente.
   openUserDialog(): void {
     this.clearMessages();
+    this.editingUserId = null;
+    this.newUser = {
+      Usuario: '', NombrePersona: '', FechaExpiracion: null, Estado: 'ACTIVO',
+      DominioP: 'BA', Dominio: 0, Rol: 'UsuarioComun',
+    };
     this.isUserDialogOpen = true;
+  }
+
+    //se abre una ventana para editar un usuario existente.
+  editUser(user: AdminUser): void {
+    this.clearMessages();
+    this.editingUserId = user.IdUsuario;
+    this.newUser = {
+      Usuario: user.Usuario,
+      NombrePersona: user.NombrePersona,
+      FechaExpiracion: user.FechaExpiracion?.slice(0, 10) ?? null,
+      Estado: user.Estado,
+      DominioP: user.DominioP,
+      Dominio: user.Dominio,
+      Rol: user.Rol,
+    };
+    this.isUserDialogOpen = true;
+  }
+
+    // Guarda los cambios realizados en el diálogo de usuario. Si se está editando un usuario existente, se actualiza; de lo contrario, se agrega uno nuevo.
+  saveUserDialog(): void {
+    if (this.editingUserId === null) {
+      this.addUser();
+      return;
+    }
+
+      
+    this.clearMessages();
+    if (!this.newUser.NombrePersona.trim()) {
+      this.errorMessage = 'El nombre de la persona es obligatorio.';
+      return;
+    }
+
+    const userToUpdate: UpdateAdminUser = {
+      NombrePersona: this.newUser.NombrePersona.trim(),
+      FechaExpiracion: this.newUser.FechaExpiracion?.trim() || null,
+      Estado: this.newUser.Estado,
+      DominioP: this.newUser.DominioP,
+      Dominio: this.newUser.Dominio,
+      Rol: this.newUser.Rol,
+    };
+    this.adminService.updateUser(this.editingUserId, userToUpdate).subscribe({
+      next: () => {
+        this.message = 'Usuario actualizado correctamente.';
+        this.closeUserDialog();
+        this.loadData();
+      },
+      error: (error) => this.errorMessage = this.getErrorMessage(error, 'No se pudo actualizar el usuario.'),
+    });
   }
 
   // Cierra el diálogo de agregar usuario.
   closeUserDialog(): void {
     this.isUserDialogOpen = false;
+    this.editingUserId = null;
   }
 
   // Solicita la eliminación de un usuario.
@@ -518,6 +663,32 @@ export class AdminComponent {
     this.pendingUserId = null;
     this.isDeleteDialogOpen = false;
   }
+
+  askResetUserPassword(idUsuario: number, userName: string): void {
+    this.pendingPasswordResetUserId = idUsuario;
+    this.pendingPasswordResetUserName = userName;
+    this.isPasswordResetDialogOpen = true;
+  }
+
+  resetUserPassword(): void {
+    if (this.pendingPasswordResetUserId === null) return;
+    const idUsuario = this.pendingPasswordResetUserId;
+    this.adminService.resetUserPassword(idUsuario).subscribe({
+      next: () => {
+        this.message = `Contraseña de ${this.pendingPasswordResetUserName} restablecida.`;
+        this.cancelPasswordReset();
+        this.loadData();
+      },
+      error: (error) => this.errorMessage = this.getErrorMessage(error, 'No se pudo restablecer la contraseña.'),
+    });
+  }
+
+  cancelPasswordReset(): void {
+    this.pendingPasswordResetUserId = null;
+    this.pendingPasswordResetUserName = '';
+    this.isPasswordResetDialogOpen = false;
+  }
+
   // Limpia los mensajes de éxito y error.
   private clearMessages(): void {
     this.message = '';

@@ -8,7 +8,7 @@
     
     </div>
     <div class="admin-header-actions">
-      <button type="button" class="refresh-button" (click)="loadData()">Refrescar panel</button>
+      <button type="button" class="refresh-button" (click)="loadData()">Refrescar panel </button>
       <button type="button" class="logout-button" (click)="logout()">Cerrar sesión</button>
     </div>
   </header>
@@ -40,6 +40,15 @@
         @for (type of deviceTypes; track type.IdTipo) { <option [ngValue]="type.IdTipo">{{ type.NombreTipo || 'Tipo ' +
           type.IdTipo }}</option> }
       </select>
+      <select [(ngModel)]="selectedRegionId" (ngModelChange)="selectDeviceRegion($event)" name="regional"
+        [disabled]="newDevice.Estado === 'DISPONIBLE'">
+        <option [ngValue]="null">Seleccionar regional</option>
+        @for (region of regionalOptions; track region.IdRegional) {
+        <option [ngValue]="region.IdRegional">{{ region.NombreRegional }}</option>
+        }
+      </select>
+
+
       <select [(ngModel)]="newDevice.Estado" (ngModelChange)="handleDeviceStateChange($event)" name="estado" required>
         <option value="DISPONIBLE">Disponible</option>
         <option value="ASIGNADO">Asignado</option>
@@ -52,7 +61,7 @@
       <select [(ngModel)]="selectedBuildingId" (ngModelChange)="selectBuilding($event)" name="edificio"
         [disabled]="newDevice.Estado === 'DISPONIBLE'">
         <option [ngValue]="null">Seleccionar edificio</option>
-        @for (building of buildings; track building.IdEdificio) { <option [ngValue]="building.IdEdificio">{{
+        @for (building of deviceFormBuildings; track building.IdEdificio) { <option [ngValue]="building.IdEdificio">{{
           building.NombreEdificio }}</option> }
       </select>
       <select [(ngModel)]="newDevice.IdArea" name="area"
@@ -60,26 +69,38 @@
         <option [ngValue]="null">{{ isLoadingAreas ? 'Cargando departamentos...' : 'Sin área' }}</option>
         @for (area of areas; track area.IdArea) { <option [ngValue]="area.IdArea">{{ area.NombreArea }}</option> }
       </select>
-      <button type="submit" [disabled]="deviceForm.invalid">{{ editingDeviceId === null ? 'Agregar dispositivo' :
+      <button type="submit" [disabled]="deviceForm.invalid">{{ editingDeviceId === null ? 'Agregar' :
         'Guardar cambios' }}</button>
       @if (editingDeviceId !== null) { <button type="button" class="secondary" (click)="cancelEdit()">Cancelar</button>
-      }
+      }-->
     </form>
-    <div class="filter-bar">
+
+    <!-- Filtros de búsqueda y tabla de dispositivos -->
+    <div class="filter-bar device-filter-bar">
       <input type="search" [(ngModel)]="searchTerm" (ngModelChange)="applyFilters()" name="adminSearch"
-        placeholder="Buscar por código o serie" />
-      <select [(ngModel)]="selectedBrand" (ngModelChange)="applyFilters()" name="adminBrand">
-        <option value="">Todas las marcas</option>
-        @for (brand of availableBrands; track brand) { <option [value]="brand">{{ brand }}</option> }
-      </select>
-      <select [(ngModel)]="selectedModel" (ngModelChange)="applyFilters()" name="adminModel">
-        <option value="">Todos los modelos</option>
-        @for (model of availableModels; track model) { <option [value]="model">{{ model }}</option> }
-      </select>
+        placeholder="Buscar código, serie, marca, modelo o empleado" />
       <select [(ngModel)]="selectedTypeId" (ngModelChange)="applyFilters()" name="adminType">
         <option [ngValue]="null">Todos los tipos</option>
         @for (type of deviceTypes; track type.IdTipo) { <option [ngValue]="type.IdTipo">{{ type.NombreTipo }}</option> }
       </select>
+      <select [ngModel]="selectedRegionalFilterId" (ngModelChange)="selectRegionalFilter($event)" name="adminRegionalFilter">
+        <option [ngValue]="null">Todas las regionales</option>
+        @for (region of regionalOptions; track region.IdRegional) {
+        <option [ngValue]="region.IdRegional">{{ region.NombreRegional }}</option>
+        }
+      </select>
+      <select [ngModel]="selectedBuildingFilterId" (ngModelChange)="selectBuildingFilter($event)" name="adminBuildingFilter">
+        <option [ngValue]="null">Todos los edificios</option>
+        @for (building of filterBuildings; track building.IdEdificio) {
+        <option [ngValue]="building.IdEdificio">{{ building.NombreEdificio }}</option>
+        }
+      </select>
+      <select [(ngModel)]="selectedAreaFilterId" (ngModelChange)="applyFilters()" name="adminAreaFilter"
+        [disabled]="selectedBuildingFilterId === null">
+        <option [ngValue]="null">Todas las áreas</option>
+        @for (area of filterAreas; track area.IdArea) { <option [ngValue]="area.IdArea">{{ area.NombreArea }}</option> }
+      </select>
+      <button type="button" class="secondary" (click)="showEmployeeSearch = true"> 🔎</button>
       <button type="button" class="secondary" (click)="clearFilters()">Limpiar</button>
     </div>
     <div class="table-wrap">
@@ -95,15 +116,18 @@
             <th>Estado</th>
             <th>Número de pago</th>
             <th>Asignado a</th>
+            <th>Regional</th>
             <th>Área</th>
             <th>Edificio</th>
             <th>Acciones</th>
           </tr>
         </thead>
+
+        <!-- tabla de dispositivos-->
         <tbody>
           @if (filteredDevices.length === 0) {
           <tr>
-            <td colspan="12">No se encontraron equipos con los filtros actuales.</td>
+            <td colspan="13">No se encontraron equipos con los filtros actuales.</td>
           </tr>
           } @else {
           @for (device of pagedDevices; track device.IdEquipo) { <tr>
@@ -116,6 +140,7 @@
             <td>{{ device.Estado }}</td>
             <td>{{ device.NumeroPagoAsignado || '-' }}</td>
             <td>{{ device.AsignadoA || 'Sin asignar' }}</td>
+            <td>{{ device.NombreRegional || '-' }}</td>
             <td>{{ device.NombreArea || 'Sin área' }}</td>
             <td>{{ device.NombreEdificio || '-' }}</td>
             <td><button type="button" class="secondary" (click)="editDevice(device)">Editar</button><button
@@ -127,7 +152,7 @@
     </div>
     <nav class="pagination" aria-label="Paginación de dispositivos">
       <button type="button" (click)="goToPage(currentPage - 1)" [disabled]="currentPage === 1">Anterior</button>
-      <span>Página {{ currentPage }} de {{ totalPages }} · {{ filteredDevices.length }} registros</span>
+      <span>Página {{ currentPage }} de {{ totalPages }} · {{ totalDeviceCount }} registros</span>
       <button type="button" (click)="goToPage(currentPage + 1)"
         [disabled]="currentPage === totalPages">Siguiente</button>
     </nav>
@@ -139,11 +164,13 @@
   <section class="admin-section">
     <form class="admin-form compact" (ngSubmit)="addReassignment()">
       <h2>Registrar reasignación</h2>
-      <select [ngModel]="selectedInventoryCode" (ngModelChange)="selectDeviceForReassignment($event)" name="equipo"
-        required>
-        <option value="">Código de inventario</option>
-        @for (device of devices; track device.IdEquipo) { <option [value]="device.CodigoInventario">{{
-          device.CodigoInventario }} · {{ device.Marca }} {{ device.Modelo }}</option> }
+      <input [(ngModel)]="deviceOptionSearch" name="deviceOptionSearch" placeholder="Código, serie o modelo del equipo" />
+      <button type="button" class="secondary" (click)="searchDeviceOptions()">Buscar equipo</button>
+      <select [ngModel]="selectedInventoryCode" (ngModelChange)="selectDeviceForReassignment($event)" name="equipo" required>
+        <option value="">Selecciona un resultado</option>
+        @for (device of deviceOptions; track device.IdEquipo) {
+        <option [value]="device.CodigoInventario">{{ device.CodigoInventario }} · {{ device.Marca }} {{ device.Modelo }}</option>
+        }
       </select>
       <input [(ngModel)]="newReassignment.NoPagoNuevo" name="nuevoPago" placeholder="Número de Pago" />
       <input [(ngModel)]="newReassignment.NombreNuevo" name="nuevoNombre" placeholder="Nombres y Apellidos" />
@@ -182,7 +209,7 @@
           </tr>
         </thead>
         <tbody>@for (item of reassignments; track item.IdReasignacion) { <tr>
-            <td>{{ getInventoryCode(item.IdEquipo) }}</td>
+            <td>{{ item.CodigoInventario || getInventoryCode(item.IdEquipo) }}</td>
             <td>{{ item.NoPagoAnterior }}</td>
             <td>{{ item.NoPagoNuevo }}</td>
             <td>{{ item.FechaCambio | date }}</td>
@@ -195,7 +222,8 @@
   </section>
   }
 
-  <!-- Alta y eliminación de usuarios del sistema. -->
+
+
   @if (activeSection === 'users') {
   <section class="admin-section">
     <button type="button" class="add-user-button" (click)="openUserDialog()">Añadir usuario</button>
@@ -207,8 +235,8 @@
       </select>
       <button type="button" class="secondary" (click)="clearUserFilters()">Limpiar</button>
     </div>
-    <div class="table-wrap">
-      <table>
+    <div class="table-wrap users-table-wrap">
+      <table class="users-table">
         <thead>
           <tr>
             <th>ID</th>
@@ -235,7 +263,15 @@
             <td>{{ user.Dominio === 1 ? 'Active Directory' : 'Local' }}</td>
             <td>{{ user.Estado }}</td>
             <td>{{ user.Rol }}</td>
-            <td><button type="button" class="danger" (click)="askRemoveUser(user.IdUsuario)">Quitar</button></td>
+            <td class="user-row-actions">
+              <button type="button" class="secondary" (click)="editUser(user)">Editar</button>
+              <button type="button" class="danger" (click)="askRemoveUser(user.IdUsuario)">Quitar</button>
+              @if (user.Dominio === 0) {
+              <button type="button" class="reset-password-button" title="Restablecer contraseña"
+                [attr.aria-label]="'Restablecer contraseña de ' + user.Usuario"
+                (click)="askResetUserPassword(user.IdUsuario, user.Usuario)"><span aria-hidden="true">⟳</span></button>
+              }
+            </td>
           </tr> }
           }
         </tbody>
@@ -244,27 +280,48 @@
   </section>
   }
 
+
+  <!--ventana emergente para restablecer la contraseña desde el panel de admin-->
+  @if (isPasswordResetDialogOpen) {
+  <div class="modal-backdrop" role="presentation" (click)="cancelPasswordReset()">
+    <section class="delete-modal" role="dialog" aria-modal="true" aria-labelledby="reset-password-title"
+      (click)="$event.stopPropagation()">
+      <p class="eyebrow">RESTABLECER CONTRASEÑA</p>
+      <h2 id="reset-password-title">¿Restablecer la contraseña?</h2>
+      <br />
+
+      <div class="modal-actions">
+        <button type="button" class="secondary" (click)="cancelPasswordReset()">Cancelar</button>
+        <button type="button" class="danger modal-danger" (click)="resetUserPassword()">Restablecer</button>
+      </div>
+    </section>
+  </div>
+  }
+
+
+  <!--ventana emergente para agregar o editar un usuario desde el panel de admin-->
   @if (isUserDialogOpen) {
   <div class="modal-backdrop" role="presentation" (click)="closeUserDialog()">
     <section class="edit-modal" role="dialog" aria-modal="true" aria-labelledby="create-user-title"
       (click)="$event.stopPropagation()">
       <div class="modal-heading">
         <div>
-          <p class="eyebrow">NUEVO REGISTRO</p>
-          <h2 id="create-user-title">Agregar usuario</h2>
+          <p class="eyebrow">{{ editingUserId === null ? 'NUEVO REGISTRO' : 'EDITAR REGISTRO' }}</p>
+          <h2 id="create-user-title">{{ editingUserId === null ? 'Agregar usuario' : 'Editar usuario' }}</h2>
         </div>
         <button type="button" class="modal-close" aria-label="Cerrar ventana" (click)="closeUserDialog()">×</button>
       </div>
-      <form class="modal-form" autocomplete="off" (ngSubmit)="addUser()">
+      <form class="modal-form" autocomplete="off" (ngSubmit)="saveUserDialog()">
         <div class="user-field">
           <label for="modalUsuario">Usuario:</label>
           <input id="modalUsuario" [(ngModel)]="newUser.Usuario" name="modalUsuario" autocomplete="new-username"
+            [readonly]="editingUserId !== null"
             placeholder="Usuario" required />
         </div>
         <div class="user-field">
           <label for="modalNombrePersona">Nombre de la persona:</label>
           <input id="modalNombrePersona" [(ngModel)]="newUser.NombrePersona" name="modalNombrePersona"
-            placeholder="Nombre completo" required />
+            [readonly]="editingUserId !== null" placeholder="Nombre completo" required />
         </div>
         <div class="user-field">
           <label for="modalFechaExpiracion">Fecha de expiración:</label>
@@ -302,10 +359,13 @@
             <option value="Taller">Taller</option>
           </select>
         </div>
+
+      
+        <!--Mensaje de error para el formulario de usuario-->
         @if (errorMessage) { <p class="feedback error modal-feedback" role="alert">{{ errorMessage }}</p> }
         <div class="modal-actions">
           <button type="button" class="secondary" (click)="closeUserDialog()">Cancelar</button>
-          <button type="submit">Añadir usuario</button>
+          <button type="submit">{{ editingUserId === null ? 'Añadir usuario' : 'Guardar cambios' }}</button>
         </div>
       </form>
     </section>
@@ -383,5 +443,8 @@
 
   @if (activeSection === 'workshop') {
   <app-taller [embedded]="true" />
+  }
+  @if (showEmployeeSearch) {
+  <app-employee-search-dialog (closed)="showEmployeeSearch = false" />
   }
 </main>

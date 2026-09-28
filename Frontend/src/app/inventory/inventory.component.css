@@ -184,6 +184,15 @@ button[type="submit"] {
     width: 100%;
 }
 
+.device-filter-bar {
+    grid-template-columns: minmax(240px, 2fr) repeat(4, minmax(135px, 1fr)) auto auto;
+    align-items: center;
+}
+
+.device-filter-bar > * {
+    min-width: 0;
+}
+
 .filter-bar .secondary {
     padding: .7rem .8rem;
     border: 1px solid #b9d1ca;

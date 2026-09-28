@@ -7,7 +7,7 @@
 }
 
 .admin-shell {
-    width: min(1180px, 100%);
+    width: min(1380px, 100%);
     margin: 0 auto;
     padding: 3rem clamp(1rem, 4vw, 3rem);
 }
@@ -183,6 +183,15 @@ h1 {
     width: 100%;
 }
 
+.device-filter-bar {
+    grid-template-columns: minmax(240px, 2fr) repeat(4, minmax(135px, 1fr)) auto auto;
+    align-items: center;
+}
+
+.device-filter-bar > * {
+    min-width: 0;
+}
+
 .filter-bar .secondary {
     padding: .7rem .8rem;
     border: 1px solid #b9d1ca;
@@ -254,6 +263,19 @@ select:focus {
     border: 1px solid #d8e4e0;
     border-radius: 6px;
     background: #fff;
+}
+
+.users-table-wrap {
+    overflow-x: auto;
+}
+
+.users-table {
+    min-width: 980px;
+}
+
+.users-table th:last-child,
+.users-table td:last-child {
+    width: 190px;
 }
 
 table {
@@ -473,6 +495,39 @@ table .danger {
     border: 1px solid #b9d1ca;
     color: #276968;
     background: #fff;
+}
+
+.user-row-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: .5rem;
+    white-space: nowrap;
+}
+
+.user-row-actions button {
+    padding: .5rem .7rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 700;
+}
+
+.reset-password-button {
+    display: inline-grid;
+    place-items: center;
+    width: 32px;
+    height: 30px;
+    padding: 0 !important;
+    border: 1px solid #b9d1ca;
+    color: #276968;
+    background: #e8f2ee;
+    font-size: 1.25rem !important;
+    line-height: 1;
+}
+
+.reset-password-button:hover {
+    border-color: #276968;
+    background: #dcece6;
 }
 
 .add-user-button {

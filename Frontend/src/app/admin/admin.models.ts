@@ -17,6 +17,33 @@ export interface Device {
   AsignadoA: string | null;
   IdEdificio: number | null;
   NombreEdificio: string | null;
+  IdRegional: number | null;
+  NombreRegional: string | null;
+}
+
+export interface PagedResult<T> {
+  Items: T[];
+  TotalCount: number;
+  Page: number;
+  PageSize: number;
+}
+
+export interface DevicePageQuery {
+  Page: number;
+  SearchTerm: string;
+  Brand: string;
+  Model: string;
+  TypeId: number | null;
+  RegionalId: number | null;
+  BuildingId: number | null;
+  AreaId: number | null;
+}
+
+export interface DeviceOption {
+  IdEquipo: number;
+  CodigoInventario: string;
+  Marca: string;
+  Modelo: string;
 }
 
 // Datos mínimos que se envían al crear o editar un equipo.
@@ -43,12 +70,32 @@ export interface Area {
 export interface Building {
   IdEdificio: number;
   NombreEdificio: string;
+  IdRegional: number | null;
+  NombreRegional: string | null;
+}
+
+export interface EmployeeSearchResult {
+  NoPago: string;
+  NombreCompleto: string;
+  Estado: string;
+  IdArea: number | null;
+  NombreArea: string | null;
+  IdEdificio: number | null;
+  NombreEdificio: string | null;
+  IdRegional: number | null;
+  NombreRegional: string | null;
+  AssignedDevices: EmployeeAssignedDevice[];
+}
+
+export interface EmployeeAssignedDevice extends Device {
+  NumeroPagoAsignado: string | null;
 }
 
 // Registro histórico de una reasignación ya guardada.
 export interface Reassignment {
   IdReasignacion: number;
   IdEquipo: number;
+  CodigoInventario: string;
   NoPagoAnterior: string | null;
   NoPagoNuevo: string | null;
   FechaCambio: string;
@@ -89,15 +136,11 @@ export interface CreateAdminUser {
   Rol: string;
 }
 
+export type UpdateAdminUser = Omit<CreateAdminUser, 'Usuario'>;
+
 // Tipo de equipo usado por los selectores de inventario y recepción.
 export interface DeviceType {
   IdTipo: number;
   NombreTipo: string;
 }
 
-// Empleado empresarial usado para sugerir número de pago y área.
-export interface Employee {
-  NoPago: string;
-  NombreCompleto: string;
-  IdArea: number | null;
-}

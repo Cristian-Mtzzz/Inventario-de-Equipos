@@ -10,23 +10,232 @@ namespace SistemaInventario.Api.Services;
 // cuando una operación modifica varias tablas relacionadas.
 public sealed class AdminService(InventoryDbContext dbContext) : IAdminService
 {
-    public async Task<IReadOnlyList<DeviceDto>> GetDevices(CancellationToken cancellationToken)
+    public async Task<PagedResult<DeviceDto>> GetDevices(
+        int requestedPage,
+        string? searchTerm,
+        string? brand,
+        string? model,
+        int? typeId,
+        int? regionalId,
+        int? buildingId,
+        int? areaId,
+        CancellationToken cancellationToken)
     {
-        const string sql = """
-            SELECT d.ID_EQUIPO, d.CODIGO_INVENTARIO, d.NO_SERIE, d.MARCA, d.MODELO,
-                                         d.ID_TIPO, t.TIPO_DISPOSITIVO AS NOMBRE_TIPO, d.ESTADO,
-                                         d.NUMERO_PAGO_ASIGNADO, d.NOMBRE_ASIGNADO, d.ID_AREA,
-                                      a.DEPARTAMENTO_IHSS_DESC AS NOMBRE_AREA, a.EDIFICIO_ID AS ID_EDIFICIO,
-                                     b.EDIFICIO_DESCRIPCION AS NOMBRE_EDIFICIO,
-                                     COALESCE(NULLIF(TRIM(d.NOMBRE_ASIGNADO), ''), e.NOMBRE_EMPLEADO) AS ASIGNADO_A
+        const int pageSize = 25;
+        const string fromSql = """
             FROM DISPOSITIVOS d
-                 LEFT JOIN TIPOS_DISPOSITIVOS t ON t.ID_TIPO = d.ID_TIPO
-                  LEFT JOIN DEPARTAMENTO_IHSS a ON a.DEPARTAMENTO_IHSS_ID = d.ID_AREA
-                  LEFT JOIN EDIFICIO b ON b.EDIFICIO_ID = a.EDIFICIO_ID
-                  LEFT JOIN EMPLEADOS_IHSS e ON e.NPAGO = d.NUMERO_PAGO_ASIGNADO
-            ORDER BY d.ID_EQUIPO
+            LEFT JOIN TIPOS_DISPOSITIVOS t ON t.ID_TIPO = d.ID_TIPO
+            LEFT JOIN DEPARTAMENTO_IHSS a ON a.DEPARTAMENTO_IHSS_ID = d.ID_AREA
+            LEFT JOIN EDIFICIO b ON b.EDIFICIO_ID = a.EDIFICIO_ID
+            LEFT JOIN REGIONAL r ON r.REGIONA_ID = COALESCE(a.REGIONA_ID, b.REGIONA_ID)
+            LEFT JOIN EMPLEADOS_IHSS e ON e.NPAGO = d.NUMERO_PAGO_ASIGNADO
             """;
-        return await ReadList(sql, ReadDevice, cancellationToken);
+        var conditions = new List<string>();
+        var parameters = new List<(string Name, object? Value)>();
+
+            void AddDeviceFilter(string condition, string parameterName, object? value)
+            {
+                if (value is null || value is string text && string.IsNullOrWhiteSpace(text)) return;
+                conditions.Add(condition);
+                parameters.Add((parameterName, value));
+            }
+
+        if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            var pattern = $"%{searchTerm.Trim().ToUpperInvariant()}%";
+            conditions.Add("(UPPER(d.CODIGO_INVENTARIO) LIKE :searchCode OR UPPER(d.NO_SERIE) LIKE :searchSerial OR UPPER(d.MARCA) LIKE :searchBrand OR UPPER(d.MODELO) LIKE :searchModel OR UPPER(d.NUMERO_PAGO_ASIGNADO) LIKE :searchPayment OR UPPER(COALESCE(NULLIF(TRIM(d.NOMBRE_ASIGNADO), ''), e.NOMBRE_EMPLEADO)) LIKE :searchEmployee)");
+            parameters.Add(("searchCode", pattern));
+            parameters.Add(("searchSerial", pattern));
+            parameters.Add(("searchBrand", pattern));
+            parameters.Add(("searchModel", pattern));
+            parameters.Add(("searchPayment", pattern));
+            parameters.Add(("searchEmployee", pattern));
+        }
+
+        AddDeviceFilter("UPPER(TRIM(d.MARCA)) = :brand", "brand", brand?.Trim().ToUpperInvariant());
+        AddDeviceFilter("UPPER(TRIM(d.MODELO)) = :model", "model", model?.Trim().ToUpperInvariant());
+        AddDeviceFilter("d.ID_TIPO = :typeId", "typeId", typeId);
+        AddDeviceFilter("COALESCE(a.REGIONA_ID, b.REGIONA_ID) = :regionalId", "regionalId", regionalId);
+        AddDeviceFilter("b.EDIFICIO_ID = :buildingId", "buildingId", buildingId);
+        AddDeviceFilter("d.ID_AREA = :areaId", "areaId", areaId);
+
+        var whereSql = conditions.Count == 0 ? string.Empty : $"WHERE {string.Join(" AND ", conditions)}";
+        await dbContext.Database.OpenConnectionAsync(cancellationToken);
+        try
+        {
+            var connection = dbContext.Database.GetDbConnection();
+            await using var countCommand = CreateCommand(connection, null,
+                $"SELECT COUNT(DISTINCT d.ID_EQUIPO) {fromSql} {whereSql}", parameters.ToArray());
+            var totalCount = Convert.ToInt32(await countCommand.ExecuteScalarAsync(cancellationToken));
+            var totalPages = Math.Max(1, (int)Math.Ceiling(totalCount / (double)pageSize));
+            var page = Math.Clamp(requestedPage, 1, totalPages);
+            var startRow = (page - 1) * pageSize;
+
+            var sql = $"""
+                SELECT * FROM (
+                    SELECT d.ID_EQUIPO, d.CODIGO_INVENTARIO, d.NO_SERIE, d.MARCA, d.MODELO,
+                           d.ID_TIPO, t.TIPO_DISPOSITIVO AS NOMBRE_TIPO, d.ESTADO,
+                           d.NUMERO_PAGO_ASIGNADO, d.NOMBRE_ASIGNADO, d.ID_AREA,
+                           a.DEPARTAMENTO_IHSS_DESC AS NOMBRE_AREA, a.EDIFICIO_ID AS ID_EDIFICIO,
+                           b.EDIFICIO_DESCRIPCION AS NOMBRE_EDIFICIO,
+                           COALESCE(NULLIF(TRIM(d.NOMBRE_ASIGNADO), ''), e.NOMBRE_EMPLEADO) AS ASIGNADO_A,
+                           COALESCE(a.REGIONA_ID, b.REGIONA_ID) AS ID_REGIONAL,
+                           r.DESCRIPCION AS NOMBRE_REGIONAL,
+                           ROW_NUMBER() OVER (ORDER BY d.ID_EQUIPO) AS ROW_NUM
+                    {fromSql}
+                    {whereSql}
+                )
+                WHERE ROW_NUM > :startRow AND ROW_NUM <= :endRow
+                ORDER BY ROW_NUM
+                """;
+            var pageParameters = parameters
+                .Append(("startRow", (object?)startRow))
+                .Append(("endRow", (object?)(startRow + pageSize)))
+                .ToArray();
+            await using var command = CreateCommand(connection, null, sql, pageParameters);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            var items = new List<DeviceDto>(pageSize);
+            while (await reader.ReadAsync(cancellationToken)) items.Add(ReadDevice(reader));
+            return new PagedResult<DeviceDto>(items, totalCount, page, pageSize);
+        }
+        finally
+        {
+            await dbContext.Database.CloseConnectionAsync();
+        }
+    }
+
+    public async Task<IReadOnlyList<DeviceOptionDto>> SearchDeviceOptions(
+        string searchTerm,
+        CancellationToken cancellationToken)
+    {
+        var pattern = $"%{searchTerm.Trim().ToUpperInvariant()}%";
+        return await ReadList("""
+            SELECT ID_EQUIPO, CODIGO_INVENTARIO, MARCA, MODELO
+            FROM (
+                SELECT ID_EQUIPO, CODIGO_INVENTARIO, MARCA, MODELO,
+                       ROW_NUMBER() OVER (ORDER BY CODIGO_INVENTARIO) AS ROW_NUM
+                FROM DISPOSITIVOS
+                WHERE UPPER(CODIGO_INVENTARIO) LIKE :searchCode
+                   OR UPPER(NO_SERIE) LIKE :searchSerial
+                   OR UPPER(MARCA) LIKE :searchBrand
+                   OR UPPER(MODELO) LIKE :searchModel
+            )
+            WHERE ROW_NUM <= 25
+            ORDER BY ROW_NUM
+            """, reader => new DeviceOptionDto(
+                reader.GetInt32(reader.GetOrdinal("ID_EQUIPO")),
+                ReadString(reader, "CODIGO_INVENTARIO"),
+                ReadString(reader, "MARCA"),
+                ReadString(reader, "MODELO")),
+            cancellationToken,
+            ("searchCode", pattern), ("searchSerial", pattern),
+            ("searchBrand", pattern), ("searchModel", pattern));
+    }
+
+    public async Task<IReadOnlyList<EmployeeSearchDto>> SearchEmployees(
+        string searchTerm,
+        CancellationToken cancellationToken)
+    {
+        if (searchTerm.Trim().Length < 2) return [];
+        var pattern = $"%{searchTerm.Trim().ToUpperInvariant()}%";
+        await dbContext.Database.OpenConnectionAsync(cancellationToken);
+        try
+        {
+            await using var command = CreateCommand(dbContext.Database.GetDbConnection(), null, """
+                WITH EMPLEADOS_PAGINADOS AS (
+                    SELECT e.NPAGO AS NO_PAGO, e.NOMBRE_EMPLEADO AS NOMBRE_COMPLETO, e.ESTADO AS ESTADO_EMPLEADO,
+                           a.DEPARTAMENTO_IHSS_ID AS ID_AREA,
+                           a.DEPARTAMENTO_IHSS_DESC AS NOMBRE_AREA,
+                           b.EDIFICIO_ID AS ID_EDIFICIO,
+                           b.EDIFICIO_DESCRIPCION AS NOMBRE_EDIFICIO,
+                           COALESCE(a.REGIONA_ID, b.REGIONA_ID) AS ID_REGIONAL,
+                           r.DESCRIPCION AS NOMBRE_REGIONAL,
+                           ROW_NUMBER() OVER (ORDER BY UPPER(e.NOMBRE_EMPLEADO), e.NPAGO) AS EMPLOYEE_ROW
+                    FROM EMPLEADOS_IHSS e
+                    LEFT JOIN DEPARTAMENTO_IHSS a ON a.DEPARTAMENTO_IHSS_ID = e.DEPARTAMENTO_IHSS_ID
+                    LEFT JOIN EDIFICIO b ON b.EDIFICIO_ID = a.EDIFICIO_ID
+                    LEFT JOIN REGIONAL r ON r.REGIONA_ID = COALESCE(a.REGIONA_ID, b.REGIONA_ID)
+                    WHERE UPPER(e.NOMBRE_EMPLEADO) LIKE :searchName
+                       OR UPPER(e.NPAGO) LIKE :searchPayment
+                )
+                SELECT e.NO_PAGO, e.NOMBRE_COMPLETO, e.ESTADO_EMPLEADO, e.ID_AREA, e.NOMBRE_AREA,
+                       e.ID_EDIFICIO, e.NOMBRE_EDIFICIO, e.ID_REGIONAL, e.NOMBRE_REGIONAL,
+                       d.ID_EQUIPO, d.CODIGO_INVENTARIO, d.NO_SERIE, d.MARCA, d.MODELO,
+                       t.TIPO_DISPOSITIVO AS NOMBRE_TIPO, d.ESTADO,
+                       d.NUMERO_PAGO_ASIGNADO, d.NOMBRE_ASIGNADO, d.ID_AREA AS DEVICE_ID_AREA,
+                       da.DEPARTAMENTO_IHSS_DESC AS DEVICE_NOMBRE_AREA,
+                       db.EDIFICIO_ID AS DEVICE_ID_EDIFICIO,
+                       db.EDIFICIO_DESCRIPCION AS DEVICE_NOMBRE_EDIFICIO,
+                       COALESCE(da.REGIONA_ID, db.REGIONA_ID) AS DEVICE_ID_REGIONAL,
+                       dr.DESCRIPCION AS DEVICE_NOMBRE_REGIONAL,
+                       e.EMPLOYEE_ROW
+                FROM EMPLEADOS_PAGINADOS e
+                LEFT JOIN DISPOSITIVOS d
+                                    ON (e.NO_PAGO IS NOT NULL AND TRIM(d.NUMERO_PAGO_ASIGNADO) = TRIM(e.NO_PAGO))
+                                    OR UPPER(TRIM(d.NOMBRE_ASIGNADO)) = UPPER(TRIM(e.NOMBRE_COMPLETO))
+                LEFT JOIN TIPOS_DISPOSITIVOS t ON t.ID_TIPO = d.ID_TIPO
+                LEFT JOIN DEPARTAMENTO_IHSS da ON da.DEPARTAMENTO_IHSS_ID = d.ID_AREA
+                LEFT JOIN EDIFICIO db ON db.EDIFICIO_ID = da.EDIFICIO_ID
+                LEFT JOIN REGIONAL dr ON dr.REGIONA_ID = COALESCE(da.REGIONA_ID, db.REGIONA_ID)
+                WHERE e.EMPLOYEE_ROW <= 25
+                ORDER BY e.EMPLOYEE_ROW, d.ID_EQUIPO
+                """,
+                ("searchName", pattern), ("searchPayment", pattern));
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            var employees = new Dictionary<string, EmployeeSearchDto>(StringComparer.OrdinalIgnoreCase);
+            var devicesByEmployee = new Dictionary<string, List<EmployeeAssignedDeviceDto>>(StringComparer.OrdinalIgnoreCase);
+            var seenDevices = new Dictionary<string, HashSet<int>>(StringComparer.OrdinalIgnoreCase);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                var noPago = ReadString(reader, "NO_PAGO");
+                var name = ReadString(reader, "NOMBRE_COMPLETO");
+                var key = string.IsNullOrWhiteSpace(noPago) ? name : noPago;
+                if (!employees.ContainsKey(key))
+                {
+                    employees[key] = new EmployeeSearchDto(
+                        noPago, name, Convert.ToString(reader.GetValue(reader.GetOrdinal("ESTADO_EMPLEADO"))) ?? string.Empty,
+                        ReadNullableInt(reader, "ID_AREA"), ReadNullableString(reader, "NOMBRE_AREA"),
+                        ReadNullableInt(reader, "ID_EDIFICIO"), ReadNullableString(reader, "NOMBRE_EDIFICIO"),
+                        ReadNullableInt(reader, "ID_REGIONAL"), ReadNullableString(reader, "NOMBRE_REGIONAL"),
+                        Array.Empty<EmployeeAssignedDeviceDto>());
+                    devicesByEmployee[key] = [];
+                    seenDevices[key] = [];
+                }
+
+                if (!reader.IsDBNull(reader.GetOrdinal("ID_EQUIPO")))
+                {
+                    var deviceId = reader.GetInt32(reader.GetOrdinal("ID_EQUIPO"));
+                    if (seenDevices[key].Add(deviceId))
+                    {
+                        devicesByEmployee[key].Add(new EmployeeAssignedDeviceDto(
+                            deviceId,
+                            ReadString(reader, "CODIGO_INVENTARIO"),
+                            ReadString(reader, "NO_SERIE"),
+                            ReadString(reader, "MARCA"),
+                            ReadString(reader, "MODELO"),
+                            ReadNullableString(reader, "NOMBRE_TIPO"),
+                            ReadString(reader, "ESTADO"),
+                            ReadNullableString(reader, "NUMERO_PAGO_ASIGNADO"),
+                            ReadNullableString(reader, "NOMBRE_ASIGNADO"),
+                            ReadNullableInt(reader, "DEVICE_ID_AREA"),
+                            ReadNullableString(reader, "DEVICE_NOMBRE_AREA"),
+                            ReadNullableInt(reader, "DEVICE_ID_EDIFICIO"),
+                            ReadNullableString(reader, "DEVICE_NOMBRE_EDIFICIO"),
+                            ReadNullableInt(reader, "DEVICE_ID_REGIONAL"),
+                            ReadNullableString(reader, "DEVICE_NOMBRE_REGIONAL")));
+                    }
+                }
+            }
+
+            return employees.Select(employee => employee.Value with
+            {
+                AssignedDevices = devicesByEmployee[employee.Key],
+            }).ToArray();
+        }
+        finally
+        {
+            await dbContext.Database.CloseConnectionAsync();
+        }
     }
 
     public async Task<IReadOnlyList<DeviceTypeDto>> GetDeviceTypes(CancellationToken cancellationToken)
@@ -37,21 +246,20 @@ public sealed class AdminService(InventoryDbContext dbContext) : IAdminService
             ReadString(reader, "TIPO_DISPOSITIVO")), cancellationToken);
     }
 
-    public async Task<IReadOnlyList<EmployeeDto>> GetEmployees(CancellationToken cancellationToken)
-    {
-        const string sql = "SELECT NPAGO AS NO_PAGO, NOMBRE_EMPLEADO AS NOMBRE_COMPLETO, DEPARTAMENTO_IHSS_ID AS ID_AREA FROM EMPLEADOS_IHSS ORDER BY NOMBRE_EMPLEADO";
-        return await ReadList(sql, reader => new EmployeeDto(
-            ReadString(reader, "NO_PAGO"),
-            ReadString(reader, "NOMBRE_COMPLETO"),
-            ReadNullableInt(reader, "ID_AREA")), cancellationToken);
-    }
-
     public async Task<IReadOnlyList<BuildingDto>> GetBuildings(CancellationToken cancellationToken)
     {
-        const string sql = "SELECT EDIFICIO_ID, EDIFICIO_DESCRIPCION FROM EDIFICIO ORDER BY EDIFICIO_DESCRIPCION";
+        const string sql = """
+            SELECT b.EDIFICIO_ID, b.EDIFICIO_DESCRIPCION,
+                   b.REGIONA_ID AS ID_REGIONAL, r.DESCRIPCION AS NOMBRE_REGIONAL
+            FROM EDIFICIO b
+            LEFT JOIN REGIONAL r ON r.REGIONA_ID = b.REGIONA_ID
+            ORDER BY b.EDIFICIO_DESCRIPCION
+            """;
         return await ReadList(sql, reader => new BuildingDto(
             reader.GetInt32(reader.GetOrdinal("EDIFICIO_ID")),
-            ReadString(reader, "EDIFICIO_DESCRIPCION")), cancellationToken);
+            ReadString(reader, "EDIFICIO_DESCRIPCION"),
+            ReadNullableInt(reader, "ID_REGIONAL"),
+            ReadNullableString(reader, "NOMBRE_REGIONAL")), cancellationToken);
     }
 
     public async Task<IReadOnlyList<AreaDto>> GetAreas(int idEdificio, CancellationToken cancellationToken)
@@ -179,10 +387,11 @@ public sealed class AdminService(InventoryDbContext dbContext) : IAdminService
     {
         // Consulta el historial ordenado para que la interfaz muestre primero los cambios recientes.
         const string sql = """
-            SELECT ID_REASIGNACION, ID_EQUIPO, NO_PAGO_ANTERIOR, NO_PAGO_NUEVO,
-                   FECHA_CAMBIO, MOTIVO
-            FROM REASIGNACIONES
-            ORDER BY FECHA_CAMBIO DESC
+                 SELECT r.ID_REASIGNACION, r.ID_EQUIPO, d.CODIGO_INVENTARIO,
+                     r.NO_PAGO_ANTERIOR, r.NO_PAGO_NUEVO, r.FECHA_CAMBIO, r.MOTIVO
+                 FROM REASIGNACIONES r
+                 LEFT JOIN DISPOSITIVOS d ON d.ID_EQUIPO = r.ID_EQUIPO
+                 ORDER BY r.FECHA_CAMBIO DESC
             """;
         return await ReadList(sql, ReadReassignment, cancellationToken);
     }
@@ -295,9 +504,65 @@ public sealed class AdminService(InventoryDbContext dbContext) : IAdminService
             ("rol", user.Rol.Trim()), ("dominioP", user.DominioP.Trim().ToUpperInvariant()),
             ("dominio", user.Dominio));
 
+    public async Task<bool> UpdateUser(
+        int idUsuario,
+        UpdateAdminUserDto user,
+        CancellationToken cancellationToken)
+    {
+        await dbContext.Database.OpenConnectionAsync(cancellationToken);
+        try
+        {
+            await using var command = CreateCommand(dbContext.Database.GetDbConnection(), null, """
+                UPDATE USUARIOS
+                SET NOMBRE_PERSONA = :nombrePersona,
+                    FECHA_EXPIRACION = :fechaExpiracion,
+                    ESTADO = :estado,
+                    DOMINIOP = :dominioP,
+                    DOMINIO = :dominio,
+                    ROL = :rol
+                WHERE ID_USUARIO = :idUsuario
+                """,
+                ("nombrePersona", user.NombrePersona.Trim()),
+                ("fechaExpiracion", user.FechaExpiracion),
+                ("estado", user.Estado.Trim().ToUpperInvariant()),
+                ("dominioP", user.DominioP.Trim().ToUpperInvariant()),
+                ("dominio", user.Dominio),
+                ("rol", user.Rol.Trim()),
+                ("idUsuario", idUsuario));
+            return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+        }
+        finally
+        {
+            await dbContext.Database.CloseConnectionAsync();
+        }
+    }
+
     public Task DeleteUser(int idUsuario, CancellationToken cancellationToken) =>
         Execute("DELETE FROM USUARIOS WHERE ID_USUARIO = :idUsuario", cancellationToken,
             ("idUsuario", idUsuario));
+
+    public async Task<bool> ResetUserPassword(int idUsuario, CancellationToken cancellationToken)
+    {
+        await dbContext.Database.OpenConnectionAsync(cancellationToken);
+        try
+        {
+            await using var command = CreateCommand(dbContext.Database.GetDbConnection(), null, """
+                UPDATE USUARIOS
+                SET PASSWORD_HASH = ORA_HASH(:password, 4294967295)
+                                      || ORA_HASH(USUARIO, 4294967295),
+                    CLAVE_SEGURA = '0'
+                WHERE ID_USUARIO = :idUsuario
+                  AND DOMINIO = 0
+                """,
+                ("password", "1234"),
+                ("idUsuario", idUsuario));
+            return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+        }
+        finally
+        {
+            await dbContext.Database.CloseConnectionAsync();
+        }
+    }
 
     private async Task<IReadOnlyList<T>> ReadList<T>(
         string sql,
@@ -407,11 +672,14 @@ public sealed class AdminService(InventoryDbContext dbContext) : IAdminService
             ReadNullableString(reader, "ASIGNADO_A"),
             ReadNullableString(reader, "NOMBRE_ASIGNADO"),
             ReadNullableInt(reader, "ID_EDIFICIO"),
-            ReadNullableString(reader, "NOMBRE_EDIFICIO"));
+            ReadNullableString(reader, "NOMBRE_EDIFICIO"),
+            ReadNullableInt(reader, "ID_REGIONAL"),
+            ReadNullableString(reader, "NOMBRE_REGIONAL"));
 
     private static ReassignmentDto ReadReassignment(DbDataReader reader) => new(
         reader.GetInt32(reader.GetOrdinal("ID_REASIGNACION")),
         reader.GetInt32(reader.GetOrdinal("ID_EQUIPO")),
+        ReadString(reader, "CODIGO_INVENTARIO"),
         ReadNullableString(reader, "NO_PAGO_ANTERIOR"),
         ReadNullableString(reader, "NO_PAGO_NUEVO"),
         reader.GetDateTime(reader.GetOrdinal("FECHA_CAMBIO")),

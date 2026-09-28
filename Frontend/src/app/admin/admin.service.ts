@@ -1,9 +1,38 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { catchError, map, Observable, shareReplay, throwError } from 'rxjs';
-import { AdminUser, Area, Building, CreateAdminUser, CreateDevice, CreateReassignment, Device, DeviceType, Employee, Reassignment } from './admin.models';
+import { AdminUser, Area, Building, CreateAdminUser, CreateDevice, CreateReassignment, Device, DeviceOption, DevicePageQuery, DeviceType, EmployeeSearchResult, PagedResult, Reassignment, UpdateAdminUser } from './admin.models';
 
 const API_ADMIN_URL = '/api/admin';
+
+type ApiDevice = Device & {
+  idEquipo?: number; codigoInventario?: string; noSerie?: string; marca?: string;
+  modelo?: string; idTipo?: number | null; estado?: string;
+  numeroPagoAsignado?: string | null; nombreAsignado?: string | null; idArea?: number | null;
+  nombreTipo?: string | null; nombreArea?: string | null; asignadoA?: string | null;
+  idEdificio?: number | null; nombreEdificio?: string | null;
+  idRegional?: number | null; nombreRegional?: string | null;
+};
+
+const normalizeDevice = (device: ApiDevice): Device => ({
+  IdEquipo: device.IdEquipo ?? device.idEquipo ?? 0,
+  CodigoInventario: device.CodigoInventario ?? device.codigoInventario ?? '',
+  NoSerie: device.NoSerie ?? device.noSerie ?? '',
+  Marca: device.Marca ?? device.marca ?? '',
+  Modelo: device.Modelo ?? device.modelo ?? '',
+  IdTipo: device.IdTipo ?? device.idTipo ?? null,
+  NombreTipo: device.NombreTipo ?? device.nombreTipo ?? null,
+  Estado: device.Estado ?? device.estado ?? '',
+  NumeroPagoAsignado: device.NumeroPagoAsignado ?? device.numeroPagoAsignado ?? null,
+  NombreAsignado: device.NombreAsignado ?? device.nombreAsignado ?? null,
+  IdArea: device.IdArea ?? device.idArea ?? null,
+  NombreArea: device.NombreArea ?? device.nombreArea ?? null,
+  AsignadoA: device.AsignadoA ?? device.asignadoA ?? null,
+  IdEdificio: device.IdEdificio ?? device.idEdificio ?? null,
+  NombreEdificio: device.NombreEdificio ?? device.nombreEdificio ?? null,
+  IdRegional: device.IdRegional ?? device.idRegional ?? null,
+  NombreRegional: device.NombreRegional ?? device.nombreRegional ?? null,
+});
 
 // Cliente HTTP del módulo Admin. Centraliza las URLs, transforma respuestas del
 // backend al modelo usado por las vistas y cachea catálogos que cambian poco.
@@ -11,34 +40,57 @@ const API_ADMIN_URL = '/api/admin';
 export class AdminService {
   private deviceTypesCache$?: Observable<DeviceType[]>;
   private areasCache$?: Observable<Area[]>;
-  private employeesCache$?: Observable<Employee[]>;
-
   constructor(private readonly httpClient: HttpClient) { }
 
-  getDevices(): Observable<Device[]> {
-    // Obtiene equipos y transforma nombres de propiedades para el modelo del frontend.
-    return this.httpClient.get<Array<Device & {
-      idEquipo?: number; codigoInventario?: string; noSerie?: string; marca?: string;
-      modelo?: string; idTipo?: number | null; estado?: string;
-      numeroPagoAsignado?: string | null; nombreAsignado?: string | null; idArea?: number | null;
-      nombreTipo?: string | null; nombreArea?: string | null; asignadoA?: string | null;
-      idEdificio?: number | null; nombreEdificio?: string | null;
-    }>>(`${API_ADMIN_URL}/devices`).pipe(map((devices) => devices.map((device) => ({
+  getDevices(query: DevicePageQuery): Observable<PagedResult<Device>> {
+    let params = new HttpParams().set('page', query.Page);
+    if (query.SearchTerm.trim()) params = params.set('searchTerm', query.SearchTerm.trim());
+    if (query.Brand.trim()) params = params.set('brand', query.Brand.trim());
+    if (query.Model.trim()) params = params.set('model', query.Model.trim());
+    if (query.TypeId !== null) params = params.set('typeId', query.TypeId);
+    if (query.RegionalId !== null) params = params.set('regionalId', query.RegionalId);
+    if (query.BuildingId !== null) params = params.set('buildingId', query.BuildingId);
+    if (query.AreaId !== null) params = params.set('areaId', query.AreaId);
+
+    return this.httpClient.get<PagedResult<ApiDevice> & {
+      items?: ApiDevice[]; totalCount?: number; page?: number; pageSize?: number;
+    }>(`${API_ADMIN_URL}/devices`, { params }).pipe(map((result) => ({
+      Items: (result.Items ?? result.items ?? []).map(normalizeDevice),
+      TotalCount: result.TotalCount ?? result.totalCount ?? 0,
+      Page: result.Page ?? result.page ?? query.Page,
+      PageSize: result.PageSize ?? result.pageSize ?? 25,
+    })));
+  }
+
+  searchDeviceOptions(searchTerm: string): Observable<DeviceOption[]> {
+    const params = new HttpParams().set('searchTerm', searchTerm);
+    return this.httpClient.get<Array<DeviceOption & {
+      idEquipo?: number; codigoInventario?: string; marca?: string; modelo?: string;
+    }>>(`${API_ADMIN_URL}/device-options`, { params }).pipe(map((options) => options.map((device) => ({
       IdEquipo: device.IdEquipo ?? device.idEquipo ?? 0,
       CodigoInventario: device.CodigoInventario ?? device.codigoInventario ?? '',
-      NoSerie: device.NoSerie ?? device.noSerie ?? '',
       Marca: device.Marca ?? device.marca ?? '',
       Modelo: device.Modelo ?? device.modelo ?? '',
-      IdTipo: device.IdTipo ?? device.idTipo ?? null,
-      NombreTipo: device.NombreTipo ?? device.nombreTipo ?? null,
-      Estado: device.Estado ?? device.estado ?? '',
-      NumeroPagoAsignado: device.NumeroPagoAsignado ?? device.numeroPagoAsignado ?? null,
-      NombreAsignado: device.NombreAsignado ?? device.nombreAsignado ?? null,
-      IdArea: device.IdArea ?? device.idArea ?? null,
-      NombreArea: device.NombreArea ?? device.nombreArea ?? null,
-      AsignadoA: device.AsignadoA ?? device.asignadoA ?? null,
-      IdEdificio: device.IdEdificio ?? device.idEdificio ?? null,
-      NombreEdificio: device.NombreEdificio ?? device.nombreEdificio ?? null,
+    }))));
+  }
+
+  searchEmployees(searchTerm: string): Observable<EmployeeSearchResult[]> {
+    const params = new HttpParams().set('searchTerm', searchTerm);
+    return this.httpClient.get<Array<EmployeeSearchResult & {
+      noPago?: string; nombreCompleto?: string; estado?: string; idArea?: number | null; nombreArea?: string | null;
+      idEdificio?: number | null; nombreEdificio?: string | null; idRegional?: number | null;
+      nombreRegional?: string | null; assignedDevices?: ApiDevice[];
+    }>>(`${API_ADMIN_URL}/employees/search`, { params }).pipe(map((employees) => employees.map((employee) => ({
+      NoPago: employee.NoPago ?? employee.noPago ?? '',
+      NombreCompleto: employee.NombreCompleto ?? employee.nombreCompleto ?? '',
+      Estado: employee.Estado ?? employee.estado ?? '',
+      IdArea: employee.IdArea ?? employee.idArea ?? null,
+      NombreArea: employee.NombreArea ?? employee.nombreArea ?? null,
+      IdEdificio: employee.IdEdificio ?? employee.idEdificio ?? null,
+      NombreEdificio: employee.NombreEdificio ?? employee.nombreEdificio ?? null,
+      IdRegional: employee.IdRegional ?? employee.idRegional ?? null,
+      NombreRegional: employee.NombreRegional ?? employee.nombreRegional ?? null,
+      AssignedDevices: (employee.AssignedDevices ?? employee.assignedDevices ?? []).map(normalizeDevice),
     }))));
   }
 
@@ -57,10 +109,14 @@ export class AdminService {
 
   getBuildings(): Observable<Building[]> {
     // Obtiene el catálogo de edificios que controla el filtro de áreas.
-    return this.httpClient.get<Array<Building & { idEdificio?: number; nombreEdificio?: string }>>(`${API_ADMIN_URL}/buildings`).pipe(
+    return this.httpClient.get<Array<Building & {
+      idEdificio?: number; nombreEdificio?: string; idRegional?: number | null; nombreRegional?: string | null;
+    }>>(`${API_ADMIN_URL}/buildings`).pipe(
       map((buildings) => buildings.map((building) => ({
         IdEdificio: building.IdEdificio ?? building.idEdificio ?? 0,
         NombreEdificio: building.NombreEdificio ?? building.nombreEdificio ?? '',
+        IdRegional: building.IdRegional ?? building.idRegional ?? null,
+        NombreRegional: building.NombreRegional ?? building.nombreRegional ?? null,
       }))),
     );
   }
@@ -74,20 +130,6 @@ export class AdminService {
         IdEdificio: area.IdEdificio ?? area.idEdificio ?? idEdificio,
       }))),
     );
-  }
-
-  getEmployees(): Observable<Employee[]> {
-    // Obtiene el catálogo de empleados usado por asignaciones conocidas.
-    if (this.employeesCache$) return this.employeesCache$;
-    this.employeesCache$ = this.httpClient.get<Array<Employee & { noPago?: string; nombreCompleto?: string; idArea?: number | null }>>(`${API_ADMIN_URL}/employees`).pipe(
-      map((employees) => employees.map((employee) => ({
-        NoPago: employee.NoPago ?? employee.noPago ?? '',
-        NombreCompleto: employee.NombreCompleto ?? employee.nombreCompleto ?? '',
-        IdArea: employee.IdArea ?? employee.idArea ?? null,
-      }))),
-      shareReplay({ bufferSize: 1, refCount: false }),
-    );
-    return this.employeesCache$;
   }
 
   createDevice(device: CreateDevice): Observable<void> {
@@ -119,11 +161,12 @@ export class AdminService {
   getReassignments(): Observable<Reassignment[]> {
     // Consulta el historial de cambios de responsable.
     return this.httpClient.get<Array<Reassignment & {
-      idReasignacion?: number; idEquipo?: number; noPagoAnterior?: string | null;
+      idReasignacion?: number; idEquipo?: number; codigoInventario?: string; noPagoAnterior?: string | null;
       noPagoNuevo?: string | null; fechaCambio?: string; motivo?: string;
     }>>(`${API_ADMIN_URL}/reassignments`).pipe(map((items) => items.map((item) => ({
       IdReasignacion: item.IdReasignacion ?? item.idReasignacion ?? 0,
       IdEquipo: item.IdEquipo ?? item.idEquipo ?? 0,
+      CodigoInventario: item.CodigoInventario ?? item.codigoInventario ?? '',
       NoPagoAnterior: item.NoPagoAnterior ?? item.noPagoAnterior ?? null,
       NoPagoNuevo: item.NoPagoNuevo ?? item.noPagoNuevo ?? null,
       FechaCambio: item.FechaCambio ?? item.fechaCambio ?? '',
@@ -160,6 +203,12 @@ export class AdminService {
   // Crea un nuevo usuario en el sistema. La contraseña inicial se genera en el backend y no se muestra en pantalla.
   createUser(user: CreateAdminUser): Observable<void> {
     return this.httpClient.post<void>(`${API_ADMIN_URL}/users`, user);
+  }
+  updateUser(idUsuario: number, user: UpdateAdminUser): Observable<void> {
+    return this.httpClient.put<void>(`${API_ADMIN_URL}/users/${idUsuario}`, user);
+  }
+  resetUserPassword(idUsuario: number): Observable<void> {
+    return this.httpClient.post<void>(`${API_ADMIN_URL}/users/${idUsuario}/reset-password`, {});
   }
   // Elimina un usuario del sistema.
   deleteUser(idUsuario: number): Observable<void> {

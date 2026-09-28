@@ -123,7 +123,7 @@ public sealed class AuthService(
 
         try
         {
-            // Prefijo "dominio\usuario": sin él, las confianzas entre dominios del bosque
+            // se agrega el prefijo "dominio\usuario": sin él, las confianzas entre dominios del bosque
             // permiten autenticar la cuenta aunque pertenezca a otro dominio distinto al elegido
             using var entry = new DirectoryEntry($"LDAP://{domain}", $@"{domain}\{username}", password);
             using var searcher = new DirectorySearcher(entry);

@@ -16,18 +16,41 @@ public sealed class AdminController(IAdminService adminService) : ControllerBase
     [HttpGet("devices")]
     [Authorize(Roles = "Admin,UsuarioComun,Taller")]
     // Lista equipos con tipo, área y responsable actual.
-    public async Task<ActionResult<IReadOnlyList<DeviceDto>>> GetDevices(CancellationToken cancellationToken) =>
-        Ok(await adminService.GetDevices(cancellationToken));
+    public async Task<ActionResult<PagedResult<DeviceDto>>> GetDevices(
+        [FromQuery] int page,
+        [FromQuery] string? searchTerm,
+        [FromQuery] string? brand,
+        [FromQuery] string? model,
+        [FromQuery] int? typeId,
+        [FromQuery] int? regionalId,
+        [FromQuery] int? buildingId,
+        [FromQuery] int? areaId,
+        CancellationToken cancellationToken) =>
+        Ok(await adminService.GetDevices(
+            page, searchTerm, brand, model, typeId, regionalId, buildingId, areaId, cancellationToken));
+
+    [HttpGet("device-options")]
+    [Authorize(Roles = "Admin,UsuarioComun")]
+    public async Task<ActionResult<IReadOnlyList<DeviceOptionDto>>> SearchDeviceOptions(
+        [FromQuery] string? searchTerm,
+        CancellationToken cancellationToken) =>
+        string.IsNullOrWhiteSpace(searchTerm) || searchTerm.Trim().Length < 2
+            ? Ok(Array.Empty<DeviceOptionDto>())
+            : Ok(await adminService.SearchDeviceOptions(searchTerm, cancellationToken));
 
     [HttpGet("device-types")]
     [Authorize(Roles = "Admin,UsuarioComun,Taller")]
     public async Task<ActionResult<IReadOnlyList<DeviceTypeDto>>> GetDeviceTypes(CancellationToken cancellationToken) =>
         Ok(await adminService.GetDeviceTypes(cancellationToken));
 
-    [HttpGet("employees")]
+    [HttpGet("employees/search")]
     [Authorize(Roles = "Admin,UsuarioComun")]
-    public async Task<ActionResult<IReadOnlyList<EmployeeDto>>> GetEmployees(CancellationToken cancellationToken) =>
-        Ok(await adminService.GetEmployees(cancellationToken));
+    public async Task<ActionResult<IReadOnlyList<EmployeeSearchDto>>> SearchEmployees(
+        [FromQuery] string? searchTerm,
+        CancellationToken cancellationToken) =>
+        string.IsNullOrWhiteSpace(searchTerm) || searchTerm.Trim().Length < 2
+            ? Ok(Array.Empty<EmployeeSearchDto>())
+            : Ok(await adminService.SearchEmployees(searchTerm, cancellationToken));
 
     [HttpGet("buildings")]
     [Authorize(Roles = "Admin,UsuarioComun,Taller")]
@@ -161,6 +184,31 @@ public sealed class AdminController(IAdminService adminService) : ControllerBase
         }
     }
 
+    [HttpPut("users/{idUsuario:int}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> UpdateUser(
+        int idUsuario,
+        UpdateAdminUserDto user,
+        CancellationToken cancellationToken)
+    {
+        var validationMessage = ValidateUser(user);
+        if (validationMessage is not null)
+        {
+            return BadRequest(new { Message = validationMessage });
+        }
+
+        return await adminService.UpdateUser(idUsuario, user, cancellationToken)
+            ? NoContent()
+            : NotFound();
+    }
+
+    [HttpPost("users/{idUsuario:int}/reset-password")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> ResetUserPassword(int idUsuario, CancellationToken cancellationToken) =>
+        await adminService.ResetUserPassword(idUsuario, cancellationToken)
+            ? NoContent()
+            : NotFound(new { Message = "No existe el usuario local indicado." });
+
     [HttpDelete("users/{idUsuario:int}")]
     [Authorize(Roles = "Admin")]
     // Elimina usuarios y traduce conflictos de integridad a una respuesta 409.
@@ -199,17 +247,32 @@ public sealed class AdminController(IAdminService adminService) : ControllerBase
             return "El usuario y el nombre de la persona son obligatorios.";
         }
 
-        if (user.Dominio is not 0 and not 1)
+        return ValidateUserFields(user.DominioP, user.Dominio, user.Estado);
+    }
+
+    private static string? ValidateUser(UpdateAdminUserDto user)
+    {
+        if (string.IsNullOrWhiteSpace(user.NombrePersona))
+        {
+            return "El nombre de la persona es obligatorio.";
+        }
+
+        return ValidateUserFields(user.DominioP, user.Dominio, user.Estado);
+    }
+
+    private static string? ValidateUserFields(string dominioP, int dominio, string estado)
+    {
+        if (dominio is not 0 and not 1)
         {
             return "El tipo de autenticación debe ser local o Active Directory.";
         }
 
-        if (user.DominioP.Trim().ToUpperInvariant() is not ("BA" or "HE" or "HRN" or "IVM"))
+        if (dominioP.Trim().ToUpperInvariant() is not ("BA" or "HE" or "HRN" or "IVM"))
         {
             return "El dominio debe ser BA, HE, HRN o IVM.";
         }
 
-        return user.Estado.Trim().ToUpperInvariant() is "ACTIVO" or "INACTIVO"
+        return estado.Trim().ToUpperInvariant() is "ACTIVO" or "INACTIVO"
             ? null
             : "El estado debe ser ACTIVO o INACTIVO.";
     }

@@ -5,9 +5,19 @@ namespace SistemaInventario.Api.Services;
 // Contrato de operaciones administrativas desacoplado del controlador HTTP.
 public interface IAdminService
 {
-    Task<IReadOnlyList<DeviceDto>> GetDevices(CancellationToken cancellationToken);
+    Task<PagedResult<DeviceDto>> GetDevices(
+        int page,
+        string? searchTerm,
+        string? brand,
+        string? model,
+        int? typeId,
+        int? regionalId,
+        int? buildingId,
+        int? areaId,
+        CancellationToken cancellationToken);
+    Task<IReadOnlyList<DeviceOptionDto>> SearchDeviceOptions(string searchTerm, CancellationToken cancellationToken);
+    Task<IReadOnlyList<EmployeeSearchDto>> SearchEmployees(string searchTerm, CancellationToken cancellationToken);
     Task<IReadOnlyList<DeviceTypeDto>> GetDeviceTypes(CancellationToken cancellationToken);
-    Task<IReadOnlyList<EmployeeDto>> GetEmployees(CancellationToken cancellationToken);
     Task<IReadOnlyList<BuildingDto>> GetBuildings(CancellationToken cancellationToken);
     Task<IReadOnlyList<AreaDto>> GetAreas(int idEdificio, CancellationToken cancellationToken);
     Task CreateDevice(CreateDeviceDto device, CancellationToken cancellationToken);
@@ -19,5 +29,7 @@ public interface IAdminService
     Task DeleteReassignment(int idReasignacion, CancellationToken cancellationToken);
     Task<IReadOnlyList<AdminUserDto>> GetUsers(CancellationToken cancellationToken);
     Task CreateUser(CreateAdminUserDto user, CancellationToken cancellationToken);
+    Task<bool> UpdateUser(int idUsuario, UpdateAdminUserDto user, CancellationToken cancellationToken);
+    Task<bool> ResetUserPassword(int idUsuario, CancellationToken cancellationToken);
     Task DeleteUser(int idUsuario, CancellationToken cancellationToken);
 }

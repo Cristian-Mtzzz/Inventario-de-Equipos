@@ -1,0 +1,228 @@
+:host {
+    position: fixed;
+    inset: 0;
+    z-index: 80;
+}
+
+.employee-search-backdrop {
+    display: grid;
+    place-items: center;
+    min-height: 100%;
+    padding: 1.25rem;
+    background: rgba(12, 38, 39, .52);
+    animation: employeeBackdropIn .16s ease;
+}
+
+.employee-search-dialog {
+    display: flex;
+    flex-direction: column;
+    width: min(900px, 100%);
+    max-height: min(88dvh, 850px);
+    overflow: hidden;
+    padding: 1.5rem;
+    border: 1px solid #d8e4e0;
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: 0 24px 60px rgba(12, 38, 39, .3);
+    animation: employeeDialogIn .22s cubic-bezier(.16, 1, .3, 1);
+}
+
+.employee-search-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+}
+
+.employee-search-heading .eyebrow {
+    margin: 0 0 .5rem;
+    color: #397b78;
+    font-size: .68rem;
+    font-weight: 700;
+}
+
+.employee-search-heading h2 {
+    margin: 0;
+    color: #18383b;
+    font-size: 1.35rem;
+}
+
+.employee-search-close {
+    width: 34px;
+    height: 34px;
+    border: 1px solid #d8e4e0;
+    border-radius: 5px;
+    color: #617573;
+    background: #fff;
+    cursor: pointer;
+    font-size: 1.35rem;
+}
+
+.employee-search-form label {
+    display: block;
+    margin-bottom: .4rem;
+    color: #294649;
+    font-size: .78rem;
+    font-weight: 700;
+}
+
+.employee-search-controls {
+    display: flex;
+    gap: .6rem;
+}
+
+.employee-search-controls input {
+    flex: 1;
+    min-width: 0;
+    padding: .75rem .85rem;
+    border: 1px solid #d7e2df;
+    border-radius: 5px;
+}
+
+.employee-search-controls button {
+    padding: .7rem 1rem;
+    border: 0;
+    border-radius: 5px;
+    color: #fff;
+    background: #276968;
+    cursor: pointer;
+    font-weight: 700;
+}
+
+.employee-search-controls button:disabled {
+    cursor: wait;
+    opacity: .65;
+}
+
+.employee-search-error,
+.employee-search-status {
+    margin: .8rem 0 0;
+    color: #718080;
+    font-size: .83rem;
+}
+
+.employee-search-error {
+    color: #9b3f38;
+}
+
+.employee-search-results {
+    display: grid;
+    gap: .7rem;
+    min-height: 0;
+    overflow-y: auto;
+    margin-top: 1rem;
+}
+
+.employee-result {
+    padding: 1rem;
+    border: 1px solid #d8e4e0;
+    border-radius: 6px;
+    background: #fbfdfc;
+}
+
+.employee-result-heading h3 {
+    margin: 0;
+    color: #18383b;
+    font-size: 1rem;
+}
+
+.employee-result-heading p {
+    margin: .25rem 0 0;
+    color: #718080;
+    font-size: .78rem;
+}
+
+.employee-location {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: .6rem;
+    margin: .85rem 0;
+}
+
+.employee-location div {
+    min-width: 0;
+    padding: .55rem .65rem;
+    border-radius: 4px;
+    background: #edf4f2;
+}
+
+.employee-location dt {
+    color: #617573;
+    font-size: .67rem;
+    font-weight: 700;
+}
+
+.employee-location dd {
+    margin: .2rem 0 0;
+    overflow-wrap: anywhere;
+    color: #203238;
+    font-size: .8rem;
+}
+
+.employee-devices h4 {
+    margin: 0 0 .4rem;
+    color: #294649;
+    font-size: .78rem;
+}
+
+.employee-device-row {
+    display: grid;
+    gap: .18rem;
+    padding: .55rem 0;
+    border-top: 1px solid #e6eeeb;
+    color: #617573;
+    font-size: .75rem;
+    overflow-wrap: anywhere;
+}
+
+.employee-device-row strong {
+    color: #276968;
+}
+
+.employee-no-devices {
+    margin: 0;
+    color: #718080;
+    font-size: .76rem;
+}
+
+@keyframes employeeBackdropIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes employeeDialogIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px) scale(.98);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+@media (max-width: 600px) {
+    .employee-search-backdrop {
+        padding: .5rem;
+    }
+
+    .employee-search-dialog {
+        max-height: 94dvh;
+        padding: 1rem;
+    }
+
+    .employee-location {
+        grid-template-columns: 1fr;
+    }
+
+    .employee-search-controls {
+        align-items: stretch;
+    }
+}

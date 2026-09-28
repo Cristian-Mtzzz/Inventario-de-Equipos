@@ -7,6 +7,7 @@
             <h1>Inventario</h1>
           
         </div>
+        <!--Botones de logOut y refresh-->
         <div class="inventory-header-actions">
             <button type="button" class="refresh-button" (click)="refreshPanel()">Refrescar panel</button>
             <button type="button" class="logout-button" (click)="logout()">Cerrar sesión</button>
@@ -36,6 +37,15 @@
                 <option [ngValue]="null">Tipo de dispositivo</option>@for (type of deviceTypes; track type.IdTipo) {
                 <option [ngValue]="type.IdTipo">{{ type.NombreTipo }}</option> }
             </select>
+
+            <select [(ngModel)]="selectedRegionId" (ngModelChange)="selectDeviceRegion($event)" name="regional"
+                [disabled]="newDevice.Estado === 'DISPONIBLE'">
+                <option [ngValue]="null">Seleccionar regional</option>
+                @for (region of regionalOptions; track region.IdRegional) {
+                <option [ngValue]="region.IdRegional">{{ region.NombreRegional }}</option>
+                }
+            </select>
+
             <select [(ngModel)]="newDevice.Estado" (ngModelChange)="handleDeviceStateChange($event)" name="estado"
                 required>
                 <option value="DISPONIBLE">Disponible</option>
@@ -50,7 +60,7 @@
             <select [(ngModel)]="selectedBuildingId" (ngModelChange)="selectBuilding($event)" name="edificio"
                 [disabled]="newDevice.Estado === 'DISPONIBLE'">
                 <option [ngValue]="null">Seleccionar edificio</option>
-                @for (building of buildings; track building.IdEdificio) { <option [ngValue]="building.IdEdificio">{{
+                @for (building of deviceFormBuildings; track building.IdEdificio) { <option [ngValue]="building.IdEdificio">{{
                     building.NombreEdificio }}</option> }
             </select>
 
@@ -65,25 +75,33 @@
         </form>
 
         <!-- Barra de filtros del inventario -->
-        <div class="filter-bar">
+        <div class="filter-bar device-filter-bar">
             <input type="search" [(ngModel)]="searchTerm" (ngModelChange)="applyFilters()" name="inventorySearch"
-                placeholder="Buscar por código o serie" />
-            <select [(ngModel)]="selectedBrand" (ngModelChange)="applyFilters()" name="inventoryBrand">
-                <option value="">Todas las marcas</option>
-                @for (brand of availableBrands; track brand) { <option [value]="brand">{{ brand }}</option> }
-            </select>
-
-            <select [(ngModel)]="selectedModel" (ngModelChange)="applyFilters()" name="inventoryModel">
-                <option value="">Todos los modelos</option>
-                @for (model of availableModels; track model) { <option [value]="model">{{ model }}</option> }
-            </select>
+                placeholder="Código, serie, marca, modelo o empleado" />
 
             <select [(ngModel)]="selectedTypeId" (ngModelChange)="applyFilters()" name="inventoryType">
                 <option [ngValue]="null">Todos los tipos</option>
                 @for (type of deviceTypes; track type.IdTipo) { <option [ngValue]="type.IdTipo">{{ type.NombreTipo }}
                 </option> }
             </select>
-
+            <select [ngModel]="selectedRegionalFilterId" (ngModelChange)="selectRegionalFilter($event)" name="inventoryRegionalFilter">
+                <option [ngValue]="null">Todas las regionales</option>
+                @for (region of regionalOptions; track region.IdRegional) {
+                <option [ngValue]="region.IdRegional">{{ region.NombreRegional }}</option>
+                }
+            </select>
+            <select [ngModel]="selectedBuildingFilterId" (ngModelChange)="selectBuildingFilter($event)" name="inventoryBuildingFilter">
+                <option [ngValue]="null">Todos los edificios</option>
+                @for (building of filterBuildings; track building.IdEdificio) {
+                <option [ngValue]="building.IdEdificio">{{ building.NombreEdificio }}</option>
+                }
+            </select>
+            <select [(ngModel)]="selectedAreaFilterId" (ngModelChange)="applyFilters()" name="inventoryAreaFilter"
+                [disabled]="selectedBuildingFilterId === null">
+                <option [ngValue]="null">Todas las áreas</option>
+                @for (area of filterAreas; track area.IdArea) { <option [ngValue]="area.IdArea">{{ area.NombreArea }}</option> }
+            </select>
+            <button type="button" class="secondary" (click)="showEmployeeSearch = true">Buscar empleado</button>
             <button type="button" class="secondary" (click)="clearFilters()">Limpiar</button>
         </div>
 
@@ -101,6 +119,7 @@
                         <th>Estado</th>
                         <th>Pago</th>
                         <th>Asignado a</th>
+                        <th>Regional</th>
                         <th>Área</th>
                         <th>Edificio</th>
                         <th>Acciones</th>
@@ -111,7 +130,7 @@
                     <!-- Filas de la tabla de inventario -->
                     @if (filteredDevices.length === 0) {
                     <tr>
-                        <td colspan="12">No se encontraron equipos con los filtros actuales.</td>
+                        <td colspan="13">No se encontraron equipos con los filtros actuales.</td>
                     </tr>
                     } @else {
                     @for (device of pagedDevices; track device.IdEquipo) { <tr>
@@ -124,6 +143,7 @@
                         <td>{{ device.Estado }}</td>
                         <td>{{ device.NumeroPagoAsignado || '-' }}</td>
                         <td>{{ device.AsignadoA || 'Sin asignar' }}</td>
+                        <td>{{ device.NombreRegional || '-' }}</td>
                         <td>{{ device.NombreArea || 'Sin área' }}</td>
                         <td>{{ device.NombreEdificio || '-' }}</td>
                         <td><button type="button" class="secondary" (click)="editDevice(device)">Editar</button>
@@ -137,10 +157,12 @@
                 </tbody>
             </table>
         </div>
+
+        <!--paginacion-->
         <nav class="pagination"><button type="button" (click)="goToPage(currentPage - 1)"
-                [disabled]="currentPage === 1">Anterior</button><span>Página {{ currentPage }} de {{ totalPages }} · {{
-                filteredDevices.length }} registros</span><button type="button" (click)="goToPage(currentPage + 1)"
-                [disabled]="currentPage === totalPages">Siguiente</button></nav>
+                [disabled]="currentPage === 1 || isLoadingDevices">Anterior</button><span>Página {{ currentPage }} de {{ totalPages }} · {{
+                totalDeviceCount }} registros</span><button type="button" (click)="goToPage(currentPage + 1)"
+                [disabled]="currentPage === totalPages || isLoadingDevices">Siguiente</button></nav>
     </section>
     }
 
@@ -149,10 +171,13 @@
     <section class="inventory-section">
         <form class="inventory-form compact" (ngSubmit)="addReassignment()">
             <h2>Registrar reasignación</h2>
+            <input [(ngModel)]="deviceOptionSearch" name="deviceOptionSearch" placeholder="Código, serie o modelo del equipo" />
+            <button type="button" class="secondary" (click)="searchDeviceOptions()">Buscar equipo</button>
             <select [ngModel]="selectedInventoryCode" (ngModelChange)="selectDevice($event)" name="equipo" required>
-                <option value="">Código de inventario</option>@for (device of devices; track device.IdEquipo) { <option
-                    [value]="device.CodigoInventario">{{ device.CodigoInventario }} · {{ device.Marca }} {{
-                    device.Modelo }}</option> }
+                <option value="">Selecciona un resultado</option>
+                @for (device of deviceOptions; track device.IdEquipo) {
+                <option [value]="device.CodigoInventario">{{ device.CodigoInventario }} · {{ device.Marca }} {{ device.Modelo }}</option>
+                }
             </select>
             <input [(ngModel)]="newReassignment.NoPagoNuevo" name="pago" placeholder="Número de pago" />
             <input [(ngModel)]="newReassignment.NombreNuevo" name="nombre" placeholder="Nombres y Apellidos" />
@@ -190,7 +215,7 @@
                     </tr>
                 </thead>
                 <tbody>@for (item of reassignments; track item.IdReasignacion) { <tr>
-                        <td>{{ getInventoryCode(item.IdEquipo) }}</td>
+                        <td>{{ item.CodigoInventario || getInventoryCode(item.IdEquipo) }}</td>
                         <td>{{ item.NoPagoAnterior }}</td>
                         <td>{{ item.NoPagoNuevo }}</td>
                         <td>{{ item.FechaCambio | date }}</td>
@@ -264,5 +289,8 @@
             </div>
         </section>
     </div>
+    }
+    @if (showEmployeeSearch) {
+    <app-employee-search-dialog (closed)="showEmployeeSearch = false" />
     }
 </main>

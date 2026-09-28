@@ -17,7 +17,42 @@ public sealed record DeviceDto(
     string? AsignadoA,
     string? NombreAsignado,
     int? IdEdificio,
-    string? NombreEdificio);
+    string? NombreEdificio,
+    int? IdRegional,
+    string? NombreRegional);
+
+public sealed record PagedResult<T>(IReadOnlyList<T> Items, int TotalCount, int Page, int PageSize);
+
+public sealed record DeviceOptionDto(int IdEquipo, string CodigoInventario, string Marca, string Modelo);
+
+public sealed record EmployeeSearchDto(
+    string NoPago,
+    string NombreCompleto,
+    string Estado,
+    int? IdArea,
+    string? NombreArea,
+    int? IdEdificio,
+    string? NombreEdificio,
+    int? IdRegional,
+    string? NombreRegional,
+    IReadOnlyList<EmployeeAssignedDeviceDto> AssignedDevices);
+
+public sealed record EmployeeAssignedDeviceDto(
+    int IdEquipo,
+    string CodigoInventario,
+    string NoSerie,
+    string Marca,
+    string Modelo,
+    string? NombreTipo,
+    string Estado,
+    string? NumeroPagoAsignado,
+    string? NombreAsignado,
+    int? IdArea,
+    string? NombreArea,
+    int? IdEdificio,
+    string? NombreEdificio,
+    int? IdRegional,
+    string? NombreRegional);
 
 // Datos permitidos para crear o editar un equipo; no incluye campos calculados.
 public sealed record CreateDeviceDto(
@@ -34,13 +69,11 @@ public sealed record CreateDeviceDto(
 // Catálogo utilizado por los selectores de tipo de dispositivo.
 public sealed record DeviceTypeDto(int IdTipo, string NombreTipo);
 
-// Catálogo de empleados disponible para asignar un equipo.
-public sealed record EmployeeDto(string NoPago, string NombreCompleto, int? IdArea);
-
 // Registro histórico de un cambio de responsable.
 public sealed record ReassignmentDto(
     int IdReasignacion,
     int IdEquipo,
+    string CodigoInventario,
     string? NoPagoAnterior,
     string? NoPagoNuevo,
     DateTime FechaCambio,
@@ -77,8 +110,16 @@ public sealed record CreateAdminUserDto(
     int Dominio,
     string Rol);
 
+public sealed record UpdateAdminUserDto(
+    string NombrePersona,
+    DateTime? FechaExpiracion,
+    string Estado,
+    string DominioP,
+    int Dominio,
+    string Rol);
+
 // Catálogo de áreas donde puede ubicarse un equipo.
 public sealed record AreaDto(int IdArea, string NombreArea);
 
 // Edificio disponible para filtrar los departamentos/áreas del formulario.
-public sealed record BuildingDto(int IdEdificio, string NombreEdificio);
+public sealed record BuildingDto(int IdEdificio, string NombreEdificio, int? IdRegional, string? NombreRegional);
