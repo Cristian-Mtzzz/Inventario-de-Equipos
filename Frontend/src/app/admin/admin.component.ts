@@ -54,7 +54,8 @@ export class AdminComponent {
   userSearchTerm = '';
   selectedUserRole = '';
   @ViewChild(TallerComponent) workshopComponent?: TallerComponent;
-
+  
+  // Estado inicial para la creación de un nuevo dispositivo, reasignación o usuario.
   newDevice: CreateDevice = {
     CodigoInventario: '', NoSerie: '', Marca: '', Modelo: '', IdTipo: null,
     Estado: 'DISPONIBLE', NumeroPagoAsignado: null, NombreAsignado: null, IdArea: null,
@@ -67,11 +68,12 @@ export class AdminComponent {
     Usuario: '', NombrePersona: '', FechaExpiracion: null, Estado: 'ACTIVO',
     DominioP: 'BA', Dominio: 0, Rol: 'UsuarioComun',
   };
-
+  // Constructor y métodos de inicialización.
   constructor() {
     this.loadData();
   }
 
+  // Métodos auxiliares para el filtrado y paginación de dispositivos y usuarios.
   get filteredDevices(): Device[] {
     const normalizedSearch = this.searchTerm.trim().toLowerCase();
     return this.devices.filter((device) => {
@@ -86,15 +88,16 @@ export class AdminComponent {
     });
   }
 
+  // Métodos para la paginación de dispositivos.
   get totalPages(): number {
     return Math.max(1, Math.ceil(this.filteredDevices.length / this.pageSize));
   }
-
+  // Fin de los métodos para la paginación de dispositivos.
   get pagedDevices(): Device[] {
     const startIndex = (this.currentPage - 1) * this.pageSize;
     return this.filteredDevices.slice(startIndex, startIndex + this.pageSize);
   }
-
+    // Fin de los métodos auxiliares para el filtrado de marcas y modelos.
   get availableBrands(): string[] {
     return [...new Set(this.devices.map((device) => device.Marca).filter(Boolean))].sort((first, second) => first.localeCompare(second));
   }
@@ -102,7 +105,7 @@ export class AdminComponent {
   get availableModels(): string[] {
     return [...new Set(this.devices.map((device) => device.Modelo).filter(Boolean))].sort((first, second) => first.localeCompare(second));
   }
-
+  // Métodos auxiliares para el filtrado de usuarios.
   get filteredUsers(): AdminUser[] {
     const normalizedSearch = this.userSearchTerm.trim().toLowerCase();
     return this.users.filter((user) => {
@@ -115,6 +118,7 @@ export class AdminComponent {
   get availableUserRoles(): string[] {
     return [...new Set(this.users.map((user) => user.Rol).filter(Boolean))].sort((first, second) => first.localeCompare(second));
   }
+  // Fin de los métodos auxiliares para el filtrado de usuarios.
 
   loadData(): void {
     // Carga únicamente los datos de la sección activa para evitar peticiones innecesarias.
@@ -152,6 +156,7 @@ export class AdminComponent {
       return;
     }
 
+    // Carga de datos para secciones que no son dispositivos ni taller.
     const sectionRequest: Observable<Reassignment[] | AdminUser[]> = this.activeSection === 'reassignments'
       ? this.adminService.getReassignments().pipe(retry({ count: 3, delay: 1000 }))
       : this.adminService.getUsers().pipe(retry({ count: 3, delay: 1000 }));
@@ -193,6 +198,7 @@ export class AdminComponent {
     this.currentPage = 1;
   }
 
+  // Limpia los filtros aplicados a la lista de dispositivos.
   clearFilters(): void {
     this.searchTerm = '';
     this.selectedBrand = '';
@@ -201,11 +207,14 @@ export class AdminComponent {
     this.currentPage = 1;
   }
 
+  // Limpia los filtros aplicados a la lista de usuarios.
   clearUserFilters(): void {
     this.userSearchTerm = '';
     this.selectedUserRole = '';
+    this.currentPage = 1; // Reinicia la paginación al limpiar los filtros de usuario.
   }
 
+  // Selección de edificio y carga de áreas correspondientes. 
   selectBuilding(idEdificio: number | null): void {
     const buildingId = Number(idEdificio);
     this.selectedBuildingId = buildingId || null;
@@ -318,6 +327,7 @@ export class AdminComponent {
     };
   }
 
+  // Normaliza los datos del dispositivo antes de enviarlos al servidor.
   private isDeviceComplete(device: CreateDevice): boolean {
     return Boolean(
       device.CodigoInventario.trim()
@@ -347,12 +357,14 @@ export class AdminComponent {
       error: (error) => this.errorMessage = this.getErrorMessage(error, 'No se pudo quitar el dispositivo.'),
     });
   }
-
+  // Métodos para manejar la eliminación de dispositivos, reasignaciones y usuarios.
+  // Incluye la apertura de confirmación y la ejecución de las acciones correspondientes.
   cancelRemoveDevice(): void {
     this.pendingDeviceId = null;
     this.isDeleteDialogOpen = false;
   }
 
+  // Métodos para manejar la eliminación de reasignaciones.
   askRemoveReassignment(idReasignacion: number): void {
     this.pendingDeviceId = null;
     this.pendingUserId = null;
@@ -360,6 +372,7 @@ export class AdminComponent {
     this.isDeleteDialogOpen = true;
   }
 
+  // Confirma la eliminación de una reasignación.
   confirmRemoveReassignment(): void {
     if (this.pendingReassignmentId === null) return;
     const idReasignacion = this.pendingReassignmentId;
@@ -371,25 +384,28 @@ export class AdminComponent {
     });
   }
 
+  // Cancela la eliminación de una reasignación.
   cancelRemoveReassignment(): void {
     this.pendingReassignmentId = null;
     this.isDeleteDialogOpen = false;
   }
 
+  // Cancela la eliminación pendiente, ya sea de un dispositivo, usuario o reasignación.
   cancelPendingDelete(): void {
     if (this.pendingDeviceId !== null) this.cancelRemoveDevice();
     else if (this.pendingUserId !== null) this.cancelRemoveUser();
     else this.cancelRemoveReassignment();
   }
 
+  // Confirma la eliminación pendiente, ya sea de un dispositivo, usuario o reasignación.
   confirmPendingDelete(): void {
     if (this.pendingDeviceId !== null) this.confirmRemoveDevice();
     else if (this.pendingUserId !== null) this.confirmRemoveUser();
     else this.confirmRemoveReassignment();
   }
 
+  // Agrega una nueva reasignación.
   addReassignment(): void {
-    // Guarda el nuevo responsable y actualiza también la colección de dispositivos.
     this.clearMessages();
     if (!this.newReassignment.IdEquipo || this.reassignmentBuildingId <= 0 || this.newReassignment.IdArea <= 0) {
       this.errorMessage = 'Selecciona el equipo, edificio y departamento de la reasignación.';
@@ -413,12 +429,14 @@ export class AdminComponent {
     });
   }
 
+  // Selecciona un dispositivo para reasignación y actualiza el modelo correspondiente.
   selectDeviceForReassignment(codigoInventario: string): void {
     this.selectedInventoryCode = codigoInventario;
     const device = this.devices.find((item) => item.CodigoInventario === codigoInventario);
     this.newReassignment.IdEquipo = device?.IdEquipo ?? 0;
   }
 
+  // Selecciona un edificio para la reasignación y carga los departamentos correspondientes.
   selectReassignmentBuilding(idEdificio: number): void {
     const buildingId = Number(idEdificio);
     this.reassignmentBuildingId = buildingId;
@@ -432,13 +450,14 @@ export class AdminComponent {
       });
     }
   }
-
+  // Obtiene el código de inventario de un dispositivo dado su ID.
   getInventoryCode(idEquipo: number): string {
     return this.devices.find((device) => device.IdEquipo === idEquipo)?.CodigoInventario ?? String(idEquipo);
   }
 
+  // Agrega un nuevo usuario al sistema. La contraseña inicial se genera en el backend y no se muestra en pantalla.
   addUser(): void {
-    // La contraseña inicial se genera en backend y nunca se captura en pantalla.
+  
     this.clearMessages();
     if (!this.newUser.Usuario.trim() || !this.newUser.NombrePersona.trim()) {
       this.errorMessage = 'El usuario y el nombre de la persona son obligatorios.';
@@ -449,6 +468,7 @@ export class AdminComponent {
       ...this.newUser,
       FechaExpiracion: this.newUser.FechaExpiracion?.trim() || null,
     };
+    // Llama al servicio para crear el usuario en el backend.
     this.adminService.createUser(userToCreate).subscribe({
       next: () => {
         this.message = 'Usuario agregado correctamente.';
@@ -462,16 +482,18 @@ export class AdminComponent {
       error: (error) => this.errorMessage = this.getErrorMessage(error, 'No se pudo agregar el usuario.'),
     });
   }
-
+  // Abre el diálogo para agregar un nuevo usuario.
   openUserDialog(): void {
     this.clearMessages();
     this.isUserDialogOpen = true;
   }
 
+  // Cierra el diálogo de agregar usuario.
   closeUserDialog(): void {
     this.isUserDialogOpen = false;
   }
 
+  // Solicita la eliminación de un usuario.
   askRemoveUser(idUsuario: number): void {
     this.pendingUserId = idUsuario;
     this.pendingDeviceId = null;
@@ -479,6 +501,7 @@ export class AdminComponent {
     this.isDeleteDialogOpen = true;
   }
 
+  // Confirma la eliminación de un usuario.
   confirmRemoveUser(): void {
     if (this.pendingUserId === null) return;
     const idUsuario = this.pendingUserId;
@@ -490,21 +513,22 @@ export class AdminComponent {
     });
   }
 
+  // Cancela la eliminación de un usuario.
   cancelRemoveUser(): void {
     this.pendingUserId = null;
     this.isDeleteDialogOpen = false;
   }
-
+  // Limpia los mensajes de éxito y error.
   private clearMessages(): void {
     this.message = '';
     this.errorMessage = '';
   }
-
+  // Muestra un mensaje de error si la carga de datos falla.
   private showLoadError(): void {
     this.errorMessage = 'No se pudo cargar esta sección. Verifica que el backend esté iniciado.';
     this.isLoading = false;
   }
-
+  // Obtiene el mensaje de error a mostrar, usando un valor de respaldo si no se encuentra un mensaje específico.
   private getErrorMessage(error: { error?: { Message?: string; message?: string } }, fallback: string): string {
     return error.error?.Message ?? error.error?.message ?? fallback;
   }

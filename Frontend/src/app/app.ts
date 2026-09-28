@@ -1,5 +1,6 @@
-import { Component } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
+import { AuthService } from './auth/auth.service';
 
 @Component({
   imports: [RouterOutlet],
@@ -7,5 +8,8 @@ import { RouterOutlet } from '@angular/router';
   styleUrl: './app.css',
   templateUrl: './app.html',
 })
-// Componente raíz: aloja el outlet donde Angular inserta login y módulos protegidos.
-export class App { }
+// Componente raíz: aloja el outlet y el aviso de bienvenida tras iniciar sesión.
+export class App {
+  private readonly authService = inject(AuthService);
+  protected readonly welcomeName = this.authService.welcomeName;
+}

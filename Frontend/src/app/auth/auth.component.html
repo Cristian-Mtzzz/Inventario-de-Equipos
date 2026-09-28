@@ -29,7 +29,7 @@
         @if (errorMessage()) { <p class="error-banner" role="alert">{{ errorMessage() }}</p> }
         <button class="submit-button" type="submit" [disabled]="isLoading()"><span>{{ isLoading() ? 'Validando...' :
             'Entrar
-            al sistema' }}</span>@if (!isLoading()) { <span aria-hidden="true">&rarr;</span> }</button>
+            al sistema' }}</span>@if (!isLoading()) { <span class="submit-arrow" aria-hidden="true">&rarr;</span> }</button>
       </form>
       <p class="security-note"><span aria-hidden="true">&#9672;</span> Conexion segura y protegida</p>
     </div>

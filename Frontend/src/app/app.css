@@ -3,3 +3,53 @@
 	display: block;
 	min-height: 100dvh;
 }
+
+.welcome-toast {
+	position: fixed;
+	top: 1.5rem;
+	left: 50%;
+	z-index: 60;
+	display: flex;
+	align-items: center;
+	gap: .6rem;
+	padding: .85rem 1.3rem;
+	border-radius: 999px;
+	color: #f7faf8;
+	background: linear-gradient(135deg, #276968, #1b5252);
+	box-shadow: 0 12px 28px rgba(23, 63, 67, .28);
+	font-weight: 600;
+	font-size: .9rem;
+	pointer-events: none;
+	animation: welcomeToastIn 2s ease forwards;
+}
+
+.welcome-toast-icon {
+	display: grid;
+	place-items: center;
+	width: 20px;
+	height: 20px;
+	border-radius: 50%;
+	background: rgba(247, 250, 248, .18);
+}
+
+@keyframes welcomeToastIn {
+	0% {
+		opacity: 0;
+		transform: translate(-50%, -16px) scale(.94);
+	}
+
+	12% {
+		opacity: 1;
+		transform: translate(-50%, 0) scale(1);
+	}
+
+	85% {
+		opacity: 1;
+		transform: translate(-50%, 0) scale(1);
+	}
+
+	100% {
+		opacity: 0;
+		transform: translate(-50%, -10px) scale(.97);
+	}
+}

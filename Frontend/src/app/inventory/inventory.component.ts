@@ -7,6 +7,7 @@ import { AuthService } from '../auth/auth.service';
 import { AdminService } from '../admin/admin.service';
 import { Area, Building, CreateDevice, CreateReassignment, Device, DeviceType, Reassignment } from '../admin/admin.models';
 
+// Componente de inventario que permite consultar, filtrar, paginar y gestionar dispositivos y reasignaciones.
 @Component({
   selector: 'app-inventory',
   imports: [DatePipe, FormsModule],
@@ -36,10 +37,13 @@ export class InventoryComponent {
   selectedModel = '';
   selectedTypeId: number | null = null;
 
+  // Modelo para el nuevo dispositivo que se va a agregar al inventario.
   newDevice: CreateDevice = {
     CodigoInventario: '', NoSerie: '', Marca: '', Modelo: '', IdTipo: null,
     Estado: 'DISPONIBLE', NumeroPagoAsignado: null, NombreAsignado: null, IdArea: null,
   };
+
+  // Modelo para la nueva reasignación que se va a registrar.
   newReassignment: CreateReassignment = { IdEquipo: 0, NoPagoNuevo: null, NombreNuevo: '', Motivo: '', IdEdificio: 0, IdArea: 0 };
   reassignmentBuildingId = 0;
   reassignmentAreas: Area[] = [];
@@ -55,10 +59,12 @@ export class InventoryComponent {
     this.loadDevices();
   }
 
+  // Propiedad que indica si el usuario tiene permisos para eliminar dispositivos.
   get canRemoveDevices(): boolean {
     return this.authService.hasRole(['Admin']);
   }
 
+  // Propiedad que devuelve los dispositivos filtrados según los criterios de búsqueda y filtros aplicados.
   get filteredDevices(): Device[] {
     const normalizedSearch = this.searchTerm.trim().toLowerCase();
     return this.devices.filter((device) => {
@@ -73,25 +79,29 @@ export class InventoryComponent {
     });
   }
 
+  // Propiedad que devuelve los dispositivos de la página actual según la paginación.
   get pagedDevices(): Device[] {
     const startIndex = (this.currentPage - 1) * this.pageSize;
     return this.filteredDevices.slice(startIndex, startIndex + this.pageSize);
   }
 
+  // Propiedad que devuelve el número total de páginas según los dispositivos filtrados y el tamaño de página.
   get totalPages(): number {
     return Math.max(1, Math.ceil(this.filteredDevices.length / this.pageSize));
   }
 
+  // Propiedad que devuelve las marcas disponibles en el inventario.
   get availableBrands(): string[] {
     return [...new Set(this.devices.map((device) => device.Marca).filter(Boolean))].sort((first, second) => first.localeCompare(second));
   }
 
+  // Propiedad que devuelve los modelos disponibles en el inventario.
   get availableModels(): string[] {
     return [...new Set(this.devices.map((device) => device.Modelo).filter(Boolean))].sort((first, second) => first.localeCompare(second));
   }
-
+  // Método que carga los dispositivos y los catálogos necesarios para los formularios de inventario.
   loadDevices(): void {
-    // Carga equipos y catálogos necesarios para los formularios de inventario.
+
     this.adminService.getDevices().subscribe({
       next: (devices) => {
         this.devices = devices;
@@ -108,10 +118,12 @@ export class InventoryComponent {
     });
   }
 
+  // Método que aplica los filtros de búsqueda y selección de marca, modelo y tipo.
   applyFilters(): void {
     this.currentPage = 1;
   }
 
+  // Método que limpia los filtros de búsqueda y selección de marca, modelo y tipo.
   clearFilters(): void {
     this.searchTerm = '';
     this.selectedBrand = '';
@@ -120,6 +132,7 @@ export class InventoryComponent {
     this.currentPage = 1;
   }
 
+  // Método que se ejecuta al seleccionar un edificio, cargando sus áreas correspondientes.
   selectBuilding(idEdificio: number | null): void {
     const buildingId = Number(idEdificio);
     this.selectedBuildingId = buildingId || null;
@@ -134,6 +147,7 @@ export class InventoryComponent {
     }
   }
 
+  // Método que maneja los cambios en el estado del dispositivo, ajustando los campos relacionados según corresponda.
   handleDeviceStateChange(state: string): void {
     // Un equipo disponible no puede conservar responsable, pago ni área asignada.
     if (state === 'DISPONIBLE') {
@@ -169,6 +183,7 @@ export class InventoryComponent {
     this.selectSection(this.activeSection);
   }
 
+  // Método que agrega un nuevo dispositivo al inventario.
   addDevice(): void {
     this.clearMessages();
     this.adminService.createDevice(this.newDevice).subscribe({
@@ -191,6 +206,7 @@ export class InventoryComponent {
     if (this.selectedBuildingId !== null) {
       this.adminService.getAreas(this.selectedBuildingId).subscribe((areas) => this.areas = areas);
     }
+    // Copia los datos del dispositivo seleccionado al formulario de edición.
     this.newDevice = {
       CodigoInventario: device.CodigoInventario,
       NoSerie: device.NoSerie,
@@ -205,8 +221,8 @@ export class InventoryComponent {
     this.isEditDialogOpen = true;
   }
 
+  // Método que guarda los cambios realizados en un dispositivo existente.
   saveEditedDevice(): void {
-    // Envía los cambios y vuelve a cargar la tabla cuando la API responde.
     if (this.editingDeviceId === null) return;
     this.adminService.updateDevice(this.editingDeviceId, this.newDevice).subscribe({
       next: () => {
@@ -218,6 +234,7 @@ export class InventoryComponent {
     });
   }
 
+  // Método que cancela la edición de un dispositivo y restablece el formulario.
   cancelEdit(): void {
     this.editingDeviceId = null;
     this.editingCodigoInventario = '';
@@ -227,11 +244,13 @@ export class InventoryComponent {
     this.isEditDialogOpen = false;
   }
 
+  // Método que solicita la eliminación de un dispositivo, mostrando un diálogo de confirmación.
   askRemoveDevice(idEquipo: number): void {
     this.pendingDeleteDeviceId = idEquipo;
     this.isDeleteDialogOpen = true;
   }
 
+  // Método que confirma la eliminación de un dispositivo y actualiza la tabla.
   confirmRemoveDevice(): void {
     if (this.pendingDeleteDeviceId === null) return;
     const idEquipo = this.pendingDeleteDeviceId;
@@ -243,16 +262,19 @@ export class InventoryComponent {
     });
   }
 
+  // Método que cancela la eliminación de un dispositivo y cierra el diálogo de confirmación.
   cancelRemoveDevice(): void {
     this.pendingDeleteDeviceId = null;
     this.isDeleteDialogOpen = false;
   }
 
+  // Método que se ejecuta al seleccionar un dispositivo, actualizando la reasignación con su ID.
   selectDevice(codigoInventario: string): void {
     this.selectedInventoryCode = codigoInventario;
     this.newReassignment.IdEquipo = this.devices.find((device) => device.CodigoInventario === codigoInventario)?.IdEquipo ?? 0;
   }
 
+  // Método que se ejecuta al seleccionar un edificio para la reasignación, cargando sus áreas correspondientes.  
   selectReassignmentBuilding(idEdificio: number): void {
     const buildingId = Number(idEdificio);
     this.reassignmentBuildingId = buildingId;
@@ -267,8 +289,8 @@ export class InventoryComponent {
     }
   }
 
+  // Método que agrega una nueva reasignación de dispositivo.
   addReassignment(): void {
-    // Envía una reasignación y refresca ambas tablas al terminar.
     this.clearMessages();
     if (!this.newReassignment.IdEquipo || this.reassignmentBuildingId <= 0 || this.newReassignment.IdArea <= 0) {
       this.errorMessage = 'Selecciona el equipo, edificio y departamento de la reasignación.';
@@ -289,10 +311,12 @@ export class InventoryComponent {
     });
   }
 
+  // Método que obtiene el código de inventario de un dispositivo dado su ID.
   getInventoryCode(idEquipo: number): string {
     return this.devices.find((device) => device.IdEquipo === idEquipo)?.CodigoInventario ?? String(idEquipo);
   }
 
+  // Método que navega a una página específica de la lista de dispositivos.
   goToPage(page: number): void {
     this.currentPage = Math.min(Math.max(page, 1), this.totalPages);
   }

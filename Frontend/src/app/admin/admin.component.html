@@ -5,14 +5,14 @@
     <div>
       <p class="eyebrow">CONTROL ADMINISTRATIVO</p>
       <h1>Panel de administrador</h1>
-      <p>Gestiona dispositivos, movimientos y usuarios del sistema.</p>
+    
     </div>
     <div class="admin-header-actions">
       <button type="button" class="refresh-button" (click)="loadData()">Refrescar panel</button>
       <button type="button" class="logout-button" (click)="logout()">Cerrar sesión</button>
     </div>
   </header>
-
+  <!-- Navegación entre secciones administrativas -->
   <nav class="admin-tabs" aria-label="Secciones administrativas">
     <button type="button" [class.active]="activeSection === 'devices'"
       (click)="selectSection('devices')">Dispositivos</button>
@@ -52,7 +52,8 @@
       <select [(ngModel)]="selectedBuildingId" (ngModelChange)="selectBuilding($event)" name="edificio"
         [disabled]="newDevice.Estado === 'DISPONIBLE'">
         <option [ngValue]="null">Seleccionar edificio</option>
-        @for (building of buildings; track building.IdEdificio) { <option [ngValue]="building.IdEdificio">{{ building.NombreEdificio }}</option> }
+        @for (building of buildings; track building.IdEdificio) { <option [ngValue]="building.IdEdificio">{{
+          building.NombreEdificio }}</option> }
       </select>
       <select [(ngModel)]="newDevice.IdArea" name="area"
         [disabled]="newDevice.Estado === 'DISPONIBLE' || isLoadingAreas">
@@ -158,7 +159,8 @@
         <label for="admin-reassignment-area">Departamento</label>
         <select id="admin-reassignment-area" [(ngModel)]="newReassignment.IdArea" name="reassignmentArea"
           [disabled]="reassignmentBuildingId <= 0 || isLoadingAreas" required>
-          <option [ngValue]="0">{{ isLoadingAreas ? 'Cargando departamentos...' : 'Selecciona un departamento' }}</option>
+          <option [ngValue]="0">{{ isLoadingAreas ? 'Cargando departamentos...' : 'Selecciona un departamento' }}
+          </option>
           @for (area of reassignmentAreas; track area.IdArea) {
           <option [ngValue]="area.IdArea">{{ area.NombreArea }}</option>
           }
@@ -185,7 +187,8 @@
             <td>{{ item.NoPagoNuevo }}</td>
             <td>{{ item.FechaCambio | date }}</td>
             <td>{{ item.Motivo }}</td>
-            <td><button type="button" class="danger" (click)="askRemoveReassignment(item.IdReasignacion)">Quitar</button></td>
+            <td><button type="button" class="danger"
+                (click)="askRemoveReassignment(item.IdReasignacion)">Quitar</button></td>
           </tr> }</tbody>
       </table>
     </div>
@@ -255,15 +258,18 @@
       <form class="modal-form" autocomplete="off" (ngSubmit)="addUser()">
         <div class="user-field">
           <label for="modalUsuario">Usuario:</label>
-          <input id="modalUsuario" [(ngModel)]="newUser.Usuario" name="modalUsuario" autocomplete="new-username" placeholder="Usuario" required />
+          <input id="modalUsuario" [(ngModel)]="newUser.Usuario" name="modalUsuario" autocomplete="new-username"
+            placeholder="Usuario" required />
         </div>
         <div class="user-field">
           <label for="modalNombrePersona">Nombre de la persona:</label>
-          <input id="modalNombrePersona" [(ngModel)]="newUser.NombrePersona" name="modalNombrePersona" placeholder="Nombre completo" required />
+          <input id="modalNombrePersona" [(ngModel)]="newUser.NombrePersona" name="modalNombrePersona"
+            placeholder="Nombre completo" required />
         </div>
         <div class="user-field">
           <label for="modalFechaExpiracion">Fecha de expiración:</label>
-          <input id="modalFechaExpiracion" [(ngModel)]="newUser.FechaExpiracion" name="modalFechaExpiracion" type="date" />
+          <input id="modalFechaExpiracion" [(ngModel)]="newUser.FechaExpiracion" name="modalFechaExpiracion"
+            type="date" />
         </div>
         <div class="user-field">
           <label for="modalEstado">Estado:</label>
@@ -327,7 +333,8 @@
           <option [ngValue]="null">Tipo de dispositivo</option>@for (type of deviceTypes; track type.IdTipo) { <option
             [ngValue]="type.IdTipo">{{ type.NombreTipo }}</option> }
         </select>
-        <select [(ngModel)]="newDevice.Estado" (ngModelChange)="handleDeviceStateChange($event)" name="editEstado" required>
+        <select [(ngModel)]="newDevice.Estado" (ngModelChange)="handleDeviceStateChange($event)" name="editEstado"
+          required>
           <option value="DISPONIBLE">Disponible</option>
           <option value="ASIGNADO">Asignado</option>
         </select>
@@ -338,12 +345,13 @@
         <select [(ngModel)]="selectedBuildingId" (ngModelChange)="selectBuilding($event)" name="editEdificio"
           [disabled]="newDevice.Estado === 'DISPONIBLE'">
           <option [ngValue]="null">Seleccionar edificio</option>
-          @for (building of buildings; track building.IdEdificio) { <option [ngValue]="building.IdEdificio">{{ building.NombreEdificio }}</option> }
+          @for (building of buildings; track building.IdEdificio) { <option [ngValue]="building.IdEdificio">{{
+            building.NombreEdificio }}</option> }
         </select>
         <select [(ngModel)]="newDevice.IdArea" name="editArea"
           [disabled]="newDevice.Estado === 'DISPONIBLE' || isLoadingAreas">
-          <option [ngValue]="null">{{ isLoadingAreas ? 'Cargando departamentos...' : 'Sin área' }}</option>@for (area of areas; track area.IdArea) { <option
-            [ngValue]="area.IdArea">{{ area.NombreArea }}</option> }
+          <option [ngValue]="null">{{ isLoadingAreas ? 'Cargando departamentos...' : 'Sin área' }}</option>@for (area of
+          areas; track area.IdArea) { <option [ngValue]="area.IdArea">{{ area.NombreArea }}</option> }
         </select>
         <div class="modal-actions"><button type="button" class="secondary"
             (click)="cancelEdit()">Cancelar</button><button type="submit">Guardar cambios</button></div>
@@ -358,15 +366,15 @@
     <section class="delete-modal" role="dialog" aria-modal="true" aria-labelledby="delete-title"
       (click)="$event.stopPropagation()">
       <p class="eyebrow">CONFIRMAR ACCIÓN</p>
-      <h2 id="delete-title">{{ pendingReassignmentId !== null ? '¿Eliminar esta reasignación?' : '¿Quieres quitar este registro?' }}</h2>
+      <h2 id="delete-title">{{ pendingReassignmentId !== null ? '¿Eliminar esta reasignación?' : '¿Quieres quitar este
+        registro?' }}</h2>
       <p>{{ pendingReassignmentId !== null
         ? 'Esta acción eliminará permanentemente el registro de reasignación.'
         : pendingDeviceId !== null
-          ? 'Se eliminará el dispositivo junto con su historial de reparaciones y reasignaciones.'
-          : 'Esta acción eliminará el usuario del sistema.' }}</p>
+        ? 'Se eliminará el dispositivo junto con su historial de reparaciones y reasignaciones.'
+        : 'Esta acción eliminará el usuario del sistema.' }}</p>
       <div class="modal-actions"><button type="button" class="secondary"
-          (click)="cancelPendingDelete()">Cancelar</button><button
-          type="button" class="danger modal-danger"
+          (click)="cancelPendingDelete()">Cancelar</button><button type="button" class="danger modal-danger"
           (click)="confirmPendingDelete()">Confirmar
           eliminación</button></div>
     </section>

@@ -80,3 +80,48 @@ input {
     align-items: center;
     gap: .75rem;
 }
+
+/* Respuesta táctil moderna para todos los botones del sistema. */
+button {
+    transition: transform .15s ease, box-shadow .2s ease, background .2s ease, border-color .2s ease, opacity .2s ease;
+}
+
+button:active:not(:disabled) {
+    transform: scale(.96);
+}
+
+button:focus-visible {
+    outline: 2px solid #276968;
+    outline-offset: 2px;
+}
+
+/* Animación de entrada compartida por todas las ventanas emergentes (admin, taller, inventario). */
+@keyframes modalBackdropIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes modalPanelIn {
+    from {
+        opacity: 0;
+        transform: translateY(16px) scale(.96);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.modal-backdrop {
+    animation: modalBackdropIn .18s ease;
+}
+
+.modal-backdrop>* {
+    animation: modalPanelIn .25s cubic-bezier(.16, 1, .3, 1);
+}

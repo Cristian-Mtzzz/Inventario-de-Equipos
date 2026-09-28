@@ -116,6 +116,7 @@ export class TallerComponent {
 
   openReceptionWindow(): void {
     // Inicializa una recepción nueva con la fecha/hora actual del navegador.
+  
     this.message = '';
     this.errorMessage = '';
     this.reception = {
@@ -157,6 +158,7 @@ export class TallerComponent {
     this.activeWindow = 'entry';
   }
 
+  // Guarda la información de ingreso 
   saveEntry(): void {
     this.message = '';
     this.errorMessage = '';
@@ -213,6 +215,7 @@ export class TallerComponent {
     this.activeWindow = 'edit';
   }
 
+  // Guarda la información editada de una reparación.
   saveEdit(): void {
     if (!this.selectedMaintenance || this.edit.IdEquipo <= 0 || !this.edit.FechaIngreso) {
       this.errorMessage = 'Selecciona un equipo e indica la fecha de ingreso.';
@@ -225,13 +228,15 @@ export class TallerComponent {
     });
   }
 
+  // Marca una reparación para su eliminación.
   deleteMaintenance(item: Maintenance): void {
     if (!this.isAdmin) return;
     this.pendingDeleteMaintenance = item;
   }
 
+  // Confirma y ejecuta la eliminación de una reparación.
   confirmDeleteMaintenance(): void {
-    // Ejecuta la eliminación después de la confirmación visual del usuario.
+    // Verifica que haya una reparación pendiente de eliminación.
     if (!this.pendingDeleteMaintenance) return;
     const maintenanceId = this.pendingDeleteMaintenance.IdReparacion;
     this.pendingDeleteMaintenance = null;
@@ -242,10 +247,11 @@ export class TallerComponent {
     });
   }
 
+  // Cancela la eliminación de una reparación.
   cancelDeleteMaintenance(): void {
     this.pendingDeleteMaintenance = null;
   }
-
+  // Refresca el panel de información del taller.
   refreshPanel(): void {
     this.message = '';
     this.errorMessage = '';
@@ -257,25 +263,28 @@ export class TallerComponent {
     this.activeWindow = null;
     this.selectedMaintenance = null;
   }
-
+  // Obtiene la etiqueta descriptiva de un dispositivo del taller.
   getDeviceLabel(device: WorkshopDevice): string {
     return `${device.CodigoInventario} · ${device.Marca} ${device.Modelo}`;
   }
 
+  // Determina si una reparación aún está abierta (sin fecha de salida).
   isOpenMaintenance(item: Maintenance): boolean { return item.FechaSalida === null; }
 
   logout(): void {
-    // Finaliza la sesión del técnico o administrador.
+    // Finaliza la sesión con el logout
     this.authService.logout();
     this.router.navigateByUrl('/login');
   }
 
+  // Obtiene la fecha y hora actual en formato compatible con input[type="datetime-local"].
   private getCurrentDateTime(): string {
     const now = new Date();
     const pad = (value: number) => String(value).padStart(2, '0');
     return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
   }
 
+  // Convierte una cadena de fecha y hora a un formato compatible con input[type="datetime-local"].
   private toDateTimeLocal(value: string): string {
     return value ? value.slice(0, 16) : '';
   }

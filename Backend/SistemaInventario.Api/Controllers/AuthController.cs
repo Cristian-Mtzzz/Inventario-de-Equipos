@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using SistemaInventario.Api.Models;
 using SistemaInventario.Api.Services;
 
@@ -18,6 +19,8 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
         LoginRequestDto loginRequest,
         CancellationToken cancellationToken)
     {
+     
+       
         var loginResponse = await authService.AuthenticateUser(loginRequest, cancellationToken);
         return loginResponse is null
             ? Unauthorized(new { Message = "Credenciales invalidas." })

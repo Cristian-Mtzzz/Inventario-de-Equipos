@@ -1,6 +1,8 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Data;
 using System.Data.Common;
+using System.DirectoryServices;
+using System.Runtime.InteropServices;
 using System.Security.Claims;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
@@ -14,7 +16,8 @@ namespace SistemaInventario.Api.Services;
 // que el frontend utiliza para conservar la sesión y aplicar permisos por rol.
 public sealed class AuthService(
     InventoryDbContext dbContext,
-    IConfiguration configuration) : IAuthService
+    IConfiguration configuration,
+    ILogger<AuthService> logger) : IAuthService
 {
     public async Task<LoginResponseDto?> AuthenticateUser(
         LoginRequestDto loginRequest,
@@ -27,54 +30,109 @@ public sealed class AuthService(
         {
             await using var command = connection.CreateCommand();
             command.CommandText = """
-                                SELECT ID_USUARIO, USUARIO, PASSWORD_HASH, ROL, ESTADO,
+                                SELECT ID_USUARIO, USUARIO, NOMBRE_PERSONA, PASSWORD_HASH, ROL, ESTADO,
                                              DOMINIOP, DOMINIO, CLAVE_SEGURA
                 FROM USUARIOS
                 WHERE USUARIO = :userName
-                  AND PASSWORD_HASH = ORA_HASH(:password, 4294967295)
-                      || ORA_HASH(:userNameForHash, 4294967295)
-                                    AND UPPER(ESTADO) = 'ACTIVO'
-                                    AND (FECHA_EXPIRACION IS NULL OR FECHA_EXPIRACION >= TRUNC(SYSDATE))
+                  AND (DOMINIO = 1 OR PASSWORD_HASH = ORA_HASH(:password, 4294967295)
+                      || ORA_HASH(:userNameForHash, 4294967295))
+                  AND UPPER(ESTADO) = 'ACTIVO'
+                  AND (FECHA_EXPIRACION IS NULL OR FECHA_EXPIRACION >= TRUNC(SYSDATE))
                 """;
             AddParameter(command, "userName", loginRequest.UserName);
             AddParameter(command, "password", loginRequest.Password);
             AddParameter(command, "userNameForHash", loginRequest.UserName);
 
-            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-            if (!await reader.ReadAsync(cancellationToken))
+            User user;
+            int domain;
+            string domainName;
+            string secureKey;
+            string status;
+            await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
             {
-                return null;
+                if (!await reader.ReadAsync(cancellationToken))
+                {
+                    return null;
+                }
+
+                user = new User
+                {
+                    UserId = reader.GetInt32(reader.GetOrdinal("ID_USUARIO")),
+                    UserName = reader.GetString(reader.GetOrdinal("USUARIO")),
+                    FullName = ReadString(reader, "NOMBRE_PERSONA"),
+                    PasswordHash = reader.GetString(reader.GetOrdinal("PASSWORD_HASH")),
+                    Role = reader.GetString(reader.GetOrdinal("ROL")),
+                };
+                domain = Convert.ToInt32(reader.GetValue(reader.GetOrdinal("DOMINIO")));
+                domainName = ReadString(reader, "DOMINIOP").Trim().ToUpperInvariant();
+                secureKey = ReadString(reader, "CLAVE_SEGURA");
+                status = ReadString(reader, "ESTADO");
             }
 
-            var user = new User
-            {
-                UserId = reader.GetInt32(reader.GetOrdinal("ID_USUARIO")),
-                UserName = reader.GetString(reader.GetOrdinal("USUARIO")),
-                PasswordHash = reader.GetString(reader.GetOrdinal("PASSWORD_HASH")),
-                Role = reader.GetString(reader.GetOrdinal("ROL")),
-            };
-            var domain = Convert.ToInt32(reader.GetValue(reader.GetOrdinal("DOMINIO")));
             if (domain == 1)
             {
-                // La validación contra Active Directory se incorpora en la siguiente etapa.
+                if (domainName is not ("BA" or "HE" or "HRN" or "IVM"))
+                {
+                    logger.LogWarning(
+                        "El usuario {UserName} tiene un dominio no reconocido: {DomainName}.",
+                        loginRequest.UserName,
+                        domainName);
+                    return null;
+                }
+
+                if (!ValidateCredentials(loginRequest.UserName, loginRequest.Password, domainName))
+                {
+                    return null;
+                }
+            }
+            else if (domain != 0)
+            {
                 return null;
             }
 
-            var secureKey = ReadString(reader, "CLAVE_SEGURA");
-
-            return new LoginResponseDto(GenerateToken(user, secureKey != "1"), new UserResponseDto(
+            var mustChangePassword = domain == 0 && secureKey == "0";
+            // Registrar información del usuario
+            logger.LogInformation(
+                "Login aceptado para {UserName}. Tipo: {Domain}, Dominio: {DomainName}.",
+                loginRequest.UserName,
+                domain,
+                domainName);
+            return new LoginResponseDto(GenerateToken(user, mustChangePassword), new UserResponseDto(
                 user.UserId,
                 user.UserName,
-                user.UserName,
+                string.IsNullOrWhiteSpace(user.FullName) ? user.UserName : user.FullName,
                 user.Role,
-                ReadString(reader, "ESTADO"),
-                ReadString(reader, "DOMINIOP"),
+                status,
+                domainName,
                 domain),
-                secureKey != "1");
+                mustChangePassword);
         }
         finally
         {
             await dbContext.Database.CloseConnectionAsync();
+        }
+    }
+
+    private bool ValidateCredentials(string username, string password, string domain)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            logger.LogWarning("Se intento validar contra Active Directory en un sistema no Windows.");
+            return false;
+        }
+
+        try
+        {
+            // Prefijo "dominio\usuario": sin él, las confianzas entre dominios del bosque
+            // permiten autenticar la cuenta aunque pertenezca a otro dominio distinto al elegido
+            using var entry = new DirectoryEntry($"LDAP://{domain}", $@"{domain}\{username}", password);
+            using var searcher = new DirectorySearcher(entry);
+            return searcher.FindOne() is not null;
+        }
+        catch (Exception ex) when (ex is COMException or DirectoryServicesCOMException or UnauthorizedAccessException)
+        {
+            logger.LogWarning(ex, "Fallo la validacion contra Active Directory para el dominio {Domain}.", domain);
+            return false;
         }
     }
 
@@ -91,10 +149,10 @@ public sealed class AuthService(
                 UPDATE USUARIOS
                 SET PASSWORD_HASH = ORA_HASH(:newPassword, 4294967295)
                                       || ORA_HASH(USUARIO, 4294967295),
-                    CLAVE_SEGURA = '1'
+                                        CLAVE_SEGURA = '1'
                 WHERE ID_USUARIO = :userId
                   AND DOMINIO = 0
-                  AND CLAVE_SEGURA = '0'
+                                    AND CLAVE_SEGURA = '0'
                   AND PASSWORD_HASH = ORA_HASH(:currentPassword, 4294967295)
                                       || ORA_HASH(USUARIO, 4294967295)
                 """;

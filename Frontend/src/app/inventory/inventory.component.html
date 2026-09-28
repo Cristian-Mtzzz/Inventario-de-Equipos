@@ -5,14 +5,14 @@
         <div>
             <p class="eyebrow">CONTROL DE INVENTARIO</p>
             <h1>Inventario</h1>
-            <p>Consulta dispositivos y registra nuevas operaciones.</p>
+          
         </div>
         <div class="inventory-header-actions">
             <button type="button" class="refresh-button" (click)="refreshPanel()">Refrescar panel</button>
             <button type="button" class="logout-button" (click)="logout()">Cerrar sesión</button>
         </div>
     </header>
-
+<!-- Sección de pestañas de inventario -->
     <nav class="inventory-tabs" aria-label="Secciones de inventario">
         <button type="button" [class.active]="activeSection === 'devices'"
             (click)="selectSection('devices')">Dispositivos</button>
@@ -36,11 +36,13 @@
                 <option [ngValue]="null">Tipo de dispositivo</option>@for (type of deviceTypes; track type.IdTipo) {
                 <option [ngValue]="type.IdTipo">{{ type.NombreTipo }}</option> }
             </select>
-            <select [(ngModel)]="newDevice.Estado" (ngModelChange)="handleDeviceStateChange($event)" name="estado" required>
+            <select [(ngModel)]="newDevice.Estado" (ngModelChange)="handleDeviceStateChange($event)" name="estado"
+                required>
                 <option value="DISPONIBLE">Disponible</option>
                 <option value="ASIGNADO">Asignado</option>
             </select>
-            <!-- Pago y nombre se capturan por separado y pueden quedar vacíos. -->
+
+            <!-- numero de pago y nombre se capturan por separado y pueden quedar vacíos. -->
             <input [(ngModel)]="newDevice.NumeroPagoAsignado" name="pago" placeholder="Número de pago"
                 [disabled]="newDevice.Estado === 'DISPONIBLE'" />
             <input [(ngModel)]="newDevice.NombreAsignado" name="nombreAsignado" placeholder="Nombre asignado"
@@ -48,15 +50,21 @@
             <select [(ngModel)]="selectedBuildingId" (ngModelChange)="selectBuilding($event)" name="edificio"
                 [disabled]="newDevice.Estado === 'DISPONIBLE'">
                 <option [ngValue]="null">Seleccionar edificio</option>
-                @for (building of buildings; track building.IdEdificio) { <option [ngValue]="building.IdEdificio">{{ building.NombreEdificio }}</option> }
+                @for (building of buildings; track building.IdEdificio) { <option [ngValue]="building.IdEdificio">{{
+                    building.NombreEdificio }}</option> }
             </select>
+
+            <!-- Área del dispositivo -->
             <select [(ngModel)]="newDevice.IdArea" name="area"
                 [disabled]="newDevice.Estado === 'DISPONIBLE' || isLoadingAreas">
-                <option [ngValue]="null">{{ isLoadingAreas ? 'Cargando departamentos...' : 'Sin área' }}</option>@for (area of areas; track area.IdArea) { <option
-                    [ngValue]="area.IdArea">{{ area.NombreArea }}</option> }
+                <option [ngValue]="null">{{ isLoadingAreas ? 'Cargando departamentos...' : 'Sin área' }}</option>@for
+                (area of areas; track area.IdArea) { <option [ngValue]="area.IdArea">{{ area.NombreArea }}</option> }
             </select>
+
             <button type="submit">Agregar dispositivo</button>
         </form>
+
+        <!-- Barra de filtros del inventario -->
         <div class="filter-bar">
             <input type="search" [(ngModel)]="searchTerm" (ngModelChange)="applyFilters()" name="inventorySearch"
                 placeholder="Buscar por código o serie" />
@@ -64,17 +72,22 @@
                 <option value="">Todas las marcas</option>
                 @for (brand of availableBrands; track brand) { <option [value]="brand">{{ brand }}</option> }
             </select>
+
             <select [(ngModel)]="selectedModel" (ngModelChange)="applyFilters()" name="inventoryModel">
                 <option value="">Todos los modelos</option>
                 @for (model of availableModels; track model) { <option [value]="model">{{ model }}</option> }
             </select>
+
             <select [(ngModel)]="selectedTypeId" (ngModelChange)="applyFilters()" name="inventoryType">
                 <option [ngValue]="null">Todos los tipos</option>
                 @for (type of deviceTypes; track type.IdTipo) { <option [ngValue]="type.IdTipo">{{ type.NombreTipo }}
                 </option> }
             </select>
+
             <button type="button" class="secondary" (click)="clearFilters()">Limpiar</button>
         </div>
+
+        <!-- Tabla de inventario -->
         <div class="table-wrap">
             <table>
                 <thead>
@@ -93,7 +106,9 @@
                         <th>Acciones</th>
                     </tr>
                 </thead>
+
                 <tbody>
+                    <!-- Filas de la tabla de inventario -->
                     @if (filteredDevices.length === 0) {
                     <tr>
                         <td colspan="12">No se encontraron equipos con los filtros actuales.</td>
@@ -113,8 +128,10 @@
                         <td>{{ device.NombreEdificio || '-' }}</td>
                         <td><button type="button" class="secondary" (click)="editDevice(device)">Editar</button>
                             @if (canRemoveDevices) {
-                            <button type="button" class="danger" (click)="askRemoveDevice(device.IdEquipo)">Quitar</button>
-                            }</td>
+                            <button type="button" class="danger"
+                                (click)="askRemoveDevice(device.IdEquipo)">Quitar</button>
+                            }
+                        </td>
                     </tr> }
                     }
                 </tbody>
@@ -151,7 +168,8 @@
                 <label for="inventory-reassignment-area">Departamento</label>
                 <select id="inventory-reassignment-area" [(ngModel)]="newReassignment.IdArea" name="reassignmentArea"
                     [disabled]="reassignmentBuildingId <= 0 || isLoadingAreas" required>
-                    <option [ngValue]="0">{{ isLoadingAreas ? 'Cargando departamentos...' : 'Selecciona un departamento' }}</option>
+                    <option [ngValue]="0">{{ isLoadingAreas ? 'Cargando departamentos...' : 'Selecciona un departamento'
+                        }}</option>
                     @for (area of reassignmentAreas; track area.IdArea) {
                     <option [ngValue]="area.IdArea">{{ area.NombreArea }}</option>
                     }
@@ -204,7 +222,8 @@
                     <option [ngValue]="null">Tipo de dispositivo</option>@for (type of deviceTypes; track type.IdTipo) {
                     <option [ngValue]="type.IdTipo">{{ type.NombreTipo }}</option> }
                 </select>
-                <select [(ngModel)]="newDevice.Estado" (ngModelChange)="handleDeviceStateChange($event)" name="editEstado" required>
+                <select [(ngModel)]="newDevice.Estado" (ngModelChange)="handleDeviceStateChange($event)"
+                    name="editEstado" required>
                     <option value="DISPONIBLE">Disponible</option>
                     <option value="ASIGNADO">Asignado</option>
                 </select>
@@ -215,12 +234,14 @@
                 <select [(ngModel)]="selectedBuildingId" (ngModelChange)="selectBuilding($event)" name="editEdificio"
                     [disabled]="newDevice.Estado === 'DISPONIBLE'">
                     <option [ngValue]="null">Seleccionar edificio</option>
-                    @for (building of buildings; track building.IdEdificio) { <option [ngValue]="building.IdEdificio">{{ building.NombreEdificio }}</option> }
+                    @for (building of buildings; track building.IdEdificio) { <option [ngValue]="building.IdEdificio">{{
+                        building.NombreEdificio }}</option> }
                 </select>
                 <select [(ngModel)]="newDevice.IdArea" name="editArea"
                     [disabled]="newDevice.Estado === 'DISPONIBLE' || isLoadingAreas">
-                    <option [ngValue]="null">{{ isLoadingAreas ? 'Cargando departamentos...' : 'Sin área' }}</option>@for (area of areas; track area.IdArea) { <option
-                        [ngValue]="area.IdArea">{{ area.NombreArea }}</option> }
+                    <option [ngValue]="null">{{ isLoadingAreas ? 'Cargando departamentos...' : 'Sin área' }}</option>
+                    @for (area of areas; track area.IdArea) { <option [ngValue]="area.IdArea">{{ area.NombreArea }}
+                    </option> }
                 </select>
                 <div class="modal-actions"><button type="button" class="secondary"
                         (click)="cancelEdit()">Cancelar</button><button type="submit">Guardar cambios</button></div>
@@ -238,7 +259,8 @@
             <p>Se eliminará el dispositivo junto con su historial de reparaciones y reasignaciones.</p>
             <div class="modal-actions">
                 <button type="button" class="secondary" (click)="cancelRemoveDevice()">Cancelar</button>
-                <button type="button" class="danger modal-danger" (click)="confirmRemoveDevice()">Confirmar eliminación</button>
+                <button type="button" class="danger modal-danger" (click)="confirmRemoveDevice()">Confirmar
+                    eliminación</button>
             </div>
         </section>
     </div>

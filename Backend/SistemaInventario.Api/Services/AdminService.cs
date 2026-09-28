@@ -286,7 +286,7 @@ public sealed class AdminService(InventoryDbContext dbContext) : IAdminService
                    :rol,
                    :dominioP,
                    :dominio,
-                   '0'
+                         '0'
             FROM USUARIOS
             """, cancellationToken,
             ("usuario", user.Usuario.Trim()), ("nombrePersona", user.NombrePersona.Trim()),

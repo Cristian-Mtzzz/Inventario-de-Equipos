@@ -35,12 +35,13 @@ export class AuthComponent {
       this.loginForm.markAllAsTouched();
       return;
     }
-
+    // Inicia el proceso de autenticación.
     this.isLoading.set(true);
     this.errorMessage.set('');
     const { userName, password } = this.loginForm.getRawValue();
 
-    // El servicio persiste el JWT; aquí solo se decide la ruta inicial del usuario.
+  
+    // Llama al servicio de autenticación con las credenciales proporcionadas.
     this.authService.login({ UserName: userName, Password: password }).pipe(
       catchError((error: HttpErrorResponse) => {
         this.errorMessage.set(error.status === 401
@@ -51,6 +52,7 @@ export class AuthComponent {
       finalize(() => {
         this.isLoading.set(false);
       }),
+      // Maneja la respuesta de la autenticación y redirige según el rol del usuario.
     ).subscribe({
       next: (loginResponse) => loginResponse.MustChangePassword
         ? this.router.navigateByUrl('/change-password')

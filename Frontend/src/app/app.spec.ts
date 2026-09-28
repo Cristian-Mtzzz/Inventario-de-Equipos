@@ -14,13 +14,14 @@ describe('App', () => {
     })
       .compileComponents();
   });
-
+  // Prueba que verifica la creación del componente raíz.
   it('should create the app', () => {
     const fixture = TestBed.createComponent(App);
     const app = fixture.componentInstance;
     expect(app).toBeTruthy();
   });
 
+  // Prueba que verifica que se renderiza el shell de la aplicación.
   it('should render the application shell', async () => {
     const fixture = TestBed.createComponent(App);
     await fixture.whenStable();
@@ -28,6 +29,7 @@ describe('App', () => {
     expect(compiled).toBeTruthy();
   });
 
+  // Prueba que verifica la redirección a login cuando no hay sesión activa.
   it('should redirect to login when there is no active session', () => {
     const router = TestBed.inject(Router);
     const route = { data: { roles: ['Admin'] as UserRole[] } };
@@ -38,6 +40,7 @@ describe('App', () => {
     });
   });
 
+  // Prueba que permite el acceso cuando la sesión del usuario es válida para el rol requerido.
   it('should allow access when the user session is valid for the required role', () => {
     const user: AuthUser = {
       UserId: '1',
@@ -46,9 +49,11 @@ describe('App', () => {
       Role: 'Admin',
     };
 
+    // Simula una sesión activa del usuario en el almacenamiento local.
     localStorage.setItem('sistema_inventario_token', 'jwt-token');
     localStorage.setItem('sistema_inventario_user', JSON.stringify(user));
 
+    // Configura la ruta y el estado de navegación para la prueba.
     const route = { data: { roles: ['Admin'] as UserRole[] } };
     const navigationState = {} as RouterStateSnapshot;
     TestBed.runInInjectionContext(() => {

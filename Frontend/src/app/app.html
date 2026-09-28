@@ -1,2 +1,9 @@
+<!-- Aviso de bienvenida flotante que se desvanece solo tras un login exitoso. -->
+@if (welcomeName(); as name) {
+  <div class="welcome-toast" role="status">
+    <span class="welcome-toast-icon" aria-hidden="true">✓</span>
+    <span>Bienvenido, <strong>{{ name }}</strong></span>
+  </div>
+}
 <!-- Outlet donde Angular inserta la vista correspondiente a la URL actual. -->
 <router-outlet />

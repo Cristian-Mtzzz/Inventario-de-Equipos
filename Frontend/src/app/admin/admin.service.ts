@@ -157,11 +157,11 @@ export class AdminService {
       ClaveSegura: user.ClaveSegura ?? user.claveSegura ?? '0',
     }))));
   }
-
+  // Crea un nuevo usuario en el sistema. La contraseña inicial se genera en el backend y no se muestra en pantalla.
   createUser(user: CreateAdminUser): Observable<void> {
     return this.httpClient.post<void>(`${API_ADMIN_URL}/users`, user);
   }
-
+  // Elimina un usuario del sistema.
   deleteUser(idUsuario: number): Observable<void> {
     return this.httpClient.delete<void>(`${API_ADMIN_URL}/users/${idUsuario}`);
   }

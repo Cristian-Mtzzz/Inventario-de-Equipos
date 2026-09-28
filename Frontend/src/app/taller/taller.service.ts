@@ -22,7 +22,7 @@ export class TallerService {
       Modelo: device.Modelo ?? device.modelo ?? '',
     }))));
   }
-
+  // Obtiene la lista de mantenimientos del taller.
   getMaintenances(): Observable<Maintenance[]> {
     return this.httpClient.get<Array<Maintenance & {
       idReparacion?: number; idEquipo?: number; codigoInventario?: string; noSerie?: string;
@@ -44,25 +44,25 @@ export class TallerService {
       FechaSalida: item.FechaSalida ?? item.fechaSalida ?? null,
     }))));
   }
-
+  // Registra una recepción de equipo en el taller.
   createReceptionEntry(reception: ReceptionEntryRequest): Observable<void> {
     // Registra una recepción y permite crear el equipo si todavía no existe.
     return this.httpClient.post<void>(`${API_TALLER_URL}/reception`, reception);
   }
-
+  // Crea una nueva reparación en el taller.
   createMaintenance(maintenance: MaintenanceEntryRequest): Observable<void> {
     return this.httpClient.post<void>(`${API_TALLER_URL}/maintenances`, maintenance);
   }
-
+  // Actualiza la información de una reparación existente, incluyendo la fecha de salida y el detalle del trabajo.
   updateMaintenance(idMantenimiento: number, maintenance: MaintenanceExitRequest): Observable<void> {
     // Cierra una reparación con fecha de salida y detalle del trabajo.
     return this.httpClient.put<void>(`${API_TALLER_URL}/maintenances/${idMantenimiento}`, maintenance);
   }
-
+  // Edita la información de una reparación existente.
   editMaintenance(idMantenimiento: number, maintenance: MaintenanceEditRequest): Observable<void> {
     return this.httpClient.put<void>(`${API_TALLER_URL}/maintenances/${idMantenimiento}/edit`, maintenance);
   }
-
+  // Elimina una reparación existente del taller.
   deleteMaintenance(idMantenimiento: number): Observable<void> {
     return this.httpClient.delete<void>(`${API_TALLER_URL}/maintenances/${idMantenimiento}`);
   }
