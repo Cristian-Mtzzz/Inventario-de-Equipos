@@ -1,4 +1,5 @@
 using System.Text;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -38,7 +39,9 @@ builder.Services.AddDbContext<InventoryDbContext>(options =>
     options.UseOracle(oracleConnection));
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IAdminService, AdminService>();
+builder.Services.AddScoped<IModulePermissionService, ModulePermissionService>();
 builder.Services.AddScoped<ITallerService, TallerService>();
+builder.Services.AddScoped<IAuthorizationHandler, ModuleAccessAuthorizationHandler>();
 
 // Configura la validación JWT. Los claims del token identifican al usuario y sus
 // roles para que cada endpoint pueda decidir qué operaciones permite.
@@ -69,6 +72,24 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("PasswordChange", policy => policy.RequireAuthenticatedUser());
+    options.AddPolicy(ModulePolicies.AdminPanel, policy => policy.Requirements.Add(
+        new ModuleAccessRequirement(AppModules.AdminPanel)));
+    options.AddPolicy(ModulePolicies.Inventory, policy => policy.Requirements.Add(
+        new ModuleAccessRequirement(AppModules.Inventory)));
+    options.AddPolicy(ModulePolicies.Workshop, policy => policy.Requirements.Add(
+        new ModuleAccessRequirement(AppModules.Workshop)));
+    options.AddPolicy(ModulePolicies.Users, policy => policy.Requirements.Add(
+        new ModuleAccessRequirement(AppModules.Users)));
+    options.AddPolicy(ModulePolicies.Maintenance, policy => policy.Requirements.Add(
+        new ModuleAccessRequirement(AppModules.Maintenance)));
+    options.AddPolicy(ModulePolicies.Devices, policy => policy.Requirements.Add(
+        new ModuleAccessRequirement(AppModules.Devices, AppModules.Inventory)));
+    options.AddPolicy(ModulePolicies.Reassignments, policy => policy.Requirements.Add(
+        new ModuleAccessRequirement(AppModules.Reassignments, AppModules.Inventory)));
+    options.AddPolicy(ModulePolicies.DeviceSupport, policy => policy.Requirements.Add(
+        new ModuleAccessRequirement(AppModules.Devices, AppModules.Inventory, AppModules.Reassignments, AppModules.Workshop)));
+    options.AddPolicy(ModulePolicies.AssignmentSupport, policy => policy.Requirements.Add(
+        new ModuleAccessRequirement(AppModules.Devices, AppModules.Inventory, AppModules.Reassignments)));
     options.DefaultPolicy = new Microsoft.AspNetCore.Authorization.AuthorizationPolicyBuilder()
         .RequireAuthenticatedUser()
         .RequireAssertion(context => !context.User.HasClaim("must_change_password", "true"))

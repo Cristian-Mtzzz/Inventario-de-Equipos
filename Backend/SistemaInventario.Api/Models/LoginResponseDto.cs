@@ -10,4 +10,6 @@ public sealed record UserResponseDto(
     string Role,
     string Estado,
     string DominioP,
-    int Dominio);
+    int Dominio,
+    IReadOnlyList<string> Modules,
+    bool IsSuperAdmin);

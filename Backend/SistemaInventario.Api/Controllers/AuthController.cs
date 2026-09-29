@@ -10,7 +10,7 @@ namespace SistemaInventario.Api.Controllers;
 [ApiController]
 [Route("api/auth")]
 // Expone el inicio de sesión y devuelve el token junto con los datos del usuario.
-public sealed class AuthController(IAuthService authService) : ControllerBase
+public sealed class AuthController(IAuthService authService, IModulePermissionService modulePermissions) : ControllerBase
 {
     [HttpPost("login")]
     [AllowAnonymous]
@@ -25,6 +25,19 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
         return loginResponse is null
             ? Unauthorized(new { Message = "Credenciales invalidas." })
             : Ok(loginResponse);
+    }
+
+    [HttpGet("permissions")]
+    [Authorize(Policy = "PasswordChange")]
+    public async Task<ActionResult<ModuleAccessDto>> GetPermissions(CancellationToken cancellationToken)
+    {
+        var userIdValue = User.FindFirstValue("sub") ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!int.TryParse(userIdValue, out var userId)) return Unauthorized();
+        var modules = await modulePermissions.GetModules(userId, cancellationToken);
+        var isSuperAdmin = modules.Contains(AppModules.SuperAdmin, StringComparer.OrdinalIgnoreCase);
+        return Ok(new ModuleAccessDto(
+            modules.Where(module => !string.Equals(module, AppModules.SuperAdmin, StringComparison.OrdinalIgnoreCase)).ToArray(),
+            isSuperAdmin));
     }
 
     [HttpPost("change-initial-password")]

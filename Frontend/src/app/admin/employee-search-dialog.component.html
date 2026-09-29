@@ -14,7 +14,7 @@
             <label for="employee-search-term">Nombre</label>
             <div class="employee-search-controls">
                 <input id="employee-search-term" name="employeeSearchTerm" [(ngModel)]="searchTerm"
-                    placeholder="Ej. María López " autocomplete="off" />
+                    placeholder="Ej. María López" autocomplete="off" />
                 <button type="submit" [disabled]="isLoading()">{{ isLoading() ? 'Buscando...' : 'Buscar' }}</button>
             </div>
         </form>
@@ -25,7 +25,6 @@
         <p class="employee-search-status">No se encontraron empleados.</p>
         }
 
-        <!--busqueda de empleados-->
         <div class="employee-search-results">
             @for (employee of employees(); track employee.NoPago || employee.NombreCompleto) {
             <article class="employee-result">
@@ -35,6 +34,7 @@
                         <p>Número de pago: {{ employee.NoPago || 'No registrado' }}</p>
                     </div>
                 </header>
+
                 <dl class="employee-location">
                     <div>
                         <dt>Regional</dt>
@@ -48,31 +48,8 @@
                         <dt>Departamento</dt>
                         <dd>{{ employee.NombreArea || 'Sin departamento' }}</dd>
                     </div>
-
                 </dl>
 
-
-                <!--Equipo aignado al empleado de la busqueda-->
-                <div class="employee-devices">
-                    <h4>Equipo asignado</h4>
-                    @if (employee.AssignedDevices.length === 0) {
-                    <p class="employee-no-devices">No tiene equipos asignados.</p>
-                    } @else {
-                        
-                    @for (device of employee.AssignedDevices; track device.IdEquipo) {
-                    <div class="employee-device-row">
-                        <strong>{{ device.CodigoInventario }}</strong>
-                        <span>{{ device.Marca }} {{ device.Modelo }} · {{ device.NombreTipo || 'Tipo sin especificar'
-                            }}</span>
-                        <span>Serie: {{ device.NoSerie }} · Estado: {{ device.Estado }}</span>
-                        <span>Pago: {{ device.NumeroPagoAsignado || '—' }} · Área: {{ device.NombreArea || 'Sin área' }}
-                            · Edificio: {{ device.NombreEdificio || 'Sin edificio' }} · Regional: {{
-                            device.NombreRegional || 'Sin regional' }}</span>
-
-                    </div>
-                    }
-                }
-                </div>
             </article>
             }
         </div>

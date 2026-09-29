@@ -16,6 +16,7 @@ namespace SistemaInventario.Api.Services;
 // que el frontend utiliza para conservar la sesión y aplicar permisos por rol.
 public sealed class AuthService(
     InventoryDbContext dbContext,
+    IModulePermissionService modulePermissions,
     IConfiguration configuration,
     ILogger<AuthService> logger) : IAuthService
 {
@@ -91,6 +92,8 @@ public sealed class AuthService(
             }
 
             var mustChangePassword = domain == 0 && secureKey == "0";
+            var modules = await modulePermissions.GetModules(user.UserId, cancellationToken);
+            var isSuperAdmin = modules.Contains(AppModules.SuperAdmin, StringComparer.OrdinalIgnoreCase);
             // Registrar información del usuario
             logger.LogInformation(
                 "Login aceptado para {UserName}. Tipo: {Domain}, Dominio: {DomainName}.",
@@ -104,7 +107,9 @@ public sealed class AuthService(
                 user.Role,
                 status,
                 domainName,
-                domain),
+                domain,
+                modules.Where(module => !string.Equals(module, AppModules.SuperAdmin, StringComparison.OrdinalIgnoreCase)).ToArray(),
+                isSuperAdmin),
                 mustChangePassword);
         }
         finally

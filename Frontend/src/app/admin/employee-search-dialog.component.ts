@@ -4,14 +4,13 @@ import { finalize } from 'rxjs';
 import { AdminService } from './admin.service';
 import { EmployeeSearchResult } from './admin.models';
 
+
 @Component({
     selector: 'app-employee-search-dialog',
     imports: [FormsModule],
     templateUrl: './employee-search-dialog.component.html',
     styleUrl: './employee-search-dialog.component.css',
 })
-
-
 export class EmployeeSearchDialogComponent {
     readonly closed = output<void>();
     readonly employees = signal<EmployeeSearchResult[]>([]);
@@ -22,7 +21,6 @@ export class EmployeeSearchDialogComponent {
 
     constructor(private readonly adminService: AdminService) { }
 
-    //cuadro de busqueda
     search(): void {
         const term = this.searchTerm.trim();
         this.errorMessage.set('');
@@ -39,4 +37,5 @@ export class EmployeeSearchDialogComponent {
             error: () => this.errorMessage.set('No se pudo buscar al empleado.'),
         });
     }
+
 }

@@ -186,6 +186,35 @@
     font-size: .76rem;
 }
 
+.employee-search-trigger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border: 1px solid #2d6ae8;
+    border-radius: 6px;
+    color: #fff;
+    background: linear-gradient(135deg, #2d6ae8, #1c56c7);
+    box-shadow: 0 8px 18px rgba(45, 106, 232, .25);
+    cursor: pointer;
+}
+
+.employee-search-trigger svg {
+    width: 18px;
+    height: 18px;
+    stroke: currentColor;
+    stroke-width: 2;
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.employee-search-trigger:hover {
+    filter: brightness(1.05);
+}
+
 @keyframes employeeBackdropIn {
     from {
         opacity: 0;

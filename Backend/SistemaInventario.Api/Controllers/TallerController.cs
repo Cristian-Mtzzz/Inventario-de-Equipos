@@ -7,7 +7,7 @@ using SistemaInventario.Api.Services;
 namespace SistemaInventario.Api.Controllers;
 
 [ApiController]
-[Authorize(Roles = "Taller,Admin")]
+[Authorize(Policy = ModulePolicies.Workshop)]
 [Route("api/taller")]
 // Fachada HTTP del taller: protege recepción y reparaciones con roles Taller/Admin
 // y traduce las acciones de la interfaz a operaciones del TallerService.
@@ -58,7 +58,6 @@ public sealed class TallerController(ITallerService tallerService) : ControllerB
         return NoContent();
     }
 
-    [Authorize(Roles = "Admin")]
     [HttpPut("maintenances/{idMantenimiento:int}/edit")]
     public async Task<IActionResult> EditMaintenance(int idMantenimiento, UpdateMaintenanceDto maintenance, CancellationToken cancellationToken)
     {
@@ -68,9 +67,8 @@ public sealed class TallerController(ITallerService tallerService) : ControllerB
         return NoContent();
     }
 
-    [Authorize(Roles = "Admin")]
     [HttpDelete("maintenances/{idMantenimiento:int}")]
-    // Solo Admin puede borrar una reparación existente.
+    // El acceso completo al módulo Taller permite borrar una reparación existente.
     public async Task<IActionResult> DeleteMaintenance(int idMantenimiento, CancellationToken cancellationToken)
     {
         if (idMantenimiento <= 0) return BadRequest(new { Message = "La reparación no es válida." });

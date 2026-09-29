@@ -184,7 +184,7 @@ h1 {
 }
 
 .device-filter-bar {
-    grid-template-columns: minmax(240px, 2fr) repeat(4, minmax(135px, 1fr)) auto auto;
+    grid-template-columns: repeat(4, minmax(135px, 1fr)) auto auto;
     align-items: center;
 }
 
@@ -200,6 +200,14 @@ h1 {
     background: #fff;
     cursor: pointer;
     font-weight: 700;
+}
+
+.filter-bar .employee-search-trigger {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
 }
 
 input,
@@ -603,3 +611,4 @@ table .danger {
         grid-column: auto;
     }
 }
+

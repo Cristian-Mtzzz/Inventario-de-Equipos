@@ -52,11 +52,6 @@
                 <option value="ASIGNADO">Asignado</option>
             </select>
 
-            <!-- numero de pago y nombre se capturan por separado y pueden quedar vacíos. -->
-            <input [(ngModel)]="newDevice.NumeroPagoAsignado" name="pago" placeholder="Número de pago"
-                [disabled]="newDevice.Estado === 'DISPONIBLE'" />
-            <input [(ngModel)]="newDevice.NombreAsignado" name="nombreAsignado" placeholder="Nombre asignado"
-                [disabled]="newDevice.Estado === 'DISPONIBLE'" />
             <select [(ngModel)]="selectedBuildingId" (ngModelChange)="selectBuilding($event)" name="edificio"
                 [disabled]="newDevice.Estado === 'DISPONIBLE'">
                 <option [ngValue]="null">Seleccionar edificio</option>
@@ -65,11 +60,22 @@
             </select>
 
             <!-- Área del dispositivo -->
-            <select [(ngModel)]="newDevice.IdArea" name="area"
+            <select [ngModel]="newDevice.IdArea" (ngModelChange)="selectDeviceArea($event)" name="area"
                 [disabled]="newDevice.Estado === 'DISPONIBLE' || isLoadingAreas">
-                <option [ngValue]="null">{{ isLoadingAreas ? 'Cargando departamentos...' : 'Sin área' }}</option>@for
+                <option [ngValue]="null">{{ isLoadingAreas ? 'Cargando departamentos...' : 'Seleccionar departamento' }}</option>@for
                 (area of areas; track area.IdArea) { <option [ngValue]="area.IdArea">{{ area.NombreArea }}</option> }
             </select>
+
+            @if (newDevice.Estado === 'ASIGNADO') {
+            <select [(ngModel)]="selectedEmployeeIndex" (ngModelChange)="selectDeviceEmployee($event)"
+                name="assignedEmployee" [disabled]="newDevice.IdArea === null || isLoadingEmployeesForDevice || employeesForDeviceArea.length === 0" required>
+                <option [ngValue]="null">{{ isLoadingEmployeesForDevice ? 'Cargando empleados...' : employeeCatalogError ? 'No se pudo cargar el catálogo' : newDevice.IdArea === null ? 'Selecciona primero un departamento' : employeesForDeviceArea.length === 0 ? 'No hay empleados en este departamento' : 'Selecciona un empleado' }}</option>
+                @for (employee of employeesForDeviceArea; track $index) {
+                <option [ngValue]="$index">{{ employee.NombreCompleto }}</option>
+                }
+            </select>
+            }
+            @if (employeeCatalogError) { <p class="feedback error" role="alert">{{ employeeCatalogError }}</p> }
 
             <button type="submit">Agregar dispositivo</button>
         </form>
@@ -101,7 +107,13 @@
                 <option [ngValue]="null">Todas las áreas</option>
                 @for (area of filterAreas; track area.IdArea) { <option [ngValue]="area.IdArea">{{ area.NombreArea }}</option> }
             </select>
-            <button type="button" class="secondary" (click)="showEmployeeSearch = true">Buscar empleado</button>
+            <button type="button" class="secondary employee-search-trigger" aria-label="Buscar empleado"
+                (click)="showEmployeeSearch = true">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <circle cx="11" cy="11" r="5.5"></circle>
+                    <path d="M16 16L21 21"></path>
+                </svg>
+            </button>
             <button type="button" class="secondary" (click)="clearFilters()">Limpiar</button>
         </div>
 
@@ -169,37 +181,61 @@
     <!-- Registro y consulta de reasignaciones. -->
     @if (activeSection === 'reassignments') {
     <section class="inventory-section">
-        <form class="inventory-form compact" (ngSubmit)="addReassignment()">
+        <form class="inventory-form compact" novalidate (ngSubmit)="addReassignment()">
             <h2>Registrar reasignación</h2>
-            <input [(ngModel)]="deviceOptionSearch" name="deviceOptionSearch" placeholder="Código, serie o modelo del equipo" />
-            <button type="button" class="secondary" (click)="searchDeviceOptions()">Buscar equipo</button>
+            <input [(ngModel)]="deviceOptionSearch" (ngModelChange)="searchDeviceOptions()" name="deviceOptionSearch" placeholder="Código, serie o modelo del equipo" />
             <select [ngModel]="selectedInventoryCode" (ngModelChange)="selectDevice($event)" name="equipo" required>
                 <option value="">Selecciona un resultado</option>
                 @for (device of deviceOptions; track device.IdEquipo) {
                 <option [value]="device.CodigoInventario">{{ device.CodigoInventario }} · {{ device.Marca }} {{ device.Modelo }}</option>
                 }
             </select>
-            <input [(ngModel)]="newReassignment.NoPagoNuevo" name="pago" placeholder="Número de pago" />
-            <input [(ngModel)]="newReassignment.NombreNuevo" name="nombre" placeholder="Nombres y Apellidos" />
             <div class="reassignment-location-fields">
-                <label for="inventory-reassignment-building">Edificio</label>
-                <select id="inventory-reassignment-building" [ngModel]="reassignmentBuildingId"
-                    (ngModelChange)="selectReassignmentBuilding($event)" name="reassignmentBuilding" required>
-                    <option [ngValue]="0">Selecciona un edificio</option>
-                    @for (building of buildings; track building.IdEdificio) {
-                    <option [ngValue]="building.IdEdificio">{{ building.NombreEdificio }}</option>
-                    }
-                </select>
-                <label for="inventory-reassignment-area">Departamento</label>
-                <select id="inventory-reassignment-area" [(ngModel)]="newReassignment.IdArea" name="reassignmentArea"
-                    [disabled]="reassignmentBuildingId <= 0 || isLoadingAreas" required>
-                    <option [ngValue]="0">{{ isLoadingAreas ? 'Cargando departamentos...' : 'Selecciona un departamento'
-                        }}</option>
-                    @for (area of reassignmentAreas; track area.IdArea) {
-                    <option [ngValue]="area.IdArea">{{ area.NombreArea }}</option>
-                    }
-                </select>
+                <div>
+                    <label for="inventory-reassignment-region">Regional</label>
+                    <select id="inventory-reassignment-region" [ngModel]="reassignmentRegionalId"
+                        (ngModelChange)="selectReassignmentRegion($event)" name="reassignmentRegion" required>
+                        <option [ngValue]="null">Selecciona una regional</option>
+                        @for (region of regionalOptions; track region.IdRegional) {
+                        <option [ngValue]="region.IdRegional">{{ region.NombreRegional }}</option>
+                        }
+                    </select>
+                </div>
+                <div>
+                    <label for="inventory-reassignment-building">Edificio</label>
+                    <select id="inventory-reassignment-building" [ngModel]="reassignmentBuildingId"
+                        (ngModelChange)="selectReassignmentBuilding($event)" name="reassignmentBuilding"
+                        [disabled]="reassignmentRegionalId === null" required>
+                        <option [ngValue]="0">Selecciona un edificio</option>
+                        @for (building of reassignmentBuildings; track building.IdEdificio) {
+                        <option [ngValue]="building.IdEdificio">{{ building.NombreEdificio }}</option>
+                        }
+                    </select>
+                </div>
+                <div>
+                    <label for="inventory-reassignment-area">Departamento</label>
+                    <select id="inventory-reassignment-area" [ngModel]="newReassignment.IdArea"
+                        (ngModelChange)="selectReassignmentArea($event)" name="reassignmentArea"
+                        [disabled]="reassignmentBuildingId <= 0 || isLoadingAreas" required>
+                        <option [ngValue]="0">{{ isLoadingAreas ? 'Cargando departamentos...' : 'Selecciona un departamento' }}</option>
+                        @for (area of reassignmentAreas; track area.IdArea) {
+                        <option [ngValue]="area.IdArea">{{ area.NombreArea }}</option>
+                        }
+                    </select>
+                </div>
+                <div>
+                    <label for="inventory-reassignment-employee">Empleado</label>
+                    <select id="inventory-reassignment-employee" [ngModel]="selectedReassignmentEmployeeIndex"
+                        (ngModelChange)="selectReassignmentEmployee($event)" name="reassignmentEmployee"
+                        [disabled]="newReassignment.IdArea <= 0 || reassignmentEmployees.length === 0" required>
+                        <option [ngValue]="null">{{ newReassignment.IdArea <= 0 ? 'Selecciona primero un departamento' : employeeCatalogError ? 'No se pudo cargar el catálogo' : reassignmentEmployees.length === 0 ? 'No hay empleados en este departamento' : 'Selecciona un empleado' }}</option>
+                        @for (employee of reassignmentEmployees; track $index) {
+                        <option [ngValue]="$index">{{ employee.NombreCompleto }}</option>
+                        }
+                    </select>
+                </div>
             </div>
+            @if (employeeCatalogError) { <p class="feedback error" role="alert">{{ employeeCatalogError }}</p> }
             <input [(ngModel)]="newReassignment.Motivo" name="motivo" placeholder="Motivo" required />
             <button type="submit">Registrar reasignación</button>
         </form>
@@ -216,8 +252,8 @@
                 </thead>
                 <tbody>@for (item of reassignments; track item.IdReasignacion) { <tr>
                         <td>{{ item.CodigoInventario || getInventoryCode(item.IdEquipo) }}</td>
-                        <td>{{ item.NoPagoAnterior }}</td>
-                        <td>{{ item.NoPagoNuevo }}</td>
+                        <td>{{ item.NoPagoAnterior || '-' }}</td>
+                        <td>{{ item.NoPagoNuevo || '-' }}</td>
                         <td>{{ item.FechaCambio | date }}</td>
                         <td>{{ item.Motivo }}</td>
                     </tr> }</tbody>

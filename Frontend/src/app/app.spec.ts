@@ -2,7 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { ActivatedRouteSnapshot, provideRouter, Router, RouterStateSnapshot } from '@angular/router';
 import { App } from './app';
 import { authGuard } from './auth/auth.guard';
-import { AuthUser, UserRole } from './auth/auth.models';
+import { UserRole } from './auth/auth.models';
 
 // Pruebas básicas del componente raíz y del shell de navegación.
 describe('App', () => {
@@ -42,16 +42,18 @@ describe('App', () => {
 
   // Prueba que permite el acceso cuando la sesión del usuario es válida para el rol requerido.
   it('should allow access when the user session is valid for the required role', () => {
-    const user: AuthUser = {
-      UserId: '1',
-      UserName: 'admin',
-      FullName: 'Administrador',
-      Role: 'Admin',
-    };
+    const encodeBase64Url = (value: object): string => btoa(JSON.stringify(value))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
+    const tokenPayload = encodeBase64Url({
+      sub: '1',
+      unique_name: 'admin',
+      role: 'Admin',
+      exp: Math.floor(Date.now() / 1000) + 60,
+    });
 
-    // Simula una sesión activa del usuario en el almacenamiento local.
-    localStorage.setItem('sistema_inventario_token', 'jwt-token');
-    localStorage.setItem('sistema_inventario_user', JSON.stringify(user));
+    localStorage.setItem('sistema_inventario_token', `header.${tokenPayload}.signature`);
 
     // Configura la ruta y el estado de navegación para la prueba.
     const route = { data: { roles: ['Admin'] as UserRole[] } };

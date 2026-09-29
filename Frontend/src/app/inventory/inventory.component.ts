@@ -5,7 +5,7 @@ import { Router } from '@angular/router';
 import { finalize, forkJoin } from 'rxjs';
 import { AuthService } from '../auth/auth.service';
 import { AdminService } from '../admin/admin.service';
-import { Area, Building, CreateDevice, CreateReassignment, Device, DeviceOption, DeviceType, Reassignment } from '../admin/admin.models';
+import { Area, Building, CreateDevice, CreateReassignment, Device, DeviceOption, DeviceType, EmployeeOption, Reassignment } from '../admin/admin.models';
 import { EmployeeSearchDialogComponent } from '../admin/employee-search-dialog.component';
 
 // Componente de inventario que permite consultar, filtrar, paginar y gestionar dispositivos y reasignaciones.
@@ -26,6 +26,12 @@ export class InventoryComponent {
   isLoadingDevices = false;
   reassignments: Reassignment[] = [];
   areas: Area[] = [];
+  allEmployeeOptions: EmployeeOption[] = [];
+  employeesForDeviceArea: EmployeeOption[] = [];
+  selectedEmployeeIndex: number | null = null;
+  isLoadingEmployeesForDevice = false;
+  isLoadingEmployeeCatalog = true;
+  employeeCatalogError = '';
   isLoadingAreas = false;
   buildings: Building[] = [];
   selectedBuildingId: number | null = null;
@@ -60,7 +66,11 @@ export class InventoryComponent {
   newReassignment: CreateReassignment = { IdEquipo: 0, NoPagoNuevo: null, NombreNuevo: '', Motivo: '', IdEdificio: 0, IdArea: 0 };
   reassignmentBuildingId = 0;
   reassignmentAreas: Area[] = [];
+  reassignmentRegionalId: number | null = null;
+  reassignmentEmployees: EmployeeOption[] = [];
+  selectedReassignmentEmployeeIndex: number | null = null;
   selectedInventoryCode = '';
+  private deviceOptionSearchTimer: ReturnType<typeof setTimeout> | null = null;
   editingDeviceId: number | null = null;
   editingCodigoInventario = '';
   editingNoSerie = '';
@@ -68,7 +78,23 @@ export class InventoryComponent {
   pendingDeleteDeviceId: number | null = null;
   isDeleteDialogOpen = false;
 
+    // metodo constructor que inicializa el componente y carga los catálogos de tipos de dispositivos y edificios.
   constructor() {
+    this.adminService.getEmployeeOptions().subscribe({
+      next: (employees) => {
+        this.allEmployeeOptions = employees;
+        this.isLoadingEmployeeCatalog = false;
+        this.employeesForDeviceArea = this.newDevice.IdArea === null
+          ? []
+          : employees.filter((employee) => employee.IdArea === this.newDevice.IdArea);
+        this.isLoadingEmployeesForDevice = false;
+      },
+      error: () => {
+        this.isLoadingEmployeeCatalog = false;
+        this.isLoadingEmployeesForDevice = false;
+        this.employeeCatalogError = 'No se pudo cargar el catálogo de empleados. Verifica la conexión con la API.';
+      },
+    });
     forkJoin({
       deviceTypes: this.adminService.getDeviceTypes(),
       buildings: this.adminService.getBuildings(),
@@ -96,7 +122,7 @@ export class InventoryComponent {
   get totalPages(): number {
     return Math.max(1, Math.ceil(this.totalDeviceCount / this.pageSize));
   }
-
+  // Propiedad que devuelve las opciones de región disponibles según los edificios cargados.
   get regionalOptions(): { IdRegional: number; NombreRegional: string }[] {
     const regions = new Map<number, string>();
     this.buildings.forEach((building) => {
@@ -104,25 +130,32 @@ export class InventoryComponent {
     });
     return [...regions].map(([IdRegional, NombreRegional]) => ({ IdRegional, NombreRegional }));
   }
-
+  // Propiedad que devuelve los edificios filtrados según la región seleccionada en los filtros.
   get filterBuildings(): Building[] {
     return this.selectedRegionalFilterId === null
       ? this.buildings
       : this.buildings.filter((building) => building.IdRegional === this.selectedRegionalFilterId);
   }
-
+  // Propiedad que devuelve los edificios filtrados según la región seleccionada en el formulario de nuevo dispositivo.
   get deviceFormBuildings(): Building[] {
     return this.selectedRegionId === null
       ? this.buildings
       : this.buildings.filter((building) => building.IdRegional === this.selectedRegionId);
   }
-  // Método que carga los dispositivos y los catálogos necesarios para los formularios de inventario
 
+  get reassignmentBuildings(): Building[] {
+    return this.reassignmentRegionalId === null
+      ? this.buildings
+      : this.buildings.filter((building) => building.IdRegional === this.reassignmentRegionalId);
+  }
+
+  // Método que carga los dispositivos y los catálogos necesarios para los formularios de inventario
   loadDevices(): void {
     this.isLoadingDevices = true;
     const requestId = ++this.deviceRequestId;
     this.adminService.getDevices({
       Page: this.currentPage,
+      PageSize: 25,
       SearchTerm: this.searchTerm,
       Brand: this.selectedBrand,
       Model: this.selectedModel,
@@ -131,7 +164,7 @@ export class InventoryComponent {
       BuildingId: this.selectedBuildingFilterId,
       AreaId: this.selectedAreaFilterId,
     }).subscribe({
-
+      // Maneja la respuesta de la solicitud de dispositivos, actualizando la lista y el estado de carga.
       next: (result) => {
         if (requestId !== this.deviceRequestId) return;
         this.devices = result.Items;
@@ -139,6 +172,7 @@ export class InventoryComponent {
         this.currentPage = result.Page;
         this.isLoadingDevices = false;
       },
+      // Maneja los errores de la solicitud de dispositivos, mostrando un mensaje de error y deteniendo el estado de carga.
       error: () => {
         if (requestId !== this.deviceRequestId) return;
         this.errorMessage = 'No se pudo cargar el inventario. Verifica que la API esté activa.';
@@ -200,19 +234,28 @@ export class InventoryComponent {
     this.selectedBuildingId = null;
     this.newDevice.IdArea = null;
     this.areas = [];
+    this.clearDeviceEmployeeSelection();
   }
 
+    // Método que busca opciones de dispositivos según el término ingresado en el campo de búsqueda.
   searchDeviceOptions(): void {
+    if (this.deviceOptionSearchTimer) clearTimeout(this.deviceOptionSearchTimer);
     this.selectedInventoryCode = '';
     this.newReassignment.IdEquipo = 0;
-    if (this.deviceOptionSearch.trim().length < 2) {
+    this.deviceOptions = [];
+    const searchTerm = this.deviceOptionSearch.trim();
+    if (searchTerm.length < 2) {
       this.deviceOptions = [];
       return;
     }
-    this.adminService.searchDeviceOptions(this.deviceOptionSearch.trim()).subscribe({
-      next: (options) => this.deviceOptions = options,
-      error: () => this.errorMessage = 'No se pudieron buscar dispositivos.',
-    });
+    // Solicita al servicio de administración las opciones de dispositivos que coincidan con el término de búsqueda.
+    this.deviceOptionSearchTimer = setTimeout(() => {
+      this.deviceOptionSearchTimer = null;
+      this.adminService.searchDeviceOptions(searchTerm).subscribe({
+        next: (options) => this.deviceOptions = options,
+        error: () => this.errorMessage = 'No se pudieron buscar dispositivos.',
+      });
+    }, 250);
   }
 
   // Método que se ejecuta al seleccionar un edificvio y carga las areas ancladas a ese edificio
@@ -222,6 +265,7 @@ export class InventoryComponent {
     this.selectedRegionId = this.buildings.find((building) => building.IdEdificio === this.selectedBuildingId)?.IdRegional ?? null;
     this.newDevice.IdArea = null;
     this.areas = [];
+    if (this.editingDeviceId === null) this.clearDeviceEmployeeSelection();
     this.isLoadingAreas = buildingId > 0;
     if (buildingId > 0) {
       this.adminService.getAreas(buildingId).pipe(finalize(() => this.isLoadingAreas = false)).subscribe({
@@ -229,6 +273,30 @@ export class InventoryComponent {
         error: () => this.errorMessage = 'No se pudieron cargar las áreas del edificio.',
       });
     }
+  }
+
+  selectDeviceArea(idArea: number | null): void {
+    this.newDevice.IdArea = idArea;
+    this.clearDeviceEmployeeSelection();
+    this.isLoadingEmployeesForDevice = idArea !== null && this.isLoadingEmployeeCatalog;
+    if (idArea !== null && !this.isLoadingEmployeeCatalog) {
+      this.employeesForDeviceArea = this.allEmployeeOptions.filter((employee) => employee.IdArea === idArea);
+    }
+  }
+
+  selectDeviceEmployee(employeeIndex: number | null): void {
+    this.selectedEmployeeIndex = employeeIndex;
+    const employee = employeeIndex === null ? undefined : this.employeesForDeviceArea[employeeIndex];
+    this.newDevice.NumeroPagoAsignado = employee?.NoPago || null;
+    this.newDevice.NombreAsignado = employee?.NombreCompleto ?? null;
+  }
+
+  private clearDeviceEmployeeSelection(): void {
+    this.employeesForDeviceArea = [];
+    this.selectedEmployeeIndex = null;
+    this.newDevice.NumeroPagoAsignado = null;
+    this.newDevice.NombreAsignado = null;
+    this.isLoadingEmployeesForDevice = this.isLoadingEmployeeCatalog;
   }
 
   // Método que maneja los cambios en el estado del dispositivo, ajustando los campos relacionados 
@@ -241,6 +309,7 @@ export class InventoryComponent {
       this.selectedBuildingId = null;
       this.selectedRegionId = null;
       this.areas = [];
+      this.clearDeviceEmployeeSelection();
     }
   }
 
@@ -248,7 +317,8 @@ export class InventoryComponent {
     // Carga el historial de reasignaciones que se cargan en la pestaña de reasignaciones
     this.adminService.getReassignments().subscribe({
       next: (items) => this.reassignments = items,
-      error: () => this.errorMessage = 'No se pudieron cargar las reasignaciones.',
+      error: (error) => this.errorMessage = error.error?.Message ?? error.error?.message ?? error.error?.detail
+        ?? error.message ?? 'No se pudieron cargar las reasignaciones.',
     });
   }
 
@@ -271,6 +341,10 @@ export class InventoryComponent {
   // metodo que agrega un nuevo dispositivo al inventario 
   addDevice(): void {
     this.clearMessages();
+    if (this.newDevice.Estado === 'ASIGNADO' && this.selectedEmployeeIndex === null) {
+      this.errorMessage = 'Selecciona un empleado del departamento indicado.';
+      return;
+    }
     this.adminService.createDevice(this.newDevice).subscribe({
       next: () => {
         this.message = 'Dispositivo agregado correctamente.';
@@ -361,12 +435,24 @@ export class InventoryComponent {
     this.newReassignment.IdEquipo = this.deviceOptions.find((device) => device.CodigoInventario === codigoInventario)?.IdEquipo ?? 0;
   }
 
-  // Método que se ejecuta al seleccionar un edificio para la reasignación, cargando sus áreas correspondientes.  
+  //ejecuta la carga de las areas disponibles para el edificio seleccionado en la pestaña de reasignaciones 
+  selectReassignmentRegion(idRegional: number | null): void {
+    this.reassignmentRegionalId = idRegional;
+    this.reassignmentBuildingId = 0;
+    this.newReassignment.IdEdificio = 0;
+    this.newReassignment.IdArea = 0;
+    this.reassignmentAreas = [];
+    this.clearReassignmentEmployee();
+  }
+
+  // Ejecuta la carga de los departamentos disponibles para el edificio seleccionado.
   selectReassignmentBuilding(idEdificio: number): void {
     const buildingId = Number(idEdificio);
     this.reassignmentBuildingId = buildingId;
+    this.newReassignment.IdEdificio = buildingId;
     this.newReassignment.IdArea = 0;
     this.reassignmentAreas = [];
+    this.clearReassignmentEmployee();
     this.isLoadingAreas = buildingId > 0;
     if (buildingId > 0) {
       this.adminService.getAreas(buildingId).pipe(finalize(() => this.isLoadingAreas = false)).subscribe({
@@ -376,34 +462,70 @@ export class InventoryComponent {
     }
   }
 
-  // Método que agrega una nueva reasignación de dispositivo.
+  selectReassignmentArea(idArea: number): void {
+    this.newReassignment.IdArea = Number(idArea);
+    this.clearReassignmentEmployee();
+    this.reassignmentEmployees = this.allEmployeeOptions.filter((employee) => employee.IdArea === this.newReassignment.IdArea);
+  }
+
+  selectReassignmentEmployee(employeeIndex: number | null): void {
+    this.selectedReassignmentEmployeeIndex = employeeIndex;
+    const employee = employeeIndex === null ? undefined : this.reassignmentEmployees[employeeIndex];
+    this.newReassignment.NoPagoNuevo = employee?.NoPago || null;
+    this.newReassignment.NombreNuevo = employee?.NombreCompleto ?? '';
+  }
+
+  private clearReassignmentEmployee(): void {
+    this.reassignmentEmployees = [];
+    this.selectedReassignmentEmployeeIndex = null;
+    this.newReassignment.NoPagoNuevo = null;
+    this.newReassignment.NombreNuevo = '';
+  }
+
+  // agrega una nueva reasignación al historial y actualiza la lista de dispositivos y reasignaciones
   addReassignment(): void {
     this.clearMessages();
     if (!this.newReassignment.IdEquipo || this.reassignmentBuildingId <= 0 || this.newReassignment.IdArea <= 0) {
       this.errorMessage = 'Selecciona el equipo, edificio y departamento de la reasignación.';
       return;
     }
+    if (this.selectedReassignmentEmployeeIndex === null) {
+      this.errorMessage = 'Selecciona un empleado del departamento indicado.';
+      return;
+    }
+    if (!this.newReassignment.Motivo.trim()) {
+      this.errorMessage = 'Escribe el motivo de la reasignación.';
+      return;
+    }
+
+    // Asigna el edificio seleccionado a la nueva reasignación antes de enviarla al backend.
     this.newReassignment.IdEdificio = this.reassignmentBuildingId;
     this.adminService.createReassignment(this.newReassignment).subscribe({
       next: () => {
         this.message = 'Reasignación registrada correctamente.';
         this.newReassignment = { IdEquipo: 0, NoPagoNuevo: null, NombreNuevo: '', Motivo: '', IdEdificio: 0, IdArea: 0 };
         this.reassignmentBuildingId = 0;
+        this.reassignmentRegionalId = null;
         this.reassignmentAreas = [];
+        this.reassignmentEmployees = [];
+        this.selectedReassignmentEmployeeIndex = null;
         this.selectedInventoryCode = '';
+        this.deviceOptionSearch = '';
+        this.deviceOptions = [];
         this.loadDevices();
         this.loadReassignments();
       },
-      error: (error) => this.errorMessage = error.error?.Message ?? 'No se pudo registrar la reasignación.',
+      error: (error) => this.errorMessage = error.error?.Message ?? error.error?.message ?? error.error?.detail ?? error.error?.title ?? error.message
+        ?? 'No se pudo registrar la reasignación.',
     });
   }
 
-  // Método que obtiene el código de inventario de un dispositivo dado su ID.
+  // aqui se obtiene el código de inventario de un dispositivo dado su ID, o devuelve el ID como cadena si no se encuentra.
   getInventoryCode(idEquipo: number): string {
     return this.devices.find((device) => device.IdEquipo === idEquipo)?.CodigoInventario ?? String(idEquipo);
   }
 
-  // Método que navega a una página específica de la lista de dispositivos.
+  // navega a la página especificada, asegurándose de que esté dentro del rango válido y actualiza la lista de dispositivos.
   goToPage(page: number): void {
     if (this.deviceFilterTimer) clearTimeout(this.deviceFilterTimer);
     this.currentPage = Math.min(Math.max(page, 1), this.totalPages);
@@ -411,7 +533,7 @@ export class InventoryComponent {
   }
 
   logout(): void {
-    // Finaliza la sesión y navega a login.
+    //hace el logout del usuario y lo redirige a la página de login
     this.authService.logout();
     this.router.navigateByUrl('/login');
   }

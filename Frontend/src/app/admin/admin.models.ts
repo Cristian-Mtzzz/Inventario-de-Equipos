@@ -30,6 +30,7 @@ export interface PagedResult<T> {
 
 export interface DevicePageQuery {
   Page: number;
+  PageSize: number;
   SearchTerm: string;
   Brand: string;
   Model: string;
@@ -42,6 +43,7 @@ export interface DevicePageQuery {
 export interface DeviceOption {
   IdEquipo: number;
   CodigoInventario: string;
+  NoSerie: string;
   Marca: string;
   Modelo: string;
 }
@@ -87,6 +89,44 @@ export interface EmployeeSearchResult {
   AssignedDevices: EmployeeAssignedDevice[];
 }
 
+export interface UpdateEmployee {
+  NombreCompleto: string;
+  NoPago: string;
+  IdArea: number;
+}
+
+export interface EmployeeOption {
+  NoPago: string;
+  NombreCompleto: string;
+  IdArea: number;
+}
+
+export interface DirectoryEmployee {
+  EmployeeKey: string;
+  NoPago: string;
+  NombreCompleto: string;
+  IdArea: number | null;
+}
+
+export interface RegionalOption {
+  IdRegional: number;
+  NombreRegional: string;
+}
+
+export interface CatalogDepartment {
+  IdArea: number;
+  NombreArea: string;
+  IdEdificio: number;
+  NombreEdificio: string;
+  IdRegional: number | null;
+  NombreRegional: string | null;
+}
+
+export interface SaveRegional { NombreRegional: string; }
+export interface SaveBuilding { NombreEdificio: string; IdRegional: number; }
+export interface SaveDepartment { NombreArea: string; IdEdificio: number; }
+export interface SaveDirectoryEmployee { NoPago: string; NombreCompleto: string; IdArea: number; }
+
 export interface EmployeeAssignedDevice extends Device {
   NumeroPagoAsignado: string | null;
 }
@@ -98,6 +138,8 @@ export interface Reassignment {
   CodigoInventario: string;
   NoPagoAnterior: string | null;
   NoPagoNuevo: string | null;
+  NombreEdificio: string | null;
+  NombreArea: string | null;
   FechaCambio: string;
   Motivo: string;
 }
@@ -123,6 +165,8 @@ export interface AdminUser {
   Dominio: number;
   Rol: string;
   ClaveSegura: string;
+  Modules: string[];
+  IsSuperAdmin: boolean;
 }
 
 // Datos necesarios para crear un usuario; la contraseña inicial se genera en backend.
@@ -134,6 +178,8 @@ export interface CreateAdminUser {
   DominioP: string;
   Dominio: number;
   Rol: string;
+  Modules: string[];
+  IsSuperAdmin: boolean;
 }
 
 export type UpdateAdminUser = Omit<CreateAdminUser, 'Usuario'>;

@@ -1,0 +1,359 @@
+
+<section class="admin-section catalog-management">
+    <nav class="catalog-tabs" aria-label="Catálogos administrativos">
+        @for (view of views; track view.id) {
+        <button type="button" [class.active]="view.id === 'regionals' ? activeView === 'regionals' : activeView !== 'regionals'"
+            (click)="selectView(view.id)">
+            {{ view.label }}
+        </button>
+        }
+    </nav>
+
+    @if (activeView === 'regionals') {
+    <button type="button" class="add-user-button" (click)="openCreate()">Agregar regional</button>
+    }
+
+    @if (message) { <p class="feedback success" role="status">{{ message }}</p> }
+    @if (errorMessage) { <p class="feedback error" role="alert">{{ errorMessage }}</p> }
+    @if (isLoading) { <p class="loading" role="status">Cargando catálogos...</p> }
+
+    @if (!isLoading && activeView === 'regionals') {
+    <div class="catalog-table-toolbar">
+        <label class="catalog-page-size">Mostrar
+            <select [ngModel]="pageSize" (ngModelChange)="updatePageSize($event)" name="catalogPageSize"
+                aria-label="Registros por página">
+                @for (size of pageSizeOptions; track size) { <option [ngValue]="size">{{ size }}</option> }
+            </select>
+            registros
+        </label>
+        <label class="catalog-search">Buscar:
+            <input type="search" [ngModel]="searchTerm" (ngModelChange)="updateSearch($event)" name="catalogSearch" />
+        </label>
+    </div>
+    }
+
+    @if (!isLoading && activeView !== 'regionals') {
+    <div class="catalog-table-toolbar location-search-toolbar">
+        <button type="button" class="location-search-trigger" (click)="openLocationSearch()">
+            <span aria-hidden="true">⌕</span>
+            Buscar edificios, departamentos o empleados
+        </button>
+    </div>
+    }
+
+    @if (!isLoading && activeView === 'regionals') {
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th><button type="button" class="catalog-sort" (click)="sortBy('IdRegional')">ID <span>{{
+                                sortIndicator('IdRegional') }}</span></button></th>
+                    <th><button type="button" class="catalog-sort" (click)="sortBy('NombreRegional')">Regional <span>{{
+                                sortIndicator('NombreRegional') }}</span></button></th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (catalogRegionals.length === 0) { <tr>
+                    <td colspan="3">No se encontraron regionales.</td>
+                </tr> }
+                @for (regional of visibleRegionals; track regional.IdRegional) {
+                <tr>
+                    <td>{{ regional.IdRegional }}</td>
+                    <td>{{ regional.NombreRegional }}</td>
+                    <td class="catalog-row-actions">
+                        <button type="button" class="secondary" (click)="editRegional(regional)">Editar</button>
+                        <button type="button" class="danger"
+                            (click)="askDelete('regionals', regional.IdRegional, regional.NombreRegional)">Quitar</button>
+                    </td>
+                </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    }
+
+
+    
+    @if (!isLoading && activeView !== 'regionals') {
+    <div class="location-filter">
+        <label for="location-regional">Regional</label>
+        <select id="location-regional" [ngModel]="locationRegionId"
+            (ngModelChange)="selectLocationRegion($event)" name="locationRegional">
+            <option [ngValue]="null">Selecciona una regional</option>
+            @for (regional of regionals; track regional.IdRegional) {
+            <option [ngValue]="regional.IdRegional">{{ regional.NombreRegional }}</option>
+            }
+        </select>
+    </div>
+
+    <div class="location-catalogs">
+        <section class="location-section" aria-labelledby="location-buildings-title">
+            <div class="location-section-heading">
+                <h2 id="location-buildings-title">Edificios</h2>
+                <button type="button" class="add-user-button" [disabled]="locationRegionId === null"
+                    (click)="openCreateFor('buildings')">Nuevo edificio</button>
+            </div>
+            <div class="location-selector">
+                <select id="location-building" [ngModel]="locationBuildingOptionId"
+                    (ngModelChange)="selectLocationBuilding($event)" name="locationBuilding"
+                    aria-label="Edificio">
+                    <option [ngValue]="null">Selecciona un edificio</option>
+                    @for (building of locationBuildings; track building.IdEdificio) {
+                    <option [ngValue]="building.IdEdificio">{{ building.NombreEdificio }}</option>
+                    }
+                </select>
+                <div class="catalog-row-actions">
+                    <button type="button" class="secondary" [disabled]="locationBuildingOptionId === null"
+                        (click)="editLocationBuilding()">Editar</button>
+                    <button type="button" class="danger" [disabled]="locationBuildingOptionId === null"
+                        (click)="deleteLocationBuilding()">Quitar</button>
+                </div>
+            </div>
+            @if (locationRegionId === null || locationBuildings.length === 0) {
+            <p class="location-empty">{{ locationRegionId === null ? 'Selecciona una regional.' : 'No hay edificios para esta regional.' }}</p>
+            }
+        </section>
+
+        <section class="location-section" aria-labelledby="location-departments-title">
+            <div class="location-section-heading">
+                <div>
+                    <h2 id="location-departments-title">Departamentos</h2>
+                    <p>{{ locationBuildingName }}</p>
+                </div>
+                <button type="button" class="add-user-button" [disabled]="locationBuildingId === null"
+                    (click)="openCreateFor('departments')">Nuevo departamento</button>
+            </div>
+            <div class="location-selector">
+                <select id="location-department" [ngModel]="locationDepartmentOptionId"
+                    (ngModelChange)="selectLocationDepartment($event)" name="locationDepartment"
+                    [disabled]="locationBuildingId === null" aria-label="Departamento">
+                    <option [ngValue]="null">Selecciona un departamento</option>
+                    @for (department of locationDepartments; track department.IdArea) {
+                    <option [ngValue]="department.IdArea">{{ department.NombreArea }}</option>
+                    }
+                </select>
+                <div class="catalog-row-actions">
+                    <button type="button" class="secondary" [disabled]="locationDepartmentOptionId === null"
+                        (click)="editLocationDepartment()">Editar</button>
+                    <button type="button" class="danger" [disabled]="locationDepartmentOptionId === null"
+                        (click)="deleteLocationDepartment()">Quitar</button>
+                </div>
+            </div>
+            @if (locationBuildingId !== null && locationDepartments.length === 0) {
+            <p class="location-empty">No hay departamentos en este edificio.</p>
+            }
+        </section>
+
+        <section class="location-section" aria-labelledby="location-employees-title">
+            <div class="location-section-heading">
+                <div>
+                    <h2 id="location-employees-title">Empleados</h2>
+                    <p>{{ locationDepartmentName }}</p>
+                </div>
+                <button type="button" class="add-user-button" [disabled]="locationAreaId === null"
+                    (click)="openCreateFor('employees')">Nuevo empleado</button>
+            </div>
+            <div class="location-selector">
+                <select id="location-employee" [ngModel]="locationEmployeeOptionKey"
+                    (ngModelChange)="selectLocationEmployee($event)" name="locationEmployee"
+                    [disabled]="locationAreaId === null" aria-label="Empleado">
+                    <option value="">Selecciona un empleado</option>
+                    @for (employee of locationEmployees; track employee.EmployeeKey) {
+                    <option [value]="employee.EmployeeKey">{{ employee.NoPago }} · {{ employee.NombreCompleto }}</option>
+                    }
+                </select>
+                <div class="catalog-row-actions">
+                    <button type="button" class="secondary" [disabled]="!locationEmployeeOptionKey"
+                        (click)="editLocationEmployee()">Editar</button>
+                    <button type="button" class="danger" [disabled]="!locationEmployeeOptionKey"
+                        (click)="deleteLocationEmployee()">Quitar</button>
+                </div>
+            </div>
+            @if (locationAreaId !== null && locationEmployees.length === 0) {
+            <p class="location-empty">No hay empleados en este departamento.</p>
+            }
+        </section>
+    </div>
+    }
+
+    @if (!isLoading && activeView === 'regionals') {
+    <nav class="catalog-pagination" aria-label="Paginación de catálogos">
+        <span>Mostrando {{ firstVisibleRow }} a {{ lastVisibleRow }} de {{ filteredCount }} registros</span>
+        <div class="catalog-page-buttons">
+            <button type="button" (click)="goToPage(1)" [disabled]="currentPage === 1"
+                aria-label="Primera página">«</button>
+            <button type="button" (click)="goToPage(currentPage - 1)" [disabled]="currentPage === 1">Anterior</button>
+            @for (page of visiblePages; track page) {
+            <button type="button" [class.active]="currentPage === page"
+                [attr.aria-current]="currentPage === page ? 'page' : null" (click)="goToPage(page)">{{ page }}</button>
+            }
+            <button type="button" (click)="goToPage(currentPage + 1)"
+                [disabled]="currentPage === totalPages">Siguiente</button>
+            <button type="button" (click)="goToPage(totalPages)" [disabled]="currentPage === totalPages"
+                aria-label="Última página">»</button>
+        </div>
+    </nav>
+    }
+</section>
+
+@if (isLocationSearchOpen) {
+<div class="location-search-backdrop" role="presentation" (click)="closeLocationSearch()">
+    <section class="location-search-dialog" role="dialog" aria-modal="true" aria-labelledby="location-search-title"
+        (click)="$event.stopPropagation()">
+        <header class="location-search-heading">
+            <div>
+                <p class="eyebrow">MANTENIMIENTO</p>
+                <h2 id="location-search-title">Buscar ubicación o empleado</h2>
+            </div>
+            <button type="button" class="location-search-close" aria-label="Cerrar búsqueda"
+                (click)="closeLocationSearch()">×</button>
+        </header>
+
+        <form class="location-search-form" (ngSubmit)="searchLocationCatalogs()">
+            <label for="location-search-term">Nombre, número o ubicación</label>
+            <div class="location-search-controls">
+                <input id="location-search-term" type="search" [ngModel]="locationSearchTerm"
+                    (ngModelChange)="updateLocationSearch($event)" name="locationSearchTerm"
+                    placeholder="Ej. edificio administrativo, departamento o empleado" autocomplete="off" />
+                <button type="submit">Buscar</button>
+            </div>
+        </form>
+
+        @if (locationSearchError) { <p class="location-search-message error" role="alert">{{ locationSearchError }}</p> }
+        @if (locationSearchSubmitted && locationSearchResults.length === 0) {
+        <p class="location-search-message" role="status">No se encontraron resultados.</p>
+        }
+
+        <div class="location-search-results">
+            @for (result of locationSearchResults; track result.key) {
+            <button type="button" class="location-search-result" (click)="selectLocationSearchResult(result)">
+                <span class="location-result-type">{{ result.type }}</span>
+                <strong>{{ result.title }}</strong>
+                <small>{{ result.location }}</small>
+            </button>
+            }
+        </div>
+    </section>
+</div>
+}
+
+@if (isDialogOpen) {
+<div class="modal-backdrop" role="presentation" (click)="closeDialog()">
+    <section class="edit-modal catalog-modal" role="dialog" aria-modal="true" aria-labelledby="catalog-modal-title"
+        (click)="$event.stopPropagation()">
+        <div class="modal-heading">
+            <div>
+                <p class="eyebrow">CATÁLOGOS ADMINISTRATIVOS</p>
+                <h2 id="catalog-modal-title">
+                    {{ editingId === null && !editingEmployeeKey ? 'Agregar' : 'Editar' }}
+                    {{ activeView === 'regionals' ? 'regional' : activeView === 'buildings' ? 'edificio' : activeView
+                    === 'departments' ? 'departamento' : 'empleado' }}
+                </h2>
+            </div>
+            <button type="button" class="modal-close" aria-label="Cerrar ventana" (click)="closeDialog()">×</button>
+        </div>
+
+        <form class="modal-form" novalidate (ngSubmit)="save()">
+            @if (activeView === 'regionals') {
+            <div class="user-field catalog-wide">
+                <label for="catalog-regional-name">Nombre de la regional</label>
+                <input id="catalog-regional-name" [(ngModel)]="regionalName" name="regionalName" required />
+            </div>
+            }
+
+            @if (activeView === 'buildings') {
+            <div class="user-field">
+                <label for="catalog-building-name">Nombre del edificio</label>
+                <input id="catalog-building-name" [(ngModel)]="buildingName" name="buildingName" required />
+            </div>
+            <div class="user-field">
+                <label for="catalog-building-region">Regional</label>
+                <select id="catalog-building-region" [(ngModel)]="selectedRegionId" name="buildingRegion"
+                    [disabled]="lockLocationRegion" required>
+                    <option [ngValue]="null">Selecciona una regional</option>
+                    @for (regional of regionals; track regional.IdRegional) {
+                    <option [ngValue]="regional.IdRegional">{{ regional.NombreRegional }}</option>
+                    }
+                </select>
+            </div>
+            }
+
+            @if (activeView === 'departments' || activeView === 'employees') {
+            @if (activeView === 'employees') {
+            <div class="user-field">
+                <label for="catalog-employee-payment">Número de pago</label>
+                <input id="catalog-employee-payment" [(ngModel)]="employeeNoPago" name="employeePayment" required />
+            </div>
+            <div class="user-field">
+                <label for="catalog-employee-name">Nombre completo</label>
+                <input id="catalog-employee-name" [(ngModel)]="employeeName" name="employeeName" required />
+            </div>
+            } @else {
+            <div class="user-field catalog-wide">
+                <label for="catalog-department-name">Nombre del departamento</label>
+                <input id="catalog-department-name" [(ngModel)]="departmentName" name="departmentName" required />
+            </div>
+            }
+            <div class="user-field">
+                <label for="catalog-location-region">Regional</label>
+                <select id="catalog-location-region" [ngModel]="selectedRegionId" (ngModelChange)="selectRegion($event)"
+                    name="locationRegion" [disabled]="lockLocationRegion" required>
+                    <option [ngValue]="null">Selecciona una regional</option>
+                    @for (regional of regionals; track regional.IdRegional) {
+                    <option [ngValue]="regional.IdRegional">{{ regional.NombreRegional }}</option>
+                    }
+                </select>
+            </div>
+            <div class="user-field">
+                <label for="catalog-location-building">Edificio</label>
+                <select id="catalog-location-building" [ngModel]="selectedBuildingId"
+                    (ngModelChange)="selectBuilding($event)" name="locationBuilding"
+                    [disabled]="selectedRegionId === null || lockLocationBuilding" required>
+                    <option [ngValue]="null">Selecciona un edificio</option>
+                    @for (building of filteredBuildings; track building.IdEdificio) {
+                    <option [ngValue]="building.IdEdificio">{{ building.NombreEdificio }}</option>
+                    }
+                </select>
+            </div>
+            @if (activeView === 'employees') {
+            <div class="user-field catalog-wide">
+                <label for="catalog-employee-department">Departamento</label>
+                <select id="catalog-employee-department" [(ngModel)]="selectedAreaId" name="employeeArea"
+                    [disabled]="selectedBuildingId === null || lockLocationDepartment" required>
+                    <option [ngValue]="null">Selecciona un departamento</option>
+                    @for (department of filteredDepartments; track department.IdArea) {
+                    <option [ngValue]="department.IdArea">{{ department.NombreArea }}</option>
+                    }
+                </select>
+            </div>
+            }
+            }
+
+            @if (errorMessage) { <p class="feedback error modal-feedback" role="alert">{{ errorMessage }}</p> }
+            <div class="modal-actions">
+                <button type="button" class="secondary" (click)="closeDialog()">Cancelar</button>
+                <button type="submit" [disabled]="isSaving">{{ isSaving ? 'Guardando...' : 'Guardar' }}</button>
+            </div>
+        </form>
+    </section>
+</div>
+}
+
+@if (isDeleteDialogOpen && pendingDelete) {
+<div class="modal-backdrop" role="presentation" (click)="cancelDelete()">
+    <section class="delete-modal" role="dialog" aria-modal="true" aria-labelledby="catalog-delete-title"
+        (click)="$event.stopPropagation()">
+        <p class="eyebrow">CONFIRMAR ACCIÓN</p>
+        <h2 id="catalog-delete-title">¿Quitar este registro?</h2>
+        <p>{{ pendingDelete.label }}</p>
+        @if (errorMessage) { <p class="feedback error" role="alert">{{ errorMessage }}</p> }
+        <div class="modal-actions">
+            <button type="button" class="secondary" (click)="cancelDelete()">Cancelar</button>
+            <button type="button" class="danger modal-danger" [disabled]="isSaving" (click)="confirmDelete()">
+                {{ isSaving ? 'Eliminando...' : 'Quitar' }}
+            </button>
+        </div>
+    </section>
+</div>
+}

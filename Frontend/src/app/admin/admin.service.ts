@@ -1,7 +1,7 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { catchError, map, Observable, shareReplay, throwError } from 'rxjs';
-import { AdminUser, Area, Building, CreateAdminUser, CreateDevice, CreateReassignment, Device, DeviceOption, DevicePageQuery, DeviceType, EmployeeSearchResult, PagedResult, Reassignment, UpdateAdminUser } from './admin.models';
+import { AdminUser, Area, Building, CatalogDepartment, CreateAdminUser, CreateDevice, CreateReassignment, Device, DeviceOption, DevicePageQuery, DeviceType, DirectoryEmployee, EmployeeOption, EmployeeSearchResult, PagedResult, RegionalOption, Reassignment, SaveBuilding, SaveDepartment, SaveDirectoryEmployee, SaveRegional, UpdateAdminUser, UpdateEmployee } from './admin.models';
 
 const API_ADMIN_URL = '/api/admin';
 
@@ -40,10 +40,11 @@ const normalizeDevice = (device: ApiDevice): Device => ({
 export class AdminService {
   private deviceTypesCache$?: Observable<DeviceType[]>;
   private areasCache$?: Observable<Area[]>;
+  private employeeOptionsCache$?: Observable<EmployeeOption[]>;
   constructor(private readonly httpClient: HttpClient) { }
 
   getDevices(query: DevicePageQuery): Observable<PagedResult<Device>> {
-    let params = new HttpParams().set('page', query.Page);
+    let params = new HttpParams().set('page', query.Page).set('pageSize', query.PageSize);
     if (query.SearchTerm.trim()) params = params.set('searchTerm', query.SearchTerm.trim());
     if (query.Brand.trim()) params = params.set('brand', query.Brand.trim());
     if (query.Model.trim()) params = params.set('model', query.Model.trim());
@@ -58,17 +59,18 @@ export class AdminService {
       Items: (result.Items ?? result.items ?? []).map(normalizeDevice),
       TotalCount: result.TotalCount ?? result.totalCount ?? 0,
       Page: result.Page ?? result.page ?? query.Page,
-      PageSize: result.PageSize ?? result.pageSize ?? 25,
+      PageSize: result.PageSize ?? result.pageSize ?? query.PageSize,
     })));
   }
 
   searchDeviceOptions(searchTerm: string): Observable<DeviceOption[]> {
     const params = new HttpParams().set('searchTerm', searchTerm);
     return this.httpClient.get<Array<DeviceOption & {
-      idEquipo?: number; codigoInventario?: string; marca?: string; modelo?: string;
+      idEquipo?: number; codigoInventario?: string; noSerie?: string; marca?: string; modelo?: string;
     }>>(`${API_ADMIN_URL}/device-options`, { params }).pipe(map((options) => options.map((device) => ({
       IdEquipo: device.IdEquipo ?? device.idEquipo ?? 0,
       CodigoInventario: device.CodigoInventario ?? device.codigoInventario ?? '',
+      NoSerie: device.NoSerie ?? device.noSerie ?? '',
       Marca: device.Marca ?? device.marca ?? '',
       Modelo: device.Modelo ?? device.modelo ?? '',
     }))));
@@ -92,6 +94,79 @@ export class AdminService {
       NombreRegional: employee.NombreRegional ?? employee.nombreRegional ?? null,
       AssignedDevices: (employee.AssignedDevices ?? employee.assignedDevices ?? []).map(normalizeDevice),
     }))));
+  }
+
+  updateEmployee(currentNoPago: string, employee: UpdateEmployee): Observable<void> {
+    return this.httpClient.put<void>(`${API_ADMIN_URL}/employees/${encodeURIComponent(currentNoPago)}`, employee);
+  }
+
+  updateDirectoryEmployeeByKey(employeeKey: string, employee: UpdateEmployee): Observable<void> {
+    const params = new HttpParams().set('employeeKey', employeeKey);
+    return this.httpClient.put<void>(`${API_ADMIN_URL}/employees/directory/by-key`, employee, { params });
+  }
+
+  getEmployeeOptions(): Observable<EmployeeOption[]> {
+    if (this.employeeOptionsCache$) return this.employeeOptionsCache$;
+    this.employeeOptionsCache$ = this.httpClient.get<Array<EmployeeOption & {
+      noPago?: string; nombreCompleto?: string; idArea?: number;
+    }>>(`${API_ADMIN_URL}/employees/options`).pipe(map((employees) => employees.map((employee) => ({
+      NoPago: employee.NoPago ?? employee.noPago ?? '',
+      NombreCompleto: employee.NombreCompleto ?? employee.nombreCompleto ?? '',
+      IdArea: employee.IdArea ?? employee.idArea ?? 0,
+    }))), shareReplay({ bufferSize: 1, refCount: false }));
+    return this.employeeOptionsCache$;
+  }
+
+  getDirectoryEmployees(): Observable<DirectoryEmployee[]> {
+    return this.httpClient.get<Array<DirectoryEmployee & {
+      employeeKey?: string; noPago?: string; nombreCompleto?: string; idArea?: number | null;
+    }>>(`${API_ADMIN_URL}/employees/directory`).pipe(map((employees) => employees.map((employee) => ({
+      EmployeeKey: employee.EmployeeKey ?? employee.employeeKey ?? '',
+      NoPago: employee.NoPago ?? employee.noPago ?? '',
+      NombreCompleto: employee.NombreCompleto ?? employee.nombreCompleto ?? '',
+      IdArea: employee.IdArea ?? employee.idArea ?? null,
+    }))));
+  }
+
+  clearEmployeeOptionsCache(): void { this.employeeOptionsCache$ = undefined; }
+
+  getRegionals(): Observable<RegionalOption[]> {
+    return this.httpClient.get<Array<RegionalOption & { idRegional?: number; nombreRegional?: string }>>(
+      `${API_ADMIN_URL}/regionals`,
+    ).pipe(map((items) => items.map((item) => ({
+      IdRegional: item.IdRegional ?? item.idRegional ?? 0,
+      NombreRegional: item.NombreRegional ?? item.nombreRegional ?? '',
+    }))));
+  }
+
+  getCatalogDepartments(): Observable<CatalogDepartment[]> {
+    return this.httpClient.get<Array<CatalogDepartment & {
+      idArea?: number; nombreArea?: string; idEdificio?: number; nombreEdificio?: string;
+      idRegional?: number | null; nombreRegional?: string | null;
+    }>>(`${API_ADMIN_URL}/catalog/departments`).pipe(map((items) => items.map((item) => ({
+      IdArea: item.IdArea ?? item.idArea ?? 0,
+      NombreArea: item.NombreArea ?? item.nombreArea ?? '',
+      IdEdificio: item.IdEdificio ?? item.idEdificio ?? 0,
+      NombreEdificio: item.NombreEdificio ?? item.nombreEdificio ?? '',
+      IdRegional: item.IdRegional ?? item.idRegional ?? null,
+      NombreRegional: item.NombreRegional ?? item.nombreRegional ?? null,
+    }))));
+  }
+
+  createRegional(regional: SaveRegional): Observable<void> { return this.httpClient.post<void>(`${API_ADMIN_URL}/regionals`, regional); }
+  updateRegional(id: number, regional: SaveRegional): Observable<void> { return this.httpClient.put<void>(`${API_ADMIN_URL}/regionals/${id}`, regional); }
+  deleteRegional(id: number): Observable<void> { return this.httpClient.delete<void>(`${API_ADMIN_URL}/regionals/${id}`); }
+  createBuilding(building: SaveBuilding): Observable<void> { return this.httpClient.post<void>(`${API_ADMIN_URL}/buildings`, building); }
+  updateBuilding(id: number, building: SaveBuilding): Observable<void> { return this.httpClient.put<void>(`${API_ADMIN_URL}/buildings/${id}`, building); }
+  deleteBuilding(id: number): Observable<void> { return this.httpClient.delete<void>(`${API_ADMIN_URL}/buildings/${id}`); }
+  createDepartment(department: SaveDepartment): Observable<void> { return this.httpClient.post<void>(`${API_ADMIN_URL}/departments`, department); }
+  updateDepartment(id: number, department: SaveDepartment): Observable<void> { return this.httpClient.put<void>(`${API_ADMIN_URL}/departments/${id}`, department); }
+  deleteDepartment(id: number): Observable<void> { return this.httpClient.delete<void>(`${API_ADMIN_URL}/departments/${id}`); }
+  createDirectoryEmployee(employee: SaveDirectoryEmployee): Observable<void> { return this.httpClient.post<void>(`${API_ADMIN_URL}/employees/directory`, employee); }
+  deleteDirectoryEmployee(noPago: string): Observable<void> { return this.httpClient.delete<void>(`${API_ADMIN_URL}/employees/directory/${encodeURIComponent(noPago)}`); }
+  deleteDirectoryEmployeeByKey(employeeKey: string): Observable<void> {
+    const params = new HttpParams().set('employeeKey', employeeKey);
+    return this.httpClient.delete<void>(`${API_ADMIN_URL}/employees/directory/by-key`, { params });
   }
 
   getDeviceTypes(): Observable<DeviceType[]> {
@@ -162,13 +237,16 @@ export class AdminService {
     // Consulta el historial de cambios de responsable.
     return this.httpClient.get<Array<Reassignment & {
       idReasignacion?: number; idEquipo?: number; codigoInventario?: string; noPagoAnterior?: string | null;
-      noPagoNuevo?: string | null; fechaCambio?: string; motivo?: string;
+      noPagoNuevo?: string | null; nombreEdificio?: string | null; nombreArea?: string | null;
+      fechaCambio?: string; motivo?: string;
     }>>(`${API_ADMIN_URL}/reassignments`).pipe(map((items) => items.map((item) => ({
       IdReasignacion: item.IdReasignacion ?? item.idReasignacion ?? 0,
       IdEquipo: item.IdEquipo ?? item.idEquipo ?? 0,
       CodigoInventario: item.CodigoInventario ?? item.codigoInventario ?? '',
       NoPagoAnterior: item.NoPagoAnterior ?? item.noPagoAnterior ?? null,
       NoPagoNuevo: item.NoPagoNuevo ?? item.noPagoNuevo ?? null,
+      NombreEdificio: item.NombreEdificio ?? item.nombreEdificio ?? null,
+      NombreArea: item.NombreArea ?? item.nombreArea ?? null,
       FechaCambio: item.FechaCambio ?? item.fechaCambio ?? '',
       Motivo: item.Motivo ?? item.motivo ?? '',
     }))));
@@ -188,6 +266,7 @@ export class AdminService {
     return this.httpClient.get<Array<AdminUser & {
       idUsuario?: number; usuario?: string; nombrePersona?: string; fechaExpiracion?: string | null;
       estado?: string; dominioP?: string; dominio?: number; rol?: string; claveSegura?: string;
+      modules?: string[]; isSuperAdmin?: boolean;
     }>>(`${API_ADMIN_URL}/users`).pipe(map((users) => users.map((user) => ({
       IdUsuario: user.IdUsuario ?? user.idUsuario ?? 0,
       Usuario: user.Usuario ?? user.usuario ?? '',
@@ -198,6 +277,8 @@ export class AdminService {
       Dominio: user.Dominio ?? user.dominio ?? 0,
       Rol: user.Rol ?? user.rol ?? '',
       ClaveSegura: user.ClaveSegura ?? user.claveSegura ?? '0',
+      Modules: user.Modules ?? user.modules ?? [],
+      IsSuperAdmin: user.IsSuperAdmin ?? user.isSuperAdmin ?? false,
     }))));
   }
   // Crea un nuevo usuario en el sistema. La contraseña inicial se genera en el backend y no se muestra en pantalla.

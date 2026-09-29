@@ -56,13 +56,7 @@ export class AuthComponent {
     ).subscribe({
       next: (loginResponse) => loginResponse.MustChangePassword
         ? this.router.navigateByUrl('/change-password')
-        : this.router.navigateByUrl(
-          loginResponse.User.Role === 'Admin'
-            ? '/admin'
-            : loginResponse.User.Role === 'Taller'
-              ? '/taller'
-              : '/inventario',
-        ),
+        : this.router.navigateByUrl(this.authService.defaultRoute()),
     });
   }
 

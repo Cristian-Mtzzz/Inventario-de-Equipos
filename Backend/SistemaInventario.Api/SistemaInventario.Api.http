@@ -1,6 +1,120 @@
 @SistemaInventario.Api_HostAddress = http://localhost:5074
+@token = REEMPLAZA_CON_JWT
 
-GET {{SistemaInventario.Api_HostAddress}}/weatherforecast/
+GET {{SistemaInventario.Api_HostAddress}}/api/admin/regionals
 Accept: application/json
+Authorization: Bearer {{token}}
 
 ###
+
+GET {{SistemaInventario.Api_HostAddress}}/api/admin/buildings
+Accept: application/json
+Authorization: Bearer {{token}}
+
+###
+
+GET {{SistemaInventario.Api_HostAddress}}/api/admin/catalog/departments
+Accept: application/json
+Authorization: Bearer {{token}}
+
+###
+
+GET {{SistemaInventario.Api_HostAddress}}/api/admin/employees/options
+Accept: application/json
+Authorization: Bearer {{token}}
+
+### Crear regional
+POST {{SistemaInventario.Api_HostAddress}}/api/admin/regionals
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+	"NombreRegional": "REGIONAL DE PRUEBA"
+}
+
+### Editar regional
+PUT {{SistemaInventario.Api_HostAddress}}/api/admin/regionals/1
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+	"NombreRegional": "REGIONAL ACTUALIZADA"
+}
+
+### Quitar regional sin edificios asociados
+DELETE {{SistemaInventario.Api_HostAddress}}/api/admin/regionals/1
+Authorization: Bearer {{token}}
+
+### Crear edificio
+POST {{SistemaInventario.Api_HostAddress}}/api/admin/buildings
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+	"NombreEdificio": "EDIFICIO DE PRUEBA",
+	"IdRegional": 1
+}
+
+### Editar edificio
+PUT {{SistemaInventario.Api_HostAddress}}/api/admin/buildings/1
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+	"NombreEdificio": "EDIFICIO ACTUALIZADO",
+	"IdRegional": 1
+}
+
+### Quitar edificio sin departamentos asociados
+DELETE {{SistemaInventario.Api_HostAddress}}/api/admin/buildings/1
+Authorization: Bearer {{token}}
+
+### Crear departamento
+POST {{SistemaInventario.Api_HostAddress}}/api/admin/departments
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+	"NombreArea": "DEPARTAMENTO DE PRUEBA",
+	"IdEdificio": 1
+}
+
+### Editar departamento
+PUT {{SistemaInventario.Api_HostAddress}}/api/admin/departments/1
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+	"NombreArea": "DEPARTAMENTO ACTUALIZADO",
+	"IdEdificio": 1
+}
+
+### Quitar departamento sin empleados ni equipos asociados
+DELETE {{SistemaInventario.Api_HostAddress}}/api/admin/departments/1
+Authorization: Bearer {{token}}
+
+### Crear empleado
+POST {{SistemaInventario.Api_HostAddress}}/api/admin/employees/directory
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+	"NoPago": "999999",
+	"NombreCompleto": "EMPLEADO DE PRUEBA",
+	"IdArea": 1
+}
+
+### Editar empleado
+PUT {{SistemaInventario.Api_HostAddress}}/api/admin/employees/999999
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+	"NoPago": "999999",
+	"NombreCompleto": "EMPLEADO ACTUALIZADO",
+	"IdArea": 1
+}
+
+### Quitar empleado sin relaciones asociadas
+DELETE {{SistemaInventario.Api_HostAddress}}/api/admin/employees/directory/999999
+Authorization: Bearer {{token}}

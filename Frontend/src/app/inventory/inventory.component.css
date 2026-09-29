@@ -203,6 +203,23 @@ button[type="submit"] {
     font-weight: 700;
 }
 
+.filter-bar .employee-search-trigger {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+}
+
+.employee-search-trigger svg {
+    width: 18px;
+    height: 18px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+}
+
+
 .table-wrap {
     overflow: hidden;
     border: 1px solid #d8e4e0;

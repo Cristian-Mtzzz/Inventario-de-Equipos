@@ -7,7 +7,7 @@ export interface LoginRequest {
   Password: string;
 }
 
-// Perfil almacenado en localStorage y utilizado por guards y redirecciones.
+// Perfil de sesión mantenido en memoria y reconstruido desde los claims del token.
 export interface AuthUser {
   UserId: number | string;
   UserName: string;
@@ -16,6 +16,13 @@ export interface AuthUser {
   Estado: string;
   DominioP: string;
   Dominio: number;
+  Modules: string[];
+  IsSuperAdmin: boolean;
+}
+
+export interface ModuleAccess {
+  Modules: string[];
+  IsSuperAdmin: boolean;
 }
 
 // Respuesta normalizada: token JWT y usuario autenticado.
