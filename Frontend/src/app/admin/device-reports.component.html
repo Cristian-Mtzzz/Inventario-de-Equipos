@@ -1,0 +1,88 @@
+<section class="device-report">
+  <header class="report-header">
+    <div>
+      <p class="eyebrow">EXPORTACIÓN</p>
+      <h2>Reporte de dispositivos</h2>
+    </div>
+    @if (totalMatchingDevices !== null) {
+    <p class="report-count">{{ totalMatchingDevices }} dispositivos coinciden con los filtros</p>
+    }
+  </header>
+
+  @if (errorMessage) { <p class="feedback error" role="alert">{{ errorMessage }}</p> }
+  @if (message) { <p class="feedback success" role="status">{{ message }}</p> }
+
+  <form class="report-filters" (ngSubmit)="exportReport()">
+    <div class="report-filter-grid">
+      <label class="report-field report-search-field">
+        <span>Buscar</span>
+        <input type="search" [(ngModel)]="searchTerm" name="reportSearch"
+          placeholder="Código, serie, modelo o asignado" />
+      </label>
+
+      <label class="report-field">
+        <span>Tipo de dispositivo</span>
+        <select [(ngModel)]="typeId" name="reportType">
+          <option [ngValue]="null">Todos los tipos</option>
+          @for (type of deviceTypes; track type.IdTipo) {
+          <option [ngValue]="type.IdTipo">{{ type.NombreTipo }}</option>
+          }
+        </select>
+      </label>
+
+      <label class="report-field">
+        <span>Marca</span>
+        <input type="text" [(ngModel)]="brand" name="reportBrand" placeholder="Todas las marcas" />
+      </label>
+
+      <label class="report-field">
+        <span>Estado</span>
+        <select [(ngModel)]="state" name="reportState">
+          <option value="">Todos los estados</option>
+          <option value="ASIGNADO">Asignado</option>
+          <option value="DISPONIBLE">Disponible</option>
+        </select>
+      </label>
+
+      <label class="report-field">
+        <span>Regional</span>
+        <select [ngModel]="regionalId" (ngModelChange)="selectRegional($event)" name="reportRegional">
+          <option [ngValue]="null">Todas las regionales</option>
+          @for (regional of regionals; track regional.IdRegional) {
+          <option [ngValue]="regional.IdRegional">{{ regional.NombreRegional }}</option>
+          }
+        </select>
+      </label>
+
+      <label class="report-field">
+        <span>Edificio</span>
+        <select [ngModel]="buildingId" (ngModelChange)="selectBuilding($event)" name="reportBuilding"
+          [disabled]="regionalId === null">
+          <option [ngValue]="null">{{ regionalId === null ? 'Selecciona una regional' : 'Todos los edificios' }}</option>
+          @for (building of buildingsForRegional; track building.IdEdificio) {
+          <option [ngValue]="building.IdEdificio">{{ building.NombreEdificio }}</option>
+          }
+        </select>
+      </label>
+
+      <label class="report-field">
+        <span>Área</span>
+        <select [(ngModel)]="areaId" name="reportArea" [disabled]="buildingId === null">
+          <option [ngValue]="null">{{ buildingId === null ? 'Selecciona un edificio' : 'Todas las áreas' }}</option>
+          @for (area of areas; track area.IdArea) {
+          <option [ngValue]="area.IdArea">{{ area.NombreArea }}</option>
+          }
+        </select>
+      </label>
+    </div>
+
+    <footer class="report-actions">
+      <button type="button" class="secondary report-reset" [disabled]="isExporting" (click)="clearFilters()">
+        Limpiar filtros
+      </button>
+      <button type="submit" class="report-export" [disabled]="isLoadingFilters || isExporting">
+        @if (isExporting) { Preparando Excel... } @else { Exportar a Excel }
+      </button>
+    </footer>
+  </form>
+</section>

@@ -13,6 +13,7 @@ public sealed class AdminService(InventoryDbContext dbContext) : IAdminService
 {
     public async Task<PagedResult<DeviceDto>> GetDevices(
         int requestedPage,
+        int requestedPageSize,
         string? searchTerm,
         string? brand,
         string? model,
@@ -23,7 +24,7 @@ public sealed class AdminService(InventoryDbContext dbContext) : IAdminService
         string? state,
         CancellationToken cancellationToken)
     {
-        const int pageSize = 10;
+        var pageSize = Math.Clamp(requestedPageSize, 10, 500);
         const string fromSql = """
             FROM DISPOSITIVOS d
             LEFT JOIN TIPOS_DISPOSITIVOS t ON t.ID_TIPO = d.ID_TIPO

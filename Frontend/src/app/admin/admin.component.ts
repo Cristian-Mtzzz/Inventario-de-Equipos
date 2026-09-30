@@ -8,14 +8,15 @@ import { AuthService } from '../auth/auth.service';
 import { AdminService } from './admin.service';
 import { AdminUser, Area, Building, CreateAdminUser, CreateDevice, CreateReassignment, Device, DeviceOption, DeviceType, EmployeeOption, Reassignment, UpdateAdminUser } from './admin.models';
 import { TallerComponent } from '../taller/taller.component';
+import { DeviceReportsComponent } from './device-reports.component';
 import { EmployeeSearchDialogComponent } from './employee-search-dialog.component';
 import { CatalogManagementComponent } from './catalog-management.component';
 
-type AdminSection = 'devices' | 'reassignments' | 'users' | 'workshop' | 'catalogs';
+type AdminSection = 'devices' | 'reports' | 'reassignments' | 'users' | 'workshop' | 'catalogs';
 
 @Component({
   selector: 'app-admin',
-  imports: [DatePipe, FormsModule, SearchableSelectDirective, TallerComponent, EmployeeSearchDialogComponent, CatalogManagementComponent],
+  imports: [DatePipe, FormsModule, SearchableSelectDirective, TallerComponent, DeviceReportsComponent, EmployeeSearchDialogComponent, CatalogManagementComponent],
   templateUrl: './admin.component.html',
   styleUrl: './admin.component.css',
 })
@@ -149,6 +150,7 @@ export class AdminComponent {
   canAccessAdminSection(section: AdminSection): boolean {
     const modules: Record<AdminSection, string> = {
       devices: 'DISPOSITIVOS',
+      reports: 'DISPOSITIVOS',
       reassignments: 'REASIGNACIONES',
       workshop: 'TALLER',
       users: 'USUARIOS',
@@ -340,6 +342,11 @@ export class AdminComponent {
     }
 
     if (this.activeSection === 'catalogs') {
+      this.isLoading = false;
+      return;
+    }
+
+    if (this.activeSection === 'reports') {
       this.isLoading = false;
       return;
     }

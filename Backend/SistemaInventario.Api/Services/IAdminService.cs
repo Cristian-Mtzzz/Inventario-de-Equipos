@@ -7,6 +7,7 @@ public interface IAdminService
 {
     Task<PagedResult<DeviceDto>> GetDevices(
         int page,
+        int pageSize,
         string? searchTerm,
         string? brand,
         string? model,

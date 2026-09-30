@@ -45,7 +45,9 @@ export class AdminService {
   constructor(private readonly httpClient: HttpClient) { }
 
   getDevices(query: DevicePageQuery): Observable<PagedResult<Device>> {
-    let params = new HttpParams().set('page', query.Page);
+    let params = new HttpParams()
+      .set('page', query.Page)
+      .set('pageSize', query.PageSize);
     if (query.SearchTerm.trim()) params = params.set('searchTerm', query.SearchTerm.trim());
     if (query.Brand.trim()) params = params.set('brand', query.Brand.trim());
     if (query.Model.trim()) params = params.set('model', query.Model.trim());

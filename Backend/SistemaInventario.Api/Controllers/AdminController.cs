@@ -21,6 +21,7 @@ public sealed class AdminController(
     // Lista equipos con tipo, área y responsable actual.
     public async Task<ActionResult<PagedResult<DeviceDto>>> GetDevices(
         [FromQuery] int page,
+        [FromQuery] int pageSize,
         [FromQuery] string? searchTerm,
         [FromQuery] string? brand,
         [FromQuery] string? model,
@@ -31,7 +32,7 @@ public sealed class AdminController(
         [FromQuery] string? state,
         CancellationToken cancellationToken) =>
         Ok(await adminService.GetDevices(
-            page, searchTerm, brand, model, typeId, regionalId, buildingId, areaId, state, cancellationToken));
+            page, pageSize, searchTerm, brand, model, typeId, regionalId, buildingId, areaId, state, cancellationToken));
 
     [HttpGet("device-options")]
     [Authorize(Policy = ModulePolicies.AssignmentSupport)]

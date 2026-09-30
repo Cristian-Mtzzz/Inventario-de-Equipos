@@ -18,6 +18,10 @@
     <button type="button" [class.active]="activeSection === 'devices'"
       (click)="selectSection('devices')">Dispositivos</button>
     }
+    @if (canAccessAdminSection('reports')) {
+    <button type="button" [class.active]="activeSection === 'reports'"
+      (click)="selectSection('reports')">Reportes</button>
+    }
     @if (canAccessAdminSection('reassignments')) {
     <button type="button" [class.active]="activeSection === 'reassignments'"
       (click)="selectSection('reassignments')">Reasignaciones</button>
@@ -138,6 +142,10 @@
         [disabled]="currentPage === totalPages">Siguiente</button>
     </nav>
   </section>
+  }
+
+  @if (activeSection === 'reports') {
+  <app-device-reports />
   }
 
   @if (activeSection === 'catalogs') {

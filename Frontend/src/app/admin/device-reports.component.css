@@ -1,0 +1,146 @@
+.device-report {
+  display: grid;
+  gap: 1.25rem;
+  margin-top: 2rem;
+  color: #203238;
+}
+
+.report-header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: .9rem;
+  border-bottom: 1px solid #d8e4e0;
+}
+
+.report-header h2 {
+  margin: 0;
+  color: #18383b;
+  font-size: 1.3rem;
+}
+
+.eyebrow {
+  margin: 0 0 .4rem;
+  color: #397b78;
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .12em;
+}
+
+.report-count {
+  margin: 0;
+  color: #617573;
+  font-size: .84rem;
+  font-weight: 700;
+}
+
+.report-filters {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.report-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+  align-items: end;
+}
+
+.report-field {
+  display: grid;
+  gap: .4rem;
+  min-width: 0;
+  color: #294649;
+  font-size: .78rem;
+  font-weight: 700;
+}
+
+.report-field span {
+  overflow-wrap: anywhere;
+}
+
+.report-field input,
+.report-field select {
+  width: 100%;
+  min-height: 2.7rem;
+  padding: .65rem .75rem;
+  border: 1px solid #d7e2df;
+  border-radius: 4px;
+  color: #203238;
+  background: #fff;
+  font: inherit;
+  font-weight: 400;
+}
+
+.report-field input:focus,
+.report-field select:focus {
+  border-color: #397b78;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(57, 123, 120, .12);
+}
+
+.report-field :disabled {
+  color: #718080;
+  background: #f0f4f3;
+  cursor: not-allowed;
+}
+
+.report-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: .65rem;
+  padding-top: .9rem;
+  border-top: 1px solid #d8e4e0;
+}
+
+.report-actions button {
+  min-height: 2.65rem;
+  padding: .65rem 1rem;
+  border-radius: 5px;
+  cursor: pointer;
+  font: inherit;
+  font-size: .84rem;
+  font-weight: 700;
+}
+
+.report-reset {
+  border: 1px solid #b9d1ca;
+  color: #276968;
+  background: #fff;
+}
+
+.report-export {
+  min-width: 11rem;
+  border: 0;
+  color: #fff;
+  background: #276968;
+}
+
+.report-actions button:disabled {
+  cursor: wait;
+  opacity: .6;
+}
+
+@media (max-width: 900px) {
+  .report-filter-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .report-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .report-filter-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .report-actions {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+}
