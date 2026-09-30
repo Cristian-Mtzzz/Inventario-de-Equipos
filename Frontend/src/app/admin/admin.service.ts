@@ -1,6 +1,6 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable } from '@angular/core';
-import { catchError, map, Observable, shareReplay, throwError } from 'rxjs';
+import { catchError, map, Observable, shareReplay, tap, throwError } from 'rxjs';
 import { AdminUser, Area, Building, CatalogDepartment, CreateAdminUser, CreateDevice, CreateReassignment, Device, DeviceOption, DevicePageQuery, DeviceType, DirectoryEmployee, EmployeeOption, EmployeeSearchResult, PagedResult, RegionalOption, Reassignment, SaveBuilding, SaveDepartment, SaveDirectoryEmployee, SaveRegional, UpdateAdminUser, UpdateEmployee } from './admin.models';
 
 const API_ADMIN_URL = '/api/admin';
@@ -39,12 +39,13 @@ const normalizeDevice = (device: ApiDevice): Device => ({
 @Injectable({ providedIn: 'root' })
 export class AdminService {
   private deviceTypesCache$?: Observable<DeviceType[]>;
-  private areasCache$?: Observable<Area[]>;
+  private buildingsCache$?: Observable<Building[]>;
+  private readonly areasCacheByBuilding = new Map<number, Observable<Area[]>>();
   private employeeOptionsCache$?: Observable<EmployeeOption[]>;
   constructor(private readonly httpClient: HttpClient) { }
 
   getDevices(query: DevicePageQuery): Observable<PagedResult<Device>> {
-    let params = new HttpParams().set('page', query.Page).set('pageSize', query.PageSize);
+    let params = new HttpParams().set('page', query.Page);
     if (query.SearchTerm.trim()) params = params.set('searchTerm', query.SearchTerm.trim());
     if (query.Brand.trim()) params = params.set('brand', query.Brand.trim());
     if (query.Model.trim()) params = params.set('model', query.Model.trim());
@@ -59,7 +60,7 @@ export class AdminService {
       Items: (result.Items ?? result.items ?? []).map(normalizeDevice),
       TotalCount: result.TotalCount ?? result.totalCount ?? 0,
       Page: result.Page ?? result.page ?? query.Page,
-      PageSize: result.PageSize ?? result.pageSize ?? query.PageSize,
+      PageSize: result.PageSize ?? result.pageSize ?? 25,
     })));
   }
 
@@ -153,15 +154,33 @@ export class AdminService {
     }))));
   }
 
-  createRegional(regional: SaveRegional): Observable<void> { return this.httpClient.post<void>(`${API_ADMIN_URL}/regionals`, regional); }
-  updateRegional(id: number, regional: SaveRegional): Observable<void> { return this.httpClient.put<void>(`${API_ADMIN_URL}/regionals/${id}`, regional); }
-  deleteRegional(id: number): Observable<void> { return this.httpClient.delete<void>(`${API_ADMIN_URL}/regionals/${id}`); }
-  createBuilding(building: SaveBuilding): Observable<void> { return this.httpClient.post<void>(`${API_ADMIN_URL}/buildings`, building); }
-  updateBuilding(id: number, building: SaveBuilding): Observable<void> { return this.httpClient.put<void>(`${API_ADMIN_URL}/buildings/${id}`, building); }
-  deleteBuilding(id: number): Observable<void> { return this.httpClient.delete<void>(`${API_ADMIN_URL}/buildings/${id}`); }
-  createDepartment(department: SaveDepartment): Observable<void> { return this.httpClient.post<void>(`${API_ADMIN_URL}/departments`, department); }
-  updateDepartment(id: number, department: SaveDepartment): Observable<void> { return this.httpClient.put<void>(`${API_ADMIN_URL}/departments/${id}`, department); }
-  deleteDepartment(id: number): Observable<void> { return this.httpClient.delete<void>(`${API_ADMIN_URL}/departments/${id}`); }
+  createRegional(regional: SaveRegional): Observable<void> {
+    return this.httpClient.post<void>(`${API_ADMIN_URL}/regionals`, regional).pipe(tap(() => this.clearBuildingsCache()));
+  }
+  updateRegional(id: number, regional: SaveRegional): Observable<void> {
+    return this.httpClient.put<void>(`${API_ADMIN_URL}/regionals/${id}`, regional).pipe(tap(() => this.clearBuildingsCache()));
+  }
+  deleteRegional(id: number): Observable<void> {
+    return this.httpClient.delete<void>(`${API_ADMIN_URL}/regionals/${id}`).pipe(tap(() => this.clearBuildingsCache()));
+  }
+  createBuilding(building: SaveBuilding): Observable<void> {
+    return this.httpClient.post<void>(`${API_ADMIN_URL}/buildings`, building).pipe(tap(() => this.clearBuildingsCache()));
+  }
+  updateBuilding(id: number, building: SaveBuilding): Observable<void> {
+    return this.httpClient.put<void>(`${API_ADMIN_URL}/buildings/${id}`, building).pipe(tap(() => this.clearBuildingsCache()));
+  }
+  deleteBuilding(id: number): Observable<void> {
+    return this.httpClient.delete<void>(`${API_ADMIN_URL}/buildings/${id}`).pipe(tap(() => this.clearBuildingsCache()));
+  }
+  createDepartment(department: SaveDepartment): Observable<void> {
+    return this.httpClient.post<void>(`${API_ADMIN_URL}/departments`, department).pipe(tap(() => this.clearAreasCache()));
+  }
+  updateDepartment(id: number, department: SaveDepartment): Observable<void> {
+    return this.httpClient.put<void>(`${API_ADMIN_URL}/departments/${id}`, department).pipe(tap(() => this.clearAreasCache()));
+  }
+  deleteDepartment(id: number): Observable<void> {
+    return this.httpClient.delete<void>(`${API_ADMIN_URL}/departments/${id}`).pipe(tap(() => this.clearAreasCache()));
+  }
   createDirectoryEmployee(employee: SaveDirectoryEmployee): Observable<void> { return this.httpClient.post<void>(`${API_ADMIN_URL}/employees/directory`, employee); }
   deleteDirectoryEmployee(noPago: string): Observable<void> { return this.httpClient.delete<void>(`${API_ADMIN_URL}/employees/directory/${encodeURIComponent(noPago)}`); }
   deleteDirectoryEmployeeByKey(employeeKey: string): Observable<void> {
@@ -183,8 +202,8 @@ export class AdminService {
   }
 
   getBuildings(): Observable<Building[]> {
-    // Obtiene el catálogo de edificios que controla el filtro de áreas.
-    return this.httpClient.get<Array<Building & {
+    if (this.buildingsCache$) return this.buildingsCache$;
+    const request = this.httpClient.get<Array<Building & {
       idEdificio?: number; nombreEdificio?: string; idRegional?: number | null; nombreRegional?: string | null;
     }>>(`${API_ADMIN_URL}/buildings`).pipe(
       map((buildings) => buildings.map((building) => ({
@@ -193,18 +212,42 @@ export class AdminService {
         IdRegional: building.IdRegional ?? building.idRegional ?? null,
         NombreRegional: building.NombreRegional ?? building.nombreRegional ?? null,
       }))),
+      shareReplay({ bufferSize: 1, refCount: false }),
+      catchError((error) => {
+        this.buildingsCache$ = undefined;
+        return throwError(() => error);
+      }),
     );
+    this.buildingsCache$ = request;
+    return request;
+  }
+
+  private clearBuildingsCache(): void {
+    this.buildingsCache$ = undefined;
   }
 
   getAreas(idEdificio: number): Observable<Area[]> {
-    // Consulta únicamente los departamentos pertenecientes al edificio elegido.
-    return this.httpClient.get<Array<Area & { idArea?: number; nombreArea?: string; idEdificio?: number }>>(`${API_ADMIN_URL}/areas/${idEdificio}`).pipe(
+    const cachedAreas = this.areasCacheByBuilding.get(idEdificio);
+    if (cachedAreas) return cachedAreas;
+
+    const request = this.httpClient.get<Array<Area & { idArea?: number; nombreArea?: string; idEdificio?: number }>>(`${API_ADMIN_URL}/areas/${idEdificio}`).pipe(
       map((areas) => areas.map((area) => ({
         IdArea: area.IdArea ?? area.idArea ?? 0,
         NombreArea: area.NombreArea ?? area.nombreArea ?? '',
         IdEdificio: area.IdEdificio ?? area.idEdificio ?? idEdificio,
       }))),
+      shareReplay({ bufferSize: 1, refCount: false }),
+      catchError((error) => {
+        this.areasCacheByBuilding.delete(idEdificio);
+        return throwError(() => error);
+      }),
     );
+    this.areasCacheByBuilding.set(idEdificio, request);
+    return request;
+  }
+
+  private clearAreasCache(): void {
+    this.areasCacheByBuilding.clear();
   }
 
   createDevice(device: CreateDevice): Observable<void> {
@@ -237,8 +280,7 @@ export class AdminService {
     // Consulta el historial de cambios de responsable.
     return this.httpClient.get<Array<Reassignment & {
       idReasignacion?: number; idEquipo?: number; codigoInventario?: string; noPagoAnterior?: string | null;
-      noPagoNuevo?: string | null; nombreEdificio?: string | null; nombreArea?: string | null;
-      fechaCambio?: string; motivo?: string;
+      noPagoNuevo?: string | null; nombreEdificio?: string | null; nombreArea?: string | null; fechaCambio?: string; motivo?: string;
     }>>(`${API_ADMIN_URL}/reassignments`).pipe(map((items) => items.map((item) => ({
       IdReasignacion: item.IdReasignacion ?? item.idReasignacion ?? 0,
       IdEquipo: item.IdEquipo ?? item.idEquipo ?? 0,

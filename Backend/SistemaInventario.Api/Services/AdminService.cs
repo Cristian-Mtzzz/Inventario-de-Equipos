@@ -1,6 +1,7 @@
 using System.Data;
 using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
+using Oracle.ManagedDataAccess.Client;
 using SistemaInventario.Api.Data;
 using SistemaInventario.Api.Models;
 
@@ -12,7 +13,6 @@ public sealed class AdminService(InventoryDbContext dbContext) : IAdminService
 {
     public async Task<PagedResult<DeviceDto>> GetDevices(
         int requestedPage,
-        int requestedPageSize,
         string? searchTerm,
         string? brand,
         string? model,
@@ -22,7 +22,7 @@ public sealed class AdminService(InventoryDbContext dbContext) : IAdminService
         int? areaId,
         CancellationToken cancellationToken)
     {
-        var pageSize = Math.Clamp(requestedPageSize, 10, 100);
+        const int pageSize = 10;
         const string fromSql = """
             FROM DISPOSITIVOS d
             LEFT JOIN TIPOS_DISPOSITIVOS t ON t.ID_TIPO = d.ID_TIPO
@@ -753,6 +753,7 @@ public sealed class AdminService(InventoryDbContext dbContext) : IAdminService
         }
     }
 
+    //Elimina una reasignación específica por su ID. Esto no revierte los cambios en el dispositivo, solo elimina el registro de reasignación
     public Task DeleteReassignment(int idReasignacion, CancellationToken cancellationToken) =>
         Execute("DELETE FROM REASIGNACIONES WHERE ID_REASIGNACION = :idReasignacion", cancellationToken,
             ("idReasignacion", idReasignacion));
@@ -998,6 +999,10 @@ public sealed class AdminService(InventoryDbContext dbContext) : IAdminService
         var command = connection.CreateCommand();
         command.CommandText = sql;
         command.Transaction = transaction;
+        if (command is OracleCommand oracleCommand)
+        {
+            oracleCommand.BindByName = true;
+        }
         foreach (var (name, value) in parameters)
         {
             var parameter = command.CreateParameter();

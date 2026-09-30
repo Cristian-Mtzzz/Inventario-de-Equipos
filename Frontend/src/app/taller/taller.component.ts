@@ -5,13 +5,14 @@ import { finalize } from 'rxjs';
 import { Router } from '@angular/router';
 import { AuthService } from '../auth/auth.service';
 import { AdminService } from '../admin/admin.service';
+import { SearchableSelectDirective } from '../shared/searchable-select.directive';
 import { Area, Building, DeviceType } from '../admin/admin.models';
 import { Maintenance, MaintenanceEditRequest, MaintenanceEntryRequest, MaintenanceExitRequest, ReceptionEntryRequest, WorkshopDevice } from './taller.models';
 import { TallerService } from './taller.service';
 
 @Component({
   selector: 'app-taller',
-  imports: [DatePipe, FormsModule],
+  imports: [DatePipe, FormsModule, SearchableSelectDirective],
   templateUrl: './taller.component.html',
   styleUrl: './taller.component.css',
 })

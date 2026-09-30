@@ -4,7 +4,6 @@ import { Observable, map } from 'rxjs';
 import { Maintenance, MaintenanceEditRequest, MaintenanceEntryRequest, MaintenanceExitRequest, ReceptionEntryRequest, WorkshopDevice } from './taller.models';
 
 const API_TALLER_URL = '/api/taller';
-const API_DEVICES_URL = '/api/admin/devices';
 
 // Cliente HTTP de recepción y mantenimiento; adapta la respuesta de Oracle al frontend.
 @Injectable({ providedIn: 'root' })
@@ -14,7 +13,7 @@ export class TallerService {
   getDevices(): Observable<WorkshopDevice[]> {
     return this.httpClient.get<Array<WorkshopDevice & {
       idEquipo?: number; codigoInventario?: string; noSerie?: string; marca?: string; modelo?: string;
-    }>>(`${API_DEVICES_URL}`).pipe(map((devices) => devices.map((device) => ({
+    }>>(`${API_TALLER_URL}/devices`).pipe(map((devices) => devices.map((device) => ({
       IdEquipo: device.IdEquipo ?? device.idEquipo ?? 0,
       CodigoInventario: device.CodigoInventario ?? device.codigoInventario ?? '',
       NoSerie: device.NoSerie ?? device.noSerie ?? '',

@@ -1,4 +1,4 @@
-import { Component, output, signal } from '@angular/core';
+import { Component, Input, Output, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { AdminService } from './admin.service';
@@ -12,7 +12,9 @@ import { EmployeeSearchResult } from './admin.models';
     styleUrl: './employee-search-dialog.component.css',
 })
 export class EmployeeSearchDialogComponent {
+    @Input() inventoryMode = false;
     readonly closed = output<void>();
+    readonly employeeUpdated = output<void>();
     readonly employees = signal<EmployeeSearchResult[]>([]);
     readonly isLoading = signal(false);
     readonly errorMessage = signal('');

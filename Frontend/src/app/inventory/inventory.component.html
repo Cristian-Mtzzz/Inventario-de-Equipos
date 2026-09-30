@@ -82,7 +82,7 @@
 
         <!-- Barra de filtros del inventario -->
         <div class="filter-bar device-filter-bar">
-            <input type="search" [(ngModel)]="searchTerm" (ngModelChange)="applyFilters()" name="inventorySearch"
+            <input type="text" role="searchbox" [(ngModel)]="searchTerm" (ngModelChange)="applyFilters()" name="inventorySearch"
                 placeholder="Código, serie, marca, modelo o empleado" />
 
             <select [(ngModel)]="selectedTypeId" (ngModelChange)="applyFilters()" name="inventoryType">

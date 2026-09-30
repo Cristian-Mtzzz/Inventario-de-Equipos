@@ -90,6 +90,11 @@ builder.Services.AddAuthorization(options =>
         new ModuleAccessRequirement(AppModules.Devices, AppModules.Inventory, AppModules.Reassignments, AppModules.Workshop)));
     options.AddPolicy(ModulePolicies.AssignmentSupport, policy => policy.Requirements.Add(
         new ModuleAccessRequirement(AppModules.Devices, AppModules.Inventory, AppModules.Reassignments)));
+    options.AddPolicy(ModulePolicies.LocationCatalogs, policy => policy.Requirements.Add(
+        new ModuleAccessRequirement(AppModules.Devices, AppModules.Inventory, AppModules.Reassignments,
+            AppModules.Workshop, AppModules.Maintenance)));
+    options.AddPolicy(ModulePolicies.SuperAdmin, policy => policy.Requirements.Add(
+        new ModuleAccessRequirement(AppModules.SuperAdmin)));
     options.DefaultPolicy = new Microsoft.AspNetCore.Authorization.AuthorizationPolicyBuilder()
         .RequireAuthenticatedUser()
         .RequireAssertion(context => !context.User.HasClaim("must_change_password", "true"))

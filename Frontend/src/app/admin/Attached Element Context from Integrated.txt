@@ -1,0 +1,109 @@
+Attached Element Context from Integrated Browser
+
+Element: button.add-user-button
+
+URL: http://localhost:4200/admin
+
+HTML Path: app-root > app-admin > main.admin-shell > app-catalog-management > section.admin-section.catalog-management > div.location-catalogs > section.location-section > div.location-section-heading > button.add-user-button
+
+Outer HTML:
+```html
+<button _ngcontent-ng-c3092222344="" type="button" class="add-user-button">Nuevo empleado</button>
+```
+
+Dimensions:
+- top: 731px
+- left: 856px
+- width: 162px
+- height: 45px
+
+CSS:
+```css
+* { box-sizing: border-box; }
+button, input { font: inherit; }
+button { transition:
+    transform .15s ease,
+    box-shadow .2s ease,
+    background .2s ease,
+    border-color .2s ease,
+    opacity .2s ease; }
+.add-user-button[_ngcontent-ng-c3092222344] { justify-self: start;
+  padding: .7rem 1rem;
+  border: 1px solid var(--catalog-teal);
+  border-radius: 5px;
+  color: #fff;
+  background: var(--catalog-teal);
+  cursor: pointer;
+  font-weight: 700;
+  transition:
+    background .16s ease,
+    box-shadow .16s ease,
+    transform .16s ease; }
+.add-user-button[_ngcontent-ng-c3092222344]:hover { background: #1e5655; }
+
+/* Inherited */
+[_nghost-ng-c95786403] { color: #203238 }
+:root { font-family: "Segoe UI", sans-serif; color: #203238 }
+
+/* Resolved values */
+margin: 0px /*UA*/;
+padding: 11.2px 16px;
+border-radius: 5px;
+border: 1px /*UA*/ solid /*UA*/ rgb(39, 105, 104) /*UA*/;
+transition: background 0.16s, box-shadow 0.16s, transform 0.16s;
+appearance: auto /*UA*/;
+background-attachment: scroll;
+background-clip: border-box;
+background-color: rgb(31, 88, 87);
+background-image: none;
+background-origin: padding-box;
+background-position-x: 0%;
+background-position-y: 0%;
+background-repeat: repeat;
+background-size: auto;
+border-image-outset: 0 /*UA*/;
+border-image-repeat: stretch /*UA*/;
+border-image-slice: 100% /*UA*/;
+border-image-source: none /*UA*/;
+border-image-width: 1 /*UA*/;
+box-sizing: border-box;
+color: rgb(255, 255, 255);
+cursor: pointer;
+display: block;
+font-family: "Segoe UI", sans-serif;
+font-feature-settings: normal;
+font-kerning: auto;
+font-language-override: normal;
+font-optical-sizing: auto;
+font-size: 16px;
+font-size-adjust: none;
+font-stretch: 100%;
+font-style: normal;
+font-variant-alternates: normal;
+font-variant-caps: normal;
+font-variant-east-asian: normal;
+font-variant-emoji: normal;
+font-variant-ligatures: normal;
+font-variant-numeric: normal;
+font-variant-position: normal;
+font-variation-settings: normal;
+font-weight: 700;
+height: 45.375px;
+justify-self: start;
+letter-spacing: normal /*UA*/;
+line-height: normal;
+padding-block-end: 11.2px /*UA*/;
+padding-block-start: 11.2px /*UA*/;
+padding-inline-end: 16px /*UA*/;
+padding-inline-start: 16px /*UA*/;
+text-align: center /*UA*/;
+text-indent: 0px /*UA*/;
+text-rendering: auto /*UA*/;
+text-shadow: none /*UA*/;
+text-transform: none /*UA*/;
+width: 162.422px;
+word-spacing: 0px /*UA*/;
+
+/* CSS variables */
+--catalog-teal: #276968;
+```

@@ -2,6 +2,7 @@ import { ChangeDetectorRef, Component, ViewChild, inject } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
+import { SearchableSelectDirective } from '../shared/searchable-select.directive';
 import { finalize, forkJoin, Observable, retry, timeout } from 'rxjs';
 import { AuthService } from '../auth/auth.service';
 import { AdminService } from './admin.service';
@@ -14,7 +15,7 @@ type AdminSection = 'devices' | 'reassignments' | 'users' | 'workshop' | 'catalo
 
 @Component({
   selector: 'app-admin',
-  imports: [DatePipe, FormsModule, TallerComponent, EmployeeSearchDialogComponent, CatalogManagementComponent],
+  imports: [DatePipe, FormsModule, SearchableSelectDirective, TallerComponent, EmployeeSearchDialogComponent, CatalogManagementComponent],
   templateUrl: './admin.component.html',
   styleUrl: './admin.component.css',
 })
@@ -42,6 +43,8 @@ export class AdminComponent {
   isLoadingEmployeeCatalog = true;
   employeeCatalogError = '';
   isLoadingAreas = false;
+  isLoadingFilterAreas = false;
+  isLoadingReassignmentAreas = false;
   buildings: Building[] = [];
   selectedBuildingId: number | null = null;
   selectedRegionId: number | null = null;
@@ -83,6 +86,8 @@ export class AdminComponent {
   selectedTypeId: number | null = null;
   private deviceFilterTimer: ReturnType<typeof setTimeout> | null = null;
   private deviceRequestId = 0;
+  private filterAreaRequestId = 0;
+  private reassignmentAreaRequestId = 0;
   showEmployeeSearch = false;
   deviceOptions: DeviceOption[] = [];
   deviceOptionSearch = '';
@@ -466,8 +471,14 @@ export class AdminComponent {
     this.selectedBuildingFilterId = null;
     this.selectedAreaFilterId = null;
     this.filterAreas = [];
+    this.filterAreaRequestId++;
+    this.isLoadingFilterAreas = false;
     this.currentPage = 1;
-    if (this.deviceFilterTimer) clearTimeout(this.deviceFilterTimer);
+    if (this.deviceFilterTimer) {
+      clearTimeout(this.deviceFilterTimer);
+      this.deviceFilterTimer = null;
+    }
+    this.errorMessage = '';
     this.loadDevicePage();
   }
 
@@ -515,6 +526,8 @@ export class AdminComponent {
     this.selectedBuildingFilterId = null;
     this.selectedAreaFilterId = null;
     this.filterAreas = [];
+    this.filterAreaRequestId++;
+    this.isLoadingFilterAreas = false;
     this.applyFilters();
   }
 
@@ -522,10 +535,24 @@ export class AdminComponent {
     this.selectedBuildingFilterId = idEdificio;
     this.selectedAreaFilterId = null;
     this.filterAreas = [];
+    const requestId = ++this.filterAreaRequestId;
+    this.isLoadingFilterAreas = idEdificio !== null;
     if (idEdificio !== null) {
-      this.adminService.getAreas(idEdificio).subscribe({
-        next: (areas) => this.filterAreas = areas,
-        error: () => this.errorMessage = 'No se pudieron cargar las áreas del edificio.',
+      this.adminService.getAreas(idEdificio).pipe(finalize(() => {
+        if (requestId !== this.filterAreaRequestId) return;
+        this.isLoadingFilterAreas = false;
+        this.changeDetector.markForCheck();
+      })).subscribe({
+        next: (areas) => {
+          if (requestId !== this.filterAreaRequestId) return;
+          this.filterAreas = areas;
+          this.changeDetector.markForCheck();
+        },
+        error: () => {
+          if (requestId !== this.filterAreaRequestId) return;
+          this.errorMessage = 'No se pudieron cargar las áreas del edificio.';
+          this.changeDetector.markForCheck();
+        },
       });
     }
     this.applyFilters();
@@ -853,6 +880,8 @@ export class AdminComponent {
   }
 
   selectReassignmentRegion(idRegional: number | null): void {
+    this.reassignmentAreaRequestId++;
+    this.isLoadingReassignmentAreas = false;
     this.reassignmentRegionalId = idRegional;
     this.reassignmentBuildingId = 0;
     this.newReassignment.IdEdificio = 0;
@@ -864,24 +893,51 @@ export class AdminComponent {
   // Selecciona un edificio para la reasignación y carga los departamentos correspondientes.
   selectReassignmentBuilding(idEdificio: number): void {
     const buildingId = Number(idEdificio);
+    const requestId = ++this.reassignmentAreaRequestId;
     this.reassignmentBuildingId = buildingId;
     this.newReassignment.IdEdificio = buildingId;
     this.newReassignment.IdArea = 0;
     this.reassignmentAreas = [];
     this.clearReassignmentEmployee();
-    this.isLoadingAreas = buildingId > 0;
+    this.isLoadingReassignmentAreas = buildingId > 0;
     if (buildingId > 0) {
-      this.adminService.getAreas(buildingId).pipe(finalize(() => this.isLoadingAreas = false)).subscribe({
-        next: (areas) => this.reassignmentAreas = areas,
-        error: () => this.errorMessage = 'No se pudieron cargar los departamentos del edificio.',
+      this.adminService.getAreas(buildingId).pipe(
+        finalize(() => {
+          if (requestId !== this.reassignmentAreaRequestId) return;
+          this.isLoadingReassignmentAreas = false;
+          this.changeDetector.markForCheck();
+        }),
+      ).subscribe({
+        next: (areas) => {
+          if (requestId !== this.reassignmentAreaRequestId) return;
+          this.reassignmentAreas = areas;
+          this.syncReassignmentEmployees();
+          this.changeDetector.markForCheck();
+        },
+        error: () => {
+          if (requestId !== this.reassignmentAreaRequestId) return;
+          this.errorMessage = 'No se pudieron cargar los departamentos del edificio.';
+          this.reassignmentAreas = [];
+          this.syncReassignmentEmployees();
+          this.changeDetector.markForCheck();
+        },
       });
     }
   }
 
   selectReassignmentArea(idArea: number): void {
     this.newReassignment.IdArea = Number(idArea);
-    this.clearReassignmentEmployee();
-    this.reassignmentEmployees = this.allEmployeeOptions.filter((employee) => employee.IdArea === this.newReassignment.IdArea);
+    this.syncReassignmentEmployees();
+  }
+
+  private syncReassignmentEmployees(): void {
+    if (this.newReassignment.IdArea > 0) {
+      this.reassignmentEmployees = this.allEmployeeOptions.filter((employee) => employee.IdArea === this.newReassignment.IdArea);
+      return;
+    }
+
+    const areaIds = new Set(this.reassignmentAreas.map((area) => area.IdArea));
+    this.reassignmentEmployees = this.allEmployeeOptions.filter((employee) => areaIds.has(employee.IdArea));
   }
 
   selectReassignmentEmployee(employeeIndex: number | null): void {

@@ -1,7 +1,7 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Oracle.ManagedDataAccess.Client;
-using System.Security.Claims;
 using SistemaInventario.Api.Models;
 using SistemaInventario.Api.Services;
 
@@ -10,16 +10,17 @@ namespace SistemaInventario.Api.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/admin")]
-// Fachada HTTP del módulo administrativo: valida solicitudes, aplica roles y
+// Fachada HTTP del módulo administrativo: valida solicitudes, aplica permisos por módulo y
 // delega inventario, reasignaciones y usuarios al AdminService.
-public sealed class AdminController(IAdminService adminService, IModulePermissionService modulePermissions) : ControllerBase
+public sealed class AdminController(
+    IAdminService adminService,
+    IModulePermissionService modulePermissions) : ControllerBase
 {
     [HttpGet("devices")]
-    [Authorize(Policy = ModulePolicies.Devices)]
+    [Authorize(Policy = ModulePolicies.DeviceSupport)]
     // Lista equipos con tipo, área y responsable actual.
     public async Task<ActionResult<PagedResult<DeviceDto>>> GetDevices(
         [FromQuery] int page,
-        [FromQuery] int? pageSize,
         [FromQuery] string? searchTerm,
         [FromQuery] string? brand,
         [FromQuery] string? model,
@@ -29,7 +30,7 @@ public sealed class AdminController(IAdminService adminService, IModulePermissio
         [FromQuery] int? areaId,
         CancellationToken cancellationToken) =>
         Ok(await adminService.GetDevices(
-            page, pageSize ?? 25, searchTerm, brand, model, typeId, regionalId, buildingId, areaId, cancellationToken));
+            page, searchTerm, brand, model, typeId, regionalId, buildingId, areaId, cancellationToken));
 
     [HttpGet("device-options")]
     [Authorize(Policy = ModulePolicies.AssignmentSupport)]
@@ -46,7 +47,7 @@ public sealed class AdminController(IAdminService adminService, IModulePermissio
         Ok(await adminService.GetDeviceTypes(cancellationToken));
 
     [HttpGet("employees/search")]
-    [Authorize(Policy = ModulePolicies.DeviceSupport)]
+    [Authorize(Policy = ModulePolicies.AssignmentSupport)]
     public async Task<ActionResult<IReadOnlyList<EmployeeSearchDto>>> SearchEmployees(
         [FromQuery] string? searchTerm,
         CancellationToken cancellationToken) =>
@@ -87,7 +88,7 @@ public sealed class AdminController(IAdminService adminService, IModulePermissio
     }
 
     [HttpGet("buildings")]
-    [Authorize(Policy = ModulePolicies.DeviceSupport)]
+    [Authorize(Policy = ModulePolicies.LocationCatalogs)]
     public async Task<ActionResult<IReadOnlyList<BuildingDto>>> GetBuildings(CancellationToken cancellationToken) =>
         Ok(await adminService.GetBuildings(cancellationToken));
 
@@ -273,7 +274,7 @@ public sealed class AdminController(IAdminService adminService, IModulePermissio
     }
 
     [HttpGet("areas/{idEdificio:int}")]
-    [Authorize(Policy = ModulePolicies.DeviceSupport)]
+    [Authorize(Policy = ModulePolicies.LocationCatalogs)]
     public async Task<ActionResult<IReadOnlyList<AreaDto>>> GetAreas(int idEdificio, CancellationToken cancellationToken) =>
         Ok(await adminService.GetAreas(idEdificio, cancellationToken));
 
@@ -390,12 +391,10 @@ public sealed class AdminController(IAdminService adminService, IModulePermissio
     public async Task<IActionResult> CreateUser(CreateAdminUserDto user, CancellationToken cancellationToken)
     {
         var validationMessage = ValidateUser(user);
-        validationMessage ??= ValidateModules(user.Modules);
         if (validationMessage is not null)
         {
             return BadRequest(new { Message = validationMessage });
         }
-        if (user.IsSuperAdmin && !await CurrentUserIsSuperAdmin(cancellationToken)) return Forbid();
 
         try
         {
@@ -416,18 +415,9 @@ public sealed class AdminController(IAdminService adminService, IModulePermissio
         CancellationToken cancellationToken)
     {
         var validationMessage = ValidateUser(user);
-        validationMessage ??= ValidateModules(user.Modules);
         if (validationMessage is not null)
         {
             return BadRequest(new { Message = validationMessage });
-        }
-
-        var actorIsSuperAdmin = await CurrentUserIsSuperAdmin(cancellationToken);
-        var targetIsSuperAdmin = await modulePermissions.HasAnyModule(idUsuario, [AppModules.SuperAdmin], cancellationToken);
-        if ((user.IsSuperAdmin || targetIsSuperAdmin) && !actorIsSuperAdmin) return Forbid();
-        if (targetIsSuperAdmin && !user.IsSuperAdmin && await modulePermissions.GetSuperAdminCount(cancellationToken) <= 1)
-        {
-            return Conflict(new { Message = "Debe permanecer al menos un administrador total." });
         }
 
         return await adminService.UpdateUser(idUsuario, user, cancellationToken)
@@ -447,13 +437,6 @@ public sealed class AdminController(IAdminService adminService, IModulePermissio
     // Elimina usuarios y traduce conflictos de integridad a una respuesta 409.
     public async Task<IActionResult> DeleteUser(int idUsuario, CancellationToken cancellationToken)
     {
-        var actorIsSuperAdmin = await CurrentUserIsSuperAdmin(cancellationToken);
-        var targetIsSuperAdmin = await modulePermissions.HasAnyModule(idUsuario, [AppModules.SuperAdmin], cancellationToken);
-        if (targetIsSuperAdmin && !actorIsSuperAdmin) return Forbid();
-        if (targetIsSuperAdmin && await modulePermissions.GetSuperAdminCount(cancellationToken) <= 1)
-        {
-            return Conflict(new { Message = "Debe permanecer al menos un administrador total." });
-        }
         try
         {
             await adminService.DeleteUser(idUsuario, cancellationToken);
@@ -515,22 +498,5 @@ public sealed class AdminController(IAdminService adminService, IModulePermissio
         return estado.Trim().ToUpperInvariant() is "ACTIVO" or "INACTIVO"
             ? null
             : "El estado debe ser ACTIVO o INACTIVO.";
-    }
-
-    private static string? ValidateModules(IReadOnlyList<string>? modules)
-    {
-        if (modules is null) return "Selecciona los módulos del usuario.";
-        if (modules.Any(module => !AppModules.Assignable.Contains(module, StringComparer.OrdinalIgnoreCase)))
-        {
-            return "La selección contiene un módulo no válido.";
-        }
-        return null;
-    }
-
-    private async Task<bool> CurrentUserIsSuperAdmin(CancellationToken cancellationToken)
-    {
-        var userIdValue = User.FindFirstValue("sub") ?? User.FindFirstValue(System.Security.Claims.ClaimTypes.NameIdentifier);
-        return int.TryParse(userIdValue, out var userId)
-            && await modulePermissions.HasAnyModule(userId, [AppModules.SuperAdmin], cancellationToken);
     }
 }

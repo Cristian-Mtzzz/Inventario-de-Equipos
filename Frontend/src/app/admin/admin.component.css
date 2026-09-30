@@ -232,7 +232,7 @@ select:focus {
     box-shadow: 0 0 0 3px rgba(57, 123, 120, .12);
 }
 
-.admin-form button {
+.admin-form button:not(.searchable-select-toggle) {
     padding: .78rem 1rem;
     border: 0;
     border-radius: 5px;
@@ -240,10 +240,9 @@ select:focus {
     background: #276968;
     cursor: pointer;
     font-weight: 700;
-    transition: transform .2s, background .2s;
 }
 
-.admin-form button:hover {
+.admin-form button:not(.searchable-select-toggle):hover {
     background: #1b5252;
     transform: translateY(-1px);
 }
@@ -264,6 +263,10 @@ select:focus {
     width: auto;
     justify-self: end;
     align-self: stretch;
+}
+
+.device-filter-bar > button.secondary:not(.employee-search-trigger) {
+    justify-self: start;
 }
 
 .table-wrap {

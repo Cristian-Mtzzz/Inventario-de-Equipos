@@ -1,36 +1,30 @@
-import { ChangeDetectorRef, Component, output } from '@angular/core';
+import { ChangeDetectorRef, Component, inject, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize, forkJoin, Observable } from 'rxjs';
+import { SearchableSelectDirective } from '../shared/searchable-select.directive';
 import { AdminService } from './admin.service';
 import { Building, CatalogDepartment, DirectoryEmployee, RegionalOption } from './admin.models';
 
 type CatalogView = 'regionals' | 'buildings' | 'departments' | 'employees';
+type CatalogPanel = 'locations' | 'regionals';
 type DeleteRequest = { view: CatalogView; key: number | string; label: string };
-type LocationSearchResult = {
-  key: string;
-  type: 'Edificio' | 'Departamento' | 'Empleado';
-  title: string;
-  location: string;
-  IdEdificio: number;
-  IdArea?: number;
-  EmployeeKey?: string;
-};
 
 @Component({
   selector: 'app-catalog-management',
-  imports: [FormsModule],
+  imports: [FormsModule, SearchableSelectDirective],
   templateUrl: './catalog-management.component.html',
   styleUrl: './catalog-management.component.css',
 })
-//exporta la clase CatalogManagementComponent que maneja la gestión de catálogos en la aplicación
-//  incluyendo la visualización, creación, edición y eliminación de regionales, edificios, departamentos y empleados.
 export class CatalogManagementComponent {
   readonly changed = output<void>();
+  private readonly changeDetector = inject(ChangeDetectorRef);
   readonly views: { id: CatalogView; label: string }[] = [
     { id: 'regionals', label: 'Regionales' },
-    { id: 'buildings', label: 'Ubicaciones' },
+    { id: 'buildings', label: 'Edificios' },
+    { id: 'departments', label: 'Departamentos' },
+    { id: 'employees', label: 'Empleados' },
   ];
-  //estados y propiedades del componente
+  activePanel: CatalogPanel = 'locations';
   activeView: CatalogView = 'regionals';
   pageSize = 50;
   currentPage = 1;
@@ -45,44 +39,79 @@ export class CatalogManagementComponent {
   isLoading = false;
   isSaving = false;
   isDialogOpen = false;
-  lockLocationRegion = false;
-  lockLocationBuilding = false;
-  lockLocationDepartment = false;
+  isLocationContextLocked = false;
   isDeleteDialogOpen = false;
+  isEmployeeSearchOpen = false;
   editingId: number | null = null;
   editingEmployeeKey = '';
   pendingDelete: DeleteRequest | null = null;
+  catalogRegionalId: number | null = null;
+  catalogBuildingId: number | null = null;
+  catalogAreaId: number | null = null;
+  catalogEmployeeKey = '';
   selectedRegionId: number | null = null;
   selectedBuildingId: number | null = null;
   selectedAreaId: number | null = null;
-  locationRegionId: number | null = null;
-  locationBuildingOptionId: number | null = null;
-  locationBuildingId: number | null = null;
-  locationDepartmentOptionId: number | null = null;
-  locationAreaId: number | null = null;
-  locationEmployeeOptionKey = '';
-  locationEmployeeKey = '';
-  isLocationSearchOpen = false;
-  locationSearchTerm = '';
-  locationSearchSubmitted = false;
-  locationSearchError = '';
   regionalName = '';
   buildingName = '';
   departmentName = '';
   employeeName = '';
   employeeNoPago = '';
+  employeeSearchTerm = '';
+  employeeSearchError = '';
   message = '';
   errorMessage = '';
 
-    //metodo constructor que inyecta el servicio AdminService y ChangeDetectorRef, y llama a loadCatalogs() para cargar los catálogos iniciales.
-  constructor(
-    private readonly adminService: AdminService,
-    private readonly changeDetector: ChangeDetectorRef,
-  ) {
+  constructor(private readonly adminService: AdminService) {
     this.loadCatalogs();
   }
 
-    //metodos para filtrar y paginar los catálogos de regionales, edificios, departamentos y empleados, así como para manejar la creación, edición y eliminación de registros.
+  get buildingsForSelectedRegional(): Building[] {
+    if (this.catalogRegionalId === null) return [];
+    const buildings = this.buildings.filter((building) => building.IdRegional === this.catalogRegionalId);
+    return this.filterRows(buildings, (row) => [row.IdEdificio, row.NombreEdificio]);
+  }
+
+  get departmentsForSelectedBuilding(): CatalogDepartment[] {
+    if (this.catalogBuildingId === null) return [];
+    const departments = this.departments.filter((department) => department.IdEdificio === this.catalogBuildingId);
+    return this.filterRows(departments, (row) => [row.IdArea, row.NombreArea]);
+  }
+
+  get employeesForSelectedDepartment(): DirectoryEmployee[] {
+    if (this.catalogAreaId === null) return [];
+    const employees = this.employeeRows.filter((employee) => employee.IdArea === this.catalogAreaId);
+    return this.filterRows(employees, (row) => [row.NoPago, row.NombreCompleto]);
+  }
+
+  get searchedDirectoryEmployees(): DirectoryEmployee[] {
+    const normalizedSearch = this.normalizeSearch(this.employeeSearchTerm);
+    if (normalizedSearch.length < 2) return [];
+    const searchTerms = normalizedSearch.split(/\s+/).filter(Boolean);
+    return this.employeeRows
+      .filter((employee) => {
+        const searchableText = this.normalizeSearch(`${employee.NombreCompleto} ${employee.NoPago}`);
+        return searchTerms.every((term) => searchableText.includes(term));
+      })
+      .slice(0, 50);
+  }
+
+  get selectedRegional(): RegionalOption | null {
+    return this.regionals.find((regional) => regional.IdRegional === this.catalogRegionalId) ?? null;
+  }
+
+  get selectedCatalogDepartment(): CatalogDepartment | null {
+    return this.departments.find((department) => department.IdArea === this.catalogAreaId) ?? null;
+  }
+
+  get selectedCatalogBuilding(): Building | null {
+    return this.buildings.find((building) => building.IdEdificio === this.catalogBuildingId) ?? null;
+  }
+
+  get selectedCatalogEmployee(): DirectoryEmployee | null {
+    return this.employeesForSelectedDepartment.find((employee) => employee.EmployeeKey === this.catalogEmployeeKey) ?? null;
+  }
+
   get filteredBuildings(): Building[] {
     return this.selectedRegionId === null
       ? this.buildings
@@ -95,14 +124,17 @@ export class CatalogManagementComponent {
       : this.departments.filter((department) => department.IdEdificio === this.selectedBuildingId);
   }
 
-  get locationBuildingName(): string {
-    return this.buildings.find((building) => building.IdEdificio === this.locationBuildingId)?.NombreEdificio
+  get selectedBuildingName(): string {
+    return this.buildings.find((building) => building.IdEdificio === this.selectedBuildingId)?.NombreEdificio
       ?? 'Selecciona un edificio';
   }
 
-  get locationDepartmentName(): string {
-    return this.departments.find((department) => department.IdArea === this.locationAreaId)?.NombreArea
-      ?? 'Selecciona un departamento';
+  get selectedRegionName(): string {
+    return this.regionals.find((regional) => regional.IdRegional === this.selectedRegionId)?.NombreRegional ?? '-';
+  }
+
+  get selectedAreaName(): string {
+    return this.departments.find((department) => department.IdArea === this.selectedAreaId)?.NombreArea ?? '-';
   }
 
   get employeeRows(): DirectoryEmployee[] {
@@ -126,94 +158,13 @@ export class CatalogManagementComponent {
       this.employeeRegionalName(row), this.employeeBuildingName(row), this.employeeDepartmentName(row)]);
   }
 
-  get locationBuildings(): Building[] {
-    return this.locationRegionId === null
-      ? []
-      : this.catalogBuildings.filter((building) => building.IdRegional === this.locationRegionId);
-  }
-
-  get locationDepartments(): CatalogDepartment[] {
-    return this.locationBuildingId === null
-      ? []
-      : this.catalogDepartments.filter((department) => department.IdEdificio === this.locationBuildingId);
-  }
-
-  get locationEmployees(): DirectoryEmployee[] {
-    return this.locationAreaId === null
-      ? []
-      : this.catalogEmployees.filter((employee) => employee.IdArea === this.locationAreaId);
-  }
-
-  get locationSearchResults(): LocationSearchResult[] {
-    const term = this.locationSearchTerm.trim().toLocaleLowerCase();
-    if (!this.locationSearchSubmitted || term.length < 2) return [];
-
-    const results: LocationSearchResult[] = [];
-    const matches = (values: unknown[]) => values.some((value) =>
-      String(value ?? '').toLocaleLowerCase().includes(term));
-
-    this.buildings.forEach((building) => {
-      const regional = this.regionals.find((item) => item.IdRegional === building.IdRegional);
-      if (!matches([building.IdEdificio, building.NombreEdificio, regional?.NombreRegional])) return;
-      results.push({
-        key: `building-${building.IdEdificio}`,
-        type: 'Edificio',
-        title: building.NombreEdificio,
-        location: regional?.NombreRegional ?? 'Sin regional',
-        IdEdificio: building.IdEdificio,
-      });
-    });
-
-    this.departments.forEach((department) => {
-      if (!matches([department.IdArea, department.NombreArea, department.NombreEdificio, department.NombreRegional])) return;
-      results.push({
-        key: `department-${department.IdArea}`,
-        type: 'Departamento',
-        title: department.NombreArea,
-        location: `${department.NombreEdificio} · ${department.NombreRegional ?? 'Sin regional'}`,
-        IdEdificio: department.IdEdificio,
-        IdArea: department.IdArea,
-      });
-    });
-
-    const departmentsById = new Map(this.departments.map((department) => [department.IdArea, department]));
-    this.employees.forEach((employee) => {
-      if (employee.IdArea === null) return;
-      const department = departmentsById.get(employee.IdArea);
-      if (!matches([
-        employee.NoPago,
-        employee.NombreCompleto,
-        department?.NombreArea,
-        department?.NombreEdificio,
-        department?.NombreRegional,
-      ])) return;
-      results.push({
-        key: `employee-${employee.EmployeeKey}`,
-        type: 'Empleado',
-        title: employee.NombreCompleto,
-        location: `${department?.NombreArea ?? 'Sin departamento'} · ${department?.NombreEdificio ?? 'Sin edificio'} · ${department?.NombreRegional ?? 'Sin regional'}`,
-        IdEdificio: department?.IdEdificio ?? 0,
-        IdArea: employee.IdArea,
-        EmployeeKey: employee.EmployeeKey,
-      });
-    });
-
-    return results.slice(0, 100);
-  }
-
-  //metodos para obtener las filas visibles de los catálogos de regionales, edificios, departamentos y empleados
-  //así como para calcular el número total de páginas y las filas visibles en la página actual.
-
   get visibleRegionals(): RegionalOption[] { return this.pageRows(this.catalogRegionals); }
   get visibleBuildings(): Building[] { return this.pageRows(this.catalogBuildings); }
   get visibleDepartments(): CatalogDepartment[] { return this.pageRows(this.catalogDepartments); }
   get visibleEmployees(): DirectoryEmployee[] { return this.pageRows(this.catalogEmployees); }
 
   get filteredCount(): number {
-    return this.activeView === 'regionals' ? this.catalogRegionals.length
-      : this.activeView === 'buildings' ? this.catalogBuildings.length
-      : this.activeView === 'departments' ? this.catalogDepartments.length
-      : this.catalogEmployees.length;
+    return this.catalogRegionals.length;
   }
 
   get totalPages(): number {
@@ -252,29 +203,31 @@ export class CatalogManagementComponent {
         this.buildings = catalogs.buildings;
         this.departments = catalogs.departments;
         this.employees = catalogs.employees;
-        if (this.locationRegionId === null && catalogs.regionals.length > 0) {
-          const buildingCounts = new Map<number, number>();
-          catalogs.buildings.forEach((building) => {
-            if (building.IdRegional === null) return;
-            buildingCounts.set(building.IdRegional, (buildingCounts.get(building.IdRegional) ?? 0) + 1);
-          });
-          const preferredRegional = catalogs.regionals.find((regional) =>
-            regional.NombreRegional.trim().toLocaleUpperCase() === 'TEGUCIGALPA');
-          const mostPopulatedRegional = catalogs.regionals.reduce((mostPopulated, regional) =>
-            (buildingCounts.get(regional.IdRegional) ?? 0) > (buildingCounts.get(mostPopulated.IdRegional) ?? 0)
-              ? regional
-              : mostPopulated).IdRegional;
-          this.locationRegionId = preferredRegional?.IdRegional ?? mostPopulatedRegional;
-        }
+        this.syncCatalogSelection();
         this.currentPage = Math.min(this.currentPage, this.totalPages);
+        this.changeDetector.markForCheck();
       },
-      error: (error) => this.errorMessage = this.getErrorMessage(error, 'No se pudieron cargar los catálogos.'),
+      error: (error) => {
+        this.errorMessage = this.getErrorMessage(error, 'No se pudieron cargar los catálogos.');
+        this.changeDetector.markForCheck();
+      },
     });
   }
 
   //metodo para seleccionar la vista del catalogo 
   selectView(view: CatalogView): void {
     this.activeView = view;
+    this.currentPage = 1;
+    this.searchTerm = '';
+    this.sortColumn = '';
+    this.sortDirection = 'asc';
+    this.closeDialog();
+    this.message = '';
+    this.errorMessage = '';
+  }
+
+  selectPanel(panel: CatalogPanel): void {
+    this.activePanel = panel;
     this.currentPage = 1;
     this.searchTerm = '';
     this.sortColumn = '';
@@ -314,33 +267,26 @@ export class CatalogManagementComponent {
     this.isDialogOpen = true;
   }
 
-  openCreateFor(view: Exclude<CatalogView, 'regionals'>): void {
+  openCreateFor(view: CatalogView): void {
     this.activeView = view;
     this.openCreate();
-    this.selectedRegionId = this.locationRegionId;
-    this.lockLocationRegion = true;
-    this.lockLocationBuilding = view !== 'buildings';
-    if (view !== 'buildings') {
-      this.selectedBuildingId = this.locationBuildingId;
-    }
-    if (view === 'employees') {
-      this.selectedAreaId = this.locationAreaId;
-      this.lockLocationDepartment = true;
-    }
+    this.selectedRegionId = this.catalogRegionalId;
+    this.selectedBuildingId = this.catalogBuildingId;
+    this.selectedAreaId = this.catalogAreaId;
+    this.isLocationContextLocked = true;
   }
 
   editRegional(regional: RegionalOption): void {
-    this.resetForm();
     this.activeView = 'regionals';
+    this.resetForm();
     this.editingId = regional.IdRegional;
     this.regionalName = regional.NombreRegional;
     this.isDialogOpen = true;
   }
 
   editBuilding(building: Building): void {
-    this.resetForm();
     this.activeView = 'buildings';
-    this.lockLocationRegion = true;
+    this.resetForm();
     this.editingId = building.IdEdificio;
     this.buildingName = building.NombreEdificio;
     this.selectedRegionId = building.IdRegional;
@@ -348,10 +294,8 @@ export class CatalogManagementComponent {
   }
 
   editDepartment(department: CatalogDepartment): void {
-    this.resetForm();
     this.activeView = 'departments';
-    this.lockLocationRegion = true;
-    this.lockLocationBuilding = true;
+    this.resetForm();
     this.editingId = department.IdArea;
     this.departmentName = department.NombreArea;
     this.selectedRegionId = department.IdRegional;
@@ -360,11 +304,8 @@ export class CatalogManagementComponent {
   }
 
   editEmployee(employee: DirectoryEmployee): void {
-    this.resetForm();
     this.activeView = 'employees';
-    this.lockLocationRegion = true;
-    this.lockLocationBuilding = true;
-    this.lockLocationDepartment = true;
+    this.resetForm();
     this.editingEmployeeKey = employee.EmployeeKey;
     this.employeeNoPago = employee.NoPago;
     this.employeeName = employee.NombreCompleto;
@@ -388,121 +329,101 @@ export class CatalogManagementComponent {
     this.selectedAreaId = null;
   }
 
-  selectLocationRegion(idRegional: number | null): void {
-    this.locationRegionId = idRegional;
-    this.locationBuildingOptionId = null;
-    this.locationBuildingId = null;
-    this.locationDepartmentOptionId = null;
-    this.locationAreaId = null;
-    this.locationEmployeeOptionKey = '';
-    this.locationEmployeeKey = '';
+  selectCatalogRegional(idRegional: number | null): void {
+    this.catalogRegionalId = idRegional;
+    this.catalogBuildingId = null;
+    this.catalogAreaId = null;
+    this.catalogEmployeeKey = '';
+    this.searchTerm = '';
   }
 
-  selectLocationBuilding(idEdificio: number | null): void {
-    this.locationBuildingOptionId = idEdificio;
-    if (idEdificio === null) {
-      this.locationBuildingId = null;
-      this.locationDepartmentOptionId = null;
-      this.locationAreaId = null;
-      this.locationEmployeeOptionKey = '';
-      this.locationEmployeeKey = '';
+  selectCatalogBuilding(idEdificio: number): void {
+    this.catalogBuildingId = Number(idEdificio) || null;
+    this.catalogAreaId = null;
+    this.catalogEmployeeKey = '';
+    this.searchTerm = '';
+  }
+
+  selectCatalogDepartment(idArea: number): void {
+    this.catalogAreaId = Number(idArea) || null;
+    this.catalogEmployeeKey = '';
+    this.searchTerm = '';
+  }
+
+  selectCatalogEmployee(employeeKey: string): void {
+    this.catalogEmployeeKey = employeeKey;
+    this.searchTerm = '';
+  }
+
+  openEmployeeSearch(): void {
+    this.employeeSearchTerm = '';
+    this.employeeSearchError = '';
+    this.isEmployeeSearchOpen = true;
+  }
+
+  closeEmployeeSearch(): void {
+    this.isEmployeeSearchOpen = false;
+    this.employeeSearchError = '';
+  }
+
+  updateEmployeeSearch(value: string): void {
+    this.employeeSearchTerm = value;
+    this.employeeSearchError = '';
+  }
+
+  selectSearchedEmployee(employee: DirectoryEmployee): void {
+    const department = this.departments.find((item) => item.IdArea === employee.IdArea);
+    if (!department) {
+      this.employeeSearchError = 'El empleado no tiene un departamento válido para completar su ubicación.';
       return;
     }
-    if (this.locationBuildingId !== idEdificio) {
-      this.locationDepartmentOptionId = null;
-      this.locationAreaId = null;
-      this.locationEmployeeOptionKey = '';
-      this.locationEmployeeKey = '';
+
+    this.catalogRegionalId = department.IdRegional;
+    this.catalogBuildingId = department.IdEdificio;
+    this.catalogAreaId = department.IdArea;
+    this.catalogEmployeeKey = employee.EmployeeKey;
+    this.activePanel = 'locations';
+    this.closeEmployeeSearch();
+  }
+
+  editSelectedRegional(): void {
+    if (this.selectedRegional) this.editRegional(this.selectedRegional);
+  }
+
+  deleteSelectedRegional(): void {
+    if (this.selectedRegional) {
+      this.askDelete('regionals', this.selectedRegional.IdRegional, this.selectedRegional.NombreRegional);
     }
-    this.locationBuildingId = idEdificio;
   }
 
-  editLocationBuilding(): void {
-    const building = this.buildings.find((item) => item.IdEdificio === this.locationBuildingOptionId);
-    if (building) this.editBuilding(building);
+  editSelectedBuilding(): void {
+    if (this.selectedCatalogBuilding) this.editBuilding(this.selectedCatalogBuilding);
   }
 
-  deleteLocationBuilding(): void {
-    const building = this.buildings.find((item) => item.IdEdificio === this.locationBuildingOptionId);
-    if (building) this.askDelete('buildings', building.IdEdificio, building.NombreEdificio);
-  }
-
-  selectLocationDepartment(idArea: number | null): void {
-    this.locationDepartmentOptionId = idArea;
-    if (idArea === null) {
-      this.locationAreaId = null;
-      this.locationEmployeeOptionKey = '';
-      this.locationEmployeeKey = '';
-      return;
+  deleteSelectedBuilding(): void {
+    if (this.selectedCatalogBuilding) {
+      this.askDelete('buildings', this.selectedCatalogBuilding.IdEdificio, this.selectedCatalogBuilding.NombreEdificio);
     }
-    if (this.locationAreaId !== idArea) {
-      this.locationEmployeeOptionKey = '';
-      this.locationEmployeeKey = '';
+  }
+
+  editSelectedDepartment(): void {
+    if (this.selectedCatalogDepartment) this.editDepartment(this.selectedCatalogDepartment);
+  }
+
+  deleteSelectedDepartment(): void {
+    if (this.selectedCatalogDepartment) {
+      this.askDelete('departments', this.selectedCatalogDepartment.IdArea, this.selectedCatalogDepartment.NombreArea);
     }
-    this.locationAreaId = idArea;
   }
 
-  editLocationDepartment(): void {
-    const department = this.departments.find((item) => item.IdArea === this.locationDepartmentOptionId);
-    if (department) this.editDepartment(department);
+  editSelectedEmployee(): void {
+    if (this.selectedCatalogEmployee) this.editEmployee(this.selectedCatalogEmployee);
   }
 
-  deleteLocationDepartment(): void {
-    const department = this.departments.find((item) => item.IdArea === this.locationDepartmentOptionId);
-    if (department) this.askDelete('departments', department.IdArea, department.NombreArea);
-  }
-
-  selectLocationEmployee(employeeKey: string): void {
-    this.locationEmployeeOptionKey = employeeKey;
-    this.locationEmployeeKey = employeeKey;
-  }
-
-  openLocationSearch(): void {
-    this.locationSearchTerm = '';
-    this.locationSearchSubmitted = false;
-    this.locationSearchError = '';
-    this.isLocationSearchOpen = true;
-  }
-
-  closeLocationSearch(): void {
-    this.isLocationSearchOpen = false;
-  }
-
-  updateLocationSearch(value: string): void {
-    this.locationSearchTerm = value;
-    this.locationSearchSubmitted = false;
-    this.locationSearchError = '';
-  }
-
-  searchLocationCatalogs(): void {
-    this.locationSearchError = '';
-    if (this.locationSearchTerm.trim().length < 2) {
-      this.locationSearchSubmitted = false;
-      this.locationSearchError = 'Escribe al menos 2 caracteres para buscar.';
-      return;
+  deleteSelectedEmployee(): void {
+    if (this.selectedCatalogEmployee) {
+      this.askDelete('employees', this.selectedCatalogEmployee.EmployeeKey, this.selectedCatalogEmployee.NombreCompleto);
     }
-    this.locationSearchSubmitted = true;
-  }
-
-  selectLocationSearchResult(result: LocationSearchResult): void {
-    const building = this.buildings.find((item) => item.IdEdificio === result.IdEdificio);
-    if (!building || building.IdRegional === null) return;
-
-    this.selectLocationRegion(building.IdRegional);
-    this.selectLocationBuilding(building.IdEdificio);
-    if (result.IdArea !== undefined) this.selectLocationDepartment(result.IdArea);
-    if (result.EmployeeKey) this.selectLocationEmployee(result.EmployeeKey);
-    this.closeLocationSearch();
-  }
-
-  editLocationEmployee(): void {
-    const employee = this.locationEmployees.find((item) => item.EmployeeKey === this.locationEmployeeOptionKey);
-    if (employee) this.editEmployee(employee);
-  }
-
-  deleteLocationEmployee(): void {
-    const employee = this.locationEmployees.find((item) => item.EmployeeKey === this.locationEmployeeOptionKey);
-    if (employee) this.askDelete('employees', employee.EmployeeKey, employee.NombreCompleto);
   }
 
   closeDialog(): void {
@@ -546,10 +467,7 @@ export class CatalogManagementComponent {
     }
 
     this.isSaving = true;
-    request.pipe(finalize(() => {
-      this.isSaving = false;
-      this.changeDetector.markForCheck();
-    })).subscribe({
+    request.pipe(finalize(() => this.isSaving = false)).subscribe({
       next: () => {
         this.message = this.editingId === null && !this.editingEmployeeKey
           ? 'Registro agregado correctamente.'
@@ -582,22 +500,9 @@ export class CatalogManagementComponent {
       : view === 'departments' ? this.adminService.deleteDepartment(Number(key))
       : this.adminService.deleteDirectoryEmployeeByKey(String(key));
     this.isSaving = true;
-    request.pipe(finalize(() => {
-      this.isSaving = false;
-      this.changeDetector.markForCheck();
-    })).subscribe({
+    request.pipe(finalize(() => this.isSaving = false)).subscribe({
       next: () => {
         this.message = 'Registro eliminado correctamente.';
-        if (view === 'regionals' && Number(key) === this.locationRegionId) {
-          this.locationRegionId = null;
-          this.locationBuildingId = null;
-          this.locationAreaId = null;
-        } else if (view === 'buildings' && Number(key) === this.locationBuildingId) {
-          this.locationBuildingId = null;
-          this.locationAreaId = null;
-        } else if (view === 'departments' && Number(key) === this.locationAreaId) {
-          this.locationAreaId = null;
-        }
         this.adminService.clearEmployeeOptionsCache();
         this.changed.emit();
         this.cancelDelete();
@@ -619,8 +524,27 @@ export class CatalogManagementComponent {
     return this.departments.find((department) => department.IdArea === employee.IdArea)?.NombreRegional ?? '-';
   }
 
+  private syncCatalogSelection(): void {
+    if (this.catalogRegionalId !== null && !this.regionals.some((regional) => regional.IdRegional === this.catalogRegionalId)) {
+      this.catalogRegionalId = null;
+    }
+    if (!this.buildingsForSelectedRegional.some((building) => building.IdEdificio === this.catalogBuildingId)) {
+      this.catalogBuildingId = null;
+    }
+    if (!this.departmentsForSelectedBuilding.some((department) => department.IdArea === this.catalogAreaId)) {
+      this.catalogAreaId = null;
+    }
+    if (!this.employeesForSelectedDepartment.some((employee) => employee.EmployeeKey === this.catalogEmployeeKey)) {
+      this.catalogEmployeeKey = '';
+    }
+  }
+
   private requireFields(message: string): void {
     this.errorMessage = message;
+  }
+
+  private normalizeSearch(value: string): string {
+    return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase().trim();
   }
 
   private filterRows<T>(rows: T[], values: (row: T) => unknown[]): T[] {
@@ -643,11 +567,9 @@ export class CatalogManagementComponent {
   }
 
   private resetForm(): void {
-    this.lockLocationRegion = false;
-    this.lockLocationBuilding = false;
-    this.lockLocationDepartment = false;
     this.editingId = null;
     this.editingEmployeeKey = '';
+    this.isLocationContextLocked = false;
     this.regionalName = '';
     this.buildingName = '';
     this.departmentName = '';

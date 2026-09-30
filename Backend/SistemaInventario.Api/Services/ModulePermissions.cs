@@ -35,6 +35,8 @@ public static class ModulePolicies
     public const string Inventory = "ModuleInventory";
     public const string DeviceSupport = "ModuleDeviceSupport";
     public const string AssignmentSupport = "ModuleAssignmentSupport";
+    public const string LocationCatalogs = "ModuleLocationCatalogs";
+    public const string SuperAdmin = "ModuleSuperAdmin";
 }
 
 public sealed class ModuleAccessRequirement(params string[] modules) : IAuthorizationRequirement
