@@ -40,6 +40,24 @@ public sealed class AuthController(IAuthService authService, IModulePermissionSe
             isSuperAdmin));
     }
 
+    [HttpPost("refresh")]
+    [Authorize(Policy = "PasswordChange")]
+    public ActionResult RefreshSession()
+    {
+        var userIdValue = User.FindFirstValue("sub") ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var userName = User.FindFirstValue("unique_name") ?? User.FindFirstValue(ClaimTypes.Name);
+        var role = User.FindFirstValue(ClaimTypes.Role);
+        if (!int.TryParse(userIdValue, out var userId)
+            || string.IsNullOrWhiteSpace(userName)
+            || string.IsNullOrWhiteSpace(role))
+        {
+            return Unauthorized();
+        }
+
+        var mustChangePassword = User.FindFirstValue("must_change_password") == "true";
+        return Ok(new { Token = authService.RefreshToken(userId, userName, role, mustChangePassword) });
+    }
+
     [HttpPost("change-initial-password")]
     [Authorize(Policy = "PasswordChange")]
     public async Task<IActionResult> ChangeInitialPassword(

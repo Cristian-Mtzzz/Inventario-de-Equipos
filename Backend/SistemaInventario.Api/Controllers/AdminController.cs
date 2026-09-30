@@ -28,9 +28,10 @@ public sealed class AdminController(
         [FromQuery] int? regionalId,
         [FromQuery] int? buildingId,
         [FromQuery] int? areaId,
+        [FromQuery] string? state,
         CancellationToken cancellationToken) =>
         Ok(await adminService.GetDevices(
-            page, searchTerm, brand, model, typeId, regionalId, buildingId, areaId, cancellationToken));
+            page, searchTerm, brand, model, typeId, regionalId, buildingId, areaId, state, cancellationToken));
 
     [HttpGet("device-options")]
     [Authorize(Policy = ModulePolicies.AssignmentSupport)]
@@ -92,7 +93,7 @@ public sealed class AdminController(
         Ok(await adminService.GetBuildings(cancellationToken));
 
     [HttpGet("regionals")]
-    [Authorize(Policy = ModulePolicies.Maintenance)]
+    [Authorize(Policy = ModulePolicies.LocationCatalogs)]
     public async Task<ActionResult<IReadOnlyList<RegionalDto>>> GetRegionals(CancellationToken cancellationToken) =>
         Ok(await adminService.GetRegionals(cancellationToken));
 

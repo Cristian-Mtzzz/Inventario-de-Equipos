@@ -4,7 +4,7 @@
   <header class="admin-header">
     <div>
       <p class="eyebrow">CONTROL ADMINISTRATIVO</p>
-      <h1>Panel de administrador</h1>
+      <h1>{{ panelTitle }}</h1>
 
     </div>
     <div class="admin-header-actions">
@@ -49,6 +49,11 @@
       <select [(ngModel)]="selectedTypeId" (ngModelChange)="applyFilters()" name="adminType">
         <option [ngValue]="null">Todos los tipos</option>
         @for (type of deviceTypes; track type.IdTipo) { <option [ngValue]="type.IdTipo">{{ type.NombreTipo }}</option> }
+      </select>
+      <select [(ngModel)]="selectedDeviceStatus" (ngModelChange)="applyFilters()" name="adminStateFilter">
+        <option value="">Todos los estados</option>
+        <option value="ASIGNADO">Asignado</option>
+        <option value="DISPONIBLE">Disponible</option>
       </select>
       <select [ngModel]="selectedRegionalFilterId" (ngModelChange)="selectRegionalFilter($event)"
         name="adminRegionalFilter">
@@ -199,7 +204,8 @@
           </select>
         </div>
       </div>
-      <input [(ngModel)]="newReassignment.Motivo" name="motivo" placeholder="Motivo del Cambio" required />
+      <textarea class="reassignment-reason" [(ngModel)]="newReassignment.Motivo" name="motivo"
+        placeholder="Motivo del cambio" rows="3" required></textarea>
       <button type="submit">Registrar reasignación</button>
     </form>
     <div class="table-wrap">

@@ -38,6 +38,7 @@ export interface DevicePageQuery {
   RegionalId: number | null;
   BuildingId: number | null;
   AreaId: number | null;
+  State?: string;
 }
 
 export interface DeviceOption {

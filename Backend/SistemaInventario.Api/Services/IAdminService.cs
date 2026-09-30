@@ -14,6 +14,7 @@ public interface IAdminService
         int? regionalId,
         int? buildingId,
         int? areaId,
+        string? state,
         CancellationToken cancellationToken);
     Task<IReadOnlyList<DeviceOptionDto>> SearchDeviceOptions(string searchTerm, CancellationToken cancellationToken);
     Task<IReadOnlyList<EmployeeSearchDto>> SearchEmployees(string searchTerm, CancellationToken cancellationToken);

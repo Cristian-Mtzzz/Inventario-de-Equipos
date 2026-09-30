@@ -7,9 +7,10 @@
 }
 
 .workshop-shell {
-    width: min(1180px, 100%);
-    margin: 0 auto;
-    padding: 3rem clamp(1rem, 4vw, 3rem);
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: 2rem clamp(1rem, 2vw, 2rem);
 }
 
 .workshop-header {
@@ -87,10 +88,7 @@ h1 {
     grid-template-columns: 1.5fr 1fr;
     gap: .75rem;
     align-items: end;
-    padding: 1.25rem;
-    border: 1px solid #d8e4e0;
-    border-radius: 6px;
-    background: #fff;
+    padding: 0;
 }
 
 .maintenance-form h2 {
@@ -148,9 +146,6 @@ textarea:focus {
 
 .table-wrap {
     overflow: auto;
-    border: 1px solid #d8e4e0;
-    border-radius: 6px;
-    background: #fff;
 }
 
 table {
@@ -233,10 +228,7 @@ td button:disabled {
     align-items: center;
     justify-content: space-between;
     gap: 1rem;
-    padding: 1.25rem;
-    border: 1px solid #d8e4e0;
-    border-radius: 6px;
-    background: #fff;
+    padding: 0;
 }
 
 .workshop-actions h2 {

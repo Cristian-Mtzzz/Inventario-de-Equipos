@@ -6,7 +6,7 @@ import { Router } from '@angular/router';
 import { AuthService } from '../auth/auth.service';
 import { AdminService } from '../admin/admin.service';
 import { SearchableSelectDirective } from '../shared/searchable-select.directive';
-import { Area, Building, DeviceType } from '../admin/admin.models';
+import { Area, Building, DeviceType, RegionalOption } from '../admin/admin.models';
 import { Maintenance, MaintenanceEditRequest, MaintenanceEntryRequest, MaintenanceExitRequest, ReceptionEntryRequest, WorkshopDevice } from './taller.models';
 import { TallerService } from './taller.service';
 
@@ -28,8 +28,10 @@ export class TallerComponent {
   devices: WorkshopDevice[] = [];
   maintenances: Maintenance[] = [];
   deviceTypes: DeviceType[] = [];
+  regionals: RegionalOption[] = [];
   buildings: Building[] = [];
   receptionAreas: Area[] = [];
+  selectedReceptionRegionalId: number | null = null;
   selectedMaintenance: Maintenance | null = null;
   pendingDeleteMaintenance: Maintenance | null = null;
   activeWindow: 'reception' | 'entry' | 'exit' | 'edit' | null = null;
@@ -57,7 +59,13 @@ export class TallerComponent {
     this.loadDevices();
     this.loadMaintenances();
     this.loadDeviceTypes();
+    this.loadRegionals();
     this.loadBuildings();
+  }
+
+  get receptionBuildings(): Building[] {
+    if (this.selectedReceptionRegionalId === null) return [];
+    return this.buildings.filter((building) => building.IdRegional === this.selectedReceptionRegionalId);
   }
 
   loadDeviceTypes(): void {
@@ -74,6 +82,21 @@ export class TallerComponent {
       next: (buildings) => this.buildings = buildings,
       error: () => this.buildings = [],
     });
+  }
+
+  loadRegionals(): void {
+    this.adminService.getRegionals().subscribe({
+      next: (regionals) => this.regionals = regionals,
+      error: () => this.regionals = [],
+    });
+  }
+
+  selectReceptionRegion(idRegional: number | null): void {
+    this.selectedReceptionRegionalId = idRegional;
+    this.reception.IdEdificio = 0;
+    this.reception.IdArea = 0;
+    this.receptionAreas = [];
+    this.isLoadingReceptionAreas = false;
   }
 
   selectReceptionBuilding(idEdificio: number): void {
@@ -127,6 +150,7 @@ export class TallerComponent {
       IdArea: 0,
       FechaIngreso: this.getCurrentDateTime(),
     };
+    this.selectedReceptionRegionalId = null;
     this.receptionAreas = [];
     this.activeWindow = 'reception';
   }
@@ -135,8 +159,10 @@ export class TallerComponent {
     // Valida y registra la recepción con la fecha/hora generada por el sistema.
     this.message = '';
     this.errorMessage = '';
-    if (!this.reception.CodigoInventario.trim() || !this.reception.TipoDispositivo.trim() || this.reception.IdEdificio <= 0 || this.reception.IdArea <= 0 || !this.reception.FechaIngreso) {
-      this.errorMessage = 'Completa el número de inventario, tipo, edificio, departamento y fecha de ingreso.';
+    if (!this.reception.CodigoInventario.trim() || !this.reception.TipoDispositivo.trim()
+      || this.selectedReceptionRegionalId === null || this.reception.IdEdificio <= 0
+      || this.reception.IdArea <= 0 || !this.reception.FechaIngreso) {
+      this.errorMessage = 'Completa el número de inventario, tipo, regional, edificio, departamento y fecha de ingreso.';
       return;
     }
 

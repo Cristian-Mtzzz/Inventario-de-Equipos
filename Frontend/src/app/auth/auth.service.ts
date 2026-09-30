@@ -1,19 +1,25 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Injectable, signal } from '@angular/core';
-import { BehaviorSubject, Observable, map, tap } from 'rxjs';
+import { Router } from '@angular/router';
+import { BehaviorSubject, EMPTY, Observable, catchError, finalize, map, tap } from 'rxjs';
 import { AuthUser, LoginRequest, LoginResponse, ModuleAccess, UserRole } from './auth.models';
 
 const WELCOME_TOAST_DURATION_MS = 2000;
+const SESSION_IDLE_TIMEOUT_MS = 30 * 60 * 1000;
+const TOKEN_REFRESH_MARGIN_MS = 2 * 60 * 1000;
 
 const API_AUTH_URL = '/api/auth';
 const AUTH_TOKEN_KEY = 'sistema_inventario_token';
 const AUTH_USER_KEY = 'sistema_inventario_user';
+const LAST_ACTIVITY_KEY = 'sistema_inventario_last_activity';
 
 // Centraliza la sesión del navegador: envía credenciales, guarda el Json Web Tokens, expone
 // el usuario actual y ofrece comprobaciones reutilizables de autenticación/rol.
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private readonly currentUserSubject = new BehaviorSubject<AuthUser | null>(this.readUserFromToken());
+  private inactivityTimer: ReturnType<typeof setTimeout> | null = null;
+  private tokenRefreshInFlight = false;
   readonly currentUser$: Observable<AuthUser | null> = this.currentUserSubject.asObservable();
   // Nombre a mostrar en el aviso de bienvenida; se limpia solo tras un login reciente.
   readonly welcomeName = signal<string | null>(null);
@@ -23,10 +29,17 @@ export class AuthService {
     return this.currentUser$.subscribe((user) => subscriber.next(user !== null));
   });
 
-  constructor(private readonly httpClient: HttpClient) {
+  constructor(private readonly httpClient: HttpClient, private readonly router: Router) {
     localStorage.removeItem(AUTH_USER_KEY);
     const user = this.currentUserSubject.value;
-    if (user) this.moduleAccess.set({ Modules: user.Modules, IsSuperAdmin: user.IsSuperAdmin });
+    if (user) {
+      this.moduleAccess.set({ Modules: user.Modules, IsSuperAdmin: user.IsSuperAdmin });
+      const lastActivity = this.getLastActivityTimestamp();
+      this.scheduleInactivityExpiry(lastActivity);
+      this.refreshTokenIfNeeded(lastActivity);
+    } else if (this.getToken()) {
+      this.logout();
+    }
   }
 
   login(loginRequest: LoginRequest): Observable<LoginResponse> {
@@ -46,6 +59,30 @@ export class AuthService {
       tap((access) => this.storeModuleAccess(access)),
     );
   }
+
+  recordActivity(): void {
+    if (!this.isAuthenticated()) return;
+    const lastActivity = Date.now();
+    localStorage.setItem(LAST_ACTIVITY_KEY, String(lastActivity));
+    this.scheduleInactivityExpiry(lastActivity);
+    this.refreshTokenIfNeeded(lastActivity);
+  }
+
+  handleStorageChange(key: string | null, value: string | null): void {
+    if (key === AUTH_TOKEN_KEY && value === null && this.currentUserSubject.value) {
+      this.logout();
+      void this.router.navigateByUrl('/login');
+      return;
+    }
+    if (key !== LAST_ACTIVITY_KEY || value === null || !this.isAuthenticated()) return;
+
+    const lastActivity = Number(value);
+    if (Number.isFinite(lastActivity) && lastActivity > 0) {
+      this.scheduleInactivityExpiry(lastActivity);
+      this.refreshTokenIfNeeded(lastActivity);
+    }
+  }
+
   // Cambia la contraseña inicial del usuario.
   changeInitialPassword(currentPassword: string, newPassword: string): Observable<void> {
     return this.httpClient.post<void>('/api/auth/change-initial-password', {
@@ -56,9 +93,13 @@ export class AuthService {
 
   // Cierra la sesión del usuario actual.
   logout(): void {
-    
+    if (this.inactivityTimer !== null) {
+      clearTimeout(this.inactivityTimer);
+      this.inactivityTimer = null;
+    }
     localStorage.removeItem(AUTH_TOKEN_KEY);
     localStorage.removeItem(AUTH_USER_KEY);
+    localStorage.removeItem(LAST_ACTIVITY_KEY);
     this.currentUserSubject.next(null);
     this.moduleAccess.set({ Modules: [], IsSuperAdmin: false });
   }
@@ -72,12 +113,21 @@ export class AuthService {
 
   defaultRoute(): string {
     const access = this.moduleAccess();
-    if (access.IsSuperAdmin || access.Modules.some((module) => [
+    const hasAdminModule = access.IsSuperAdmin || access.Modules.some((module) => [
       'DISPOSITIVOS', 'REASIGNACIONES', 'TALLER', 'USUARIOS', 'MANTENIMIENTO',
-    ].includes(module))) return '/admin';
+    ].includes(module));
+    if (hasAdminModule) return this.roleHomeRoute();
     if (access.Modules.includes('INVENTARIO')) return '/inventario';
-    if (access.Modules.includes('TALLER')) return '/taller';
     return '/sin-acceso';
+  }
+
+  roleHomeRoute(): string {
+    switch (this.currentUserSubject.value?.Role) {
+      case 'Admin': return '/admin';
+      case 'UsuarioComun': return '/usuario';
+      case 'Taller': return '/taller';
+      default: return '/sin-acceso';
+    }
   }
 
   // Verifica si el usuario actual tiene alguno de los roles especificados.
@@ -110,6 +160,9 @@ export class AuthService {
       Modules: loginResponse.User.Modules ?? [],
       IsSuperAdmin: loginResponse.User.IsSuperAdmin ?? false,
     });
+    const lastActivity = Date.now();
+    localStorage.setItem(LAST_ACTIVITY_KEY, String(lastActivity));
+    this.scheduleInactivityExpiry(lastActivity);
     this.welcomeName.set(loginResponse.User.FullName || loginResponse.User.UserName);
     setTimeout(() => this.welcomeName.set(null), WELCOME_TOAST_DURATION_MS);
   }
@@ -162,42 +215,91 @@ export class AuthService {
 
   // Reconstituye en memoria solo la identidad y el rol necesarios desde el JWT.
   private readUserFromToken(): AuthUser | null {
-    try {
-      const token = this.getToken();
-      const payloadSegment = token?.split('.')[1];
-      if (!payloadSegment) return null;
+    const claims = this.readTokenClaims();
+    if (!claims) return null;
+    const expiresAt = Number(claims['exp']);
+    if (!Number.isFinite(expiresAt) || expiresAt * 1000 <= Date.now()) return null;
 
-      const base64 = payloadSegment.replace(/-/g, '+').replace(/_/g, '/');
-      const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, '=');
-      const binaryPayload = atob(padded);
-      const payloadBytes = Uint8Array.from(binaryPayload, (character) => character.charCodeAt(0));
-      const claims = JSON.parse(new TextDecoder().decode(payloadBytes)) as Record<string, unknown>;
-      const expiresAt = Number(claims['exp']);
-      if (Number.isFinite(expiresAt) && expiresAt * 1000 <= Date.now()) return null;
+    const userName = String(claims['unique_name'] ?? claims['name'] ?? '').trim();
+    const rawRole = claims['role'] ?? claims['http://schemas.microsoft.com/ws/2008/06/identity/claims/role'];
+    const role = Array.isArray(rawRole) ? rawRole[0] : rawRole;
+    if (!userName || !['Admin', 'UsuarioComun', 'Taller'].includes(String(role))) return null;
 
-      const userName = String(claims['unique_name'] ?? claims['name'] ?? '').trim();
-      const rawRole = claims['role'] ?? claims['http://schemas.microsoft.com/ws/2008/06/identity/claims/role'];
-      const role = Array.isArray(rawRole) ? rawRole[0] : rawRole;
-      if (!userName || !['Admin', 'UsuarioComun', 'Taller'].includes(String(role))) return null;
-
-      return {
-        UserId: String(claims['sub'] ?? ''),
-        UserName: userName,
-        FullName: userName,
-        Role: String(role) as UserRole,
-        Estado: 'ACTIVO',
-        DominioP: '',
-        Dominio: 0,
-        Modules: [],
-        IsSuperAdmin: false,
-      };
-    } catch {
-      return null;
-    }
+    return {
+      UserId: String(claims['sub'] ?? ''),
+      UserName: userName,
+      FullName: userName,
+      Role: String(role) as UserRole,
+      Estado: 'ACTIVO',
+      DominioP: '',
+      Dominio: 0,
+      Modules: [],
+      IsSuperAdmin: false,
+    };
   }
   // Verifica si el token almacenado es válido y si hay un usuario actual.
   private hasValidToken(): boolean {
     return this.getToken() !== null && this.currentUserSubject.value !== null;
+  }
+
+  private scheduleInactivityExpiry(lastActivity: number): void {
+    if (this.inactivityTimer !== null) clearTimeout(this.inactivityTimer);
+    const remainingTime = lastActivity + SESSION_IDLE_TIMEOUT_MS - Date.now();
+    if (remainingTime <= 0) {
+      this.expireSession();
+      return;
+    }
+    this.inactivityTimer = setTimeout(() => this.expireSession(), remainingTime);
+  }
+
+  private getLastActivityTimestamp(): number {
+    const storedActivity = Number(localStorage.getItem(LAST_ACTIVITY_KEY));
+    if (Number.isFinite(storedActivity) && storedActivity > 0) return storedActivity;
+    const issuedAt = Number(this.readTokenClaims()?.['iat']);
+    return Number.isFinite(issuedAt) && issuedAt > 0 ? issuedAt * 1000 : Date.now();
+  }
+
+  private refreshTokenIfNeeded(lastActivity: number): void {
+    const expiresAt = Number(this.readTokenClaims()?.['exp']);
+    if (!Number.isFinite(expiresAt)
+      || expiresAt * 1000 - (lastActivity + SESSION_IDLE_TIMEOUT_MS) > TOKEN_REFRESH_MARGIN_MS
+      || this.tokenRefreshInFlight) return;
+
+    this.tokenRefreshInFlight = true;
+    this.httpClient.post<{ Token?: string; token?: string }>(`${API_AUTH_URL}/refresh`, {}).pipe(
+      tap((response) => {
+        const token = response.Token ?? response.token;
+        if (!token) {
+          this.expireSession();
+          return;
+        }
+        localStorage.setItem(AUTH_TOKEN_KEY, token);
+      }),
+      catchError((error: HttpErrorResponse) => {
+        if (error.status === 401) this.expireSession();
+        return EMPTY;
+      }),
+      finalize(() => this.tokenRefreshInFlight = false),
+    ).subscribe();
+  }
+
+  private readTokenClaims(): Record<string, unknown> | null {
+    try {
+      const payloadSegment = this.getToken()?.split('.')[1];
+      if (!payloadSegment) return null;
+      const base64 = payloadSegment.replace(/-/g, '+').replace(/_/g, '/');
+      const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, '=');
+      const binaryPayload = atob(padded);
+      const payloadBytes = Uint8Array.from(binaryPayload, (character) => character.charCodeAt(0));
+      return JSON.parse(new TextDecoder().decode(payloadBytes)) as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+  }
+
+  private expireSession(): void {
+    this.logout();
+    void this.router.navigateByUrl('/login');
   }
 
   private storeModuleAccess(access: ModuleAccess): void {

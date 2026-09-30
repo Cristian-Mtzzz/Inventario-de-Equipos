@@ -20,6 +20,7 @@ public sealed class AdminService(InventoryDbContext dbContext) : IAdminService
         int? regionalId,
         int? buildingId,
         int? areaId,
+        string? state,
         CancellationToken cancellationToken)
     {
         const int pageSize = 10;
@@ -59,6 +60,7 @@ public sealed class AdminService(InventoryDbContext dbContext) : IAdminService
         AddDeviceFilter("COALESCE(a.REGIONA_ID, b.REGIONA_ID) = :regionalId", "regionalId", regionalId);
         AddDeviceFilter("b.EDIFICIO_ID = :buildingId", "buildingId", buildingId);
         AddDeviceFilter("d.ID_AREA = :areaId", "areaId", areaId);
+        AddDeviceFilter("UPPER(TRIM(d.ESTADO)) = :state", "state", state?.Trim().ToUpperInvariant());
 
         var whereSql = conditions.Count == 0 ? string.Empty : $"WHERE {string.Join(" AND ", conditions)}";
         await dbContext.Database.OpenConnectionAsync(cancellationToken);

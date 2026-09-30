@@ -14,6 +14,15 @@
   </nav>
 
   @if (activePanel === 'locations') {
+  <div class="catalog-search-toolbar">
+    <button type="button" class="catalog-search-button" (click)="openEmployeeSearch()">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <circle cx="10.8" cy="10.8" r="6.8"></circle>
+        <path d="m16 16 5 5"></path>
+      </svg>
+      <span>Buscar empleado</span>
+    </button>
+  </div>
   <div class="catalog-selector-grid">
     <div class="catalog-selector-field">
       <label for="catalog-regional-filter">Regional</label>
@@ -67,16 +76,7 @@
     </div>
 
     <div class="catalog-selector-field">
-      <div class="catalog-selector-label-row">
-        <label for="catalog-employee-filter">Empleado</label>
-        <button type="button" class="catalog-search-button" aria-label="Buscar empleado"
-          title="Buscar empleado" (click)="openEmployeeSearch()">
-          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            <circle cx="10.8" cy="10.8" r="6.8"></circle>
-            <path d="m16 16 5 5"></path>
-          </svg>
-        </button>
-      </div>
+      <label for="catalog-employee-filter">Empleado</label>
       <select id="catalog-employee-filter" [ngModel]="catalogEmployeeKey"
         (ngModelChange)="selectCatalogEmployee($event)" name="catalogEmployeeFilter"
         [disabled]="catalogAreaId === null">

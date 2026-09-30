@@ -7,9 +7,10 @@
 }
 
 .inventory-shell {
-    width: min(1250px, 100%);
-    margin: 0 auto;
-    padding: 3rem clamp(1rem, 4vw, 3rem);
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: 2rem clamp(1rem, 2vw, 2rem);
 }
 
 .inventory-header {
@@ -110,10 +111,7 @@ h1 {
     grid-template-columns: repeat(4, 1fr);
     gap: .75rem;
     align-items: end;
-    padding: 1.25rem;
-    border: 1px solid #d8e4e0;
-    border-radius: 6px;
-    background: #fff;
+    padding: 0;
 }
 
 .inventory-form.compact {
@@ -173,10 +171,7 @@ button[type="submit"] {
     grid-template-columns: minmax(200px, 1.6fr) repeat(3, minmax(140px, 1fr)) auto;
     gap: .75rem;
     margin: 0 0 1rem;
-    padding: 1rem;
-    border: 1px solid #d8e4e0;
-    border-radius: 6px;
-    background: #fff;
+    padding: 0 0 1rem;
 }
 
 .filter-bar input,
@@ -221,10 +216,7 @@ button[type="submit"] {
 
 
 .table-wrap {
-    overflow: hidden;
-    border: 1px solid #d8e4e0;
-    border-radius: 6px;
-    background: #fff;
+    overflow-x: auto;
 }
 
 table {

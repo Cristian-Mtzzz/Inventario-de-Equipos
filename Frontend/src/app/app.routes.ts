@@ -1,19 +1,28 @@
 import { Routes } from '@angular/router';
 import { AuthComponent } from './auth/auth.component';
-import { authGuard } from './auth/auth.guard';
+import { authenticatedGuard, authGuard, loginGuard } from './auth/auth.guard';
 
 // Define la navegación principal; las rutas protegidas declaran módulos de acceso.
+const administrativeModules = ['DISPOSITIVOS', 'REASIGNACIONES', 'TALLER', 'USUARIOS', 'MANTENIMIENTO'];
+
 export const routes: Routes = [
 	{ path: '', pathMatch: 'full', redirectTo: 'login' },
-	{ path: 'login', component: AuthComponent },
+	{ path: 'login', component: AuthComponent, canActivate: [loginGuard] },
 	{
 		path: 'change-password',
+		canActivate: [authenticatedGuard],
 		loadComponent: () => import('./auth/change-password.component').then((module) => module.ChangePasswordComponent),
 	},
 	{
 		path: 'admin',
 		canActivate: [authGuard],
-		data: { modules: ['DISPOSITIVOS', 'REASIGNACIONES', 'TALLER', 'USUARIOS', 'MANTENIMIENTO'] },
+		data: { role: 'Admin', modules: administrativeModules },
+		loadComponent: () => import('./admin/admin.component').then((module) => module.AdminComponent),
+	},
+	{
+		path: 'usuario',
+		canActivate: [authGuard],
+		data: { role: 'UsuarioComun', modules: administrativeModules },
 		loadComponent: () => import('./admin/admin.component').then((module) => module.AdminComponent),
 	},
 	{
@@ -25,8 +34,8 @@ export const routes: Routes = [
 	{
 		path: 'taller',
 		canActivate: [authGuard],
-		data: { modules: ['TALLER'] },
-		loadComponent: () => import('./taller/taller.component').then((module) => module.TallerComponent),
+		data: { role: 'Taller', modules: administrativeModules },
+		loadComponent: () => import('./admin/admin.component').then((module) => module.AdminComponent),
 	},
 	{
 		path: 'sin-acceso',

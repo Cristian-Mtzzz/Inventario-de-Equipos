@@ -96,11 +96,20 @@
           @for (type of deviceTypes; track type.IdTipo) { <option [value]="type.NombreTipo">{{ type.NombreTipo }}
           </option> }
         </select>
+        <label for="reception-region">Regional de origen</label>
+        <select id="reception-region" [ngModel]="selectedReceptionRegionalId"
+          (ngModelChange)="selectReceptionRegion($event)" name="receptionRegion" required>
+          <option [ngValue]="null">Selecciona una regional</option>
+          @for (regional of regionals; track regional.IdRegional) {
+          <option [ngValue]="regional.IdRegional">{{ regional.NombreRegional }}</option>
+          }
+        </select>
         <label for="reception-building">Edificio de origen</label>
         <select id="reception-building" [(ngModel)]="reception.IdEdificio"
-          (ngModelChange)="selectReceptionBuilding($event)" name="receptionBuilding" required>
-          <option [ngValue]="0">Selecciona un edificio</option>
-          @for (building of buildings; track building.IdEdificio) { <option [ngValue]="building.IdEdificio">{{ building.NombreEdificio }}</option> }
+          (ngModelChange)="selectReceptionBuilding($event)" name="receptionBuilding"
+          [disabled]="selectedReceptionRegionalId === null" required>
+          <option [ngValue]="0">{{ selectedReceptionRegionalId === null ? 'Selecciona primero una regional' : 'Selecciona un edificio' }}</option>
+          @for (building of receptionBuildings; track building.IdEdificio) { <option [ngValue]="building.IdEdificio">{{ building.NombreEdificio }}</option> }
         </select>
         <label for="reception-area">Departamento de origen / envío</label>
         <select id="reception-area" [(ngModel)]="reception.IdArea" name="receptionArea"

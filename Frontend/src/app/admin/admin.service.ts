@@ -53,6 +53,7 @@ export class AdminService {
     if (query.RegionalId !== null) params = params.set('regionalId', query.RegionalId);
     if (query.BuildingId !== null) params = params.set('buildingId', query.BuildingId);
     if (query.AreaId !== null) params = params.set('areaId', query.AreaId);
+    if (query.State?.trim()) params = params.set('state', query.State.trim());
 
     return this.httpClient.get<PagedResult<ApiDevice> & {
       items?: ApiDevice[]; totalCount?: number; page?: number; pageSize?: number;

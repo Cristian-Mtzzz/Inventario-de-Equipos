@@ -197,11 +197,19 @@ public sealed class AuthService(
         command.Parameters.Add(parameter);
     }
 
+    public string RefreshToken(int userId, string userName, string role, bool mustChangePassword) =>
+        GenerateToken(new User
+        {
+            UserId = userId,
+            UserName = userName,
+            Role = role,
+        }, mustChangePassword);
+
     private string GenerateToken(User user, bool mustChangePassword)
     {
         var key = configuration["Jwt:Key"]
             ?? throw new InvalidOperationException("Falta configurar Jwt:Key.");
-        var expiresInMinutes = configuration.GetValue("Jwt:ExpirationMinutes", 60);
+        var expiresInMinutes = configuration.GetValue("Jwt:ExpirationMinutes", 35);
         var claims = new[]
         {
             new Claim(JwtRegisteredClaimNames.Sub, user.UserId.ToString()),

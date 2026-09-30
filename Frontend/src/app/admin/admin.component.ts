@@ -83,6 +83,7 @@ export class AdminComponent {
   searchTerm = '';
   selectedBrand = '';
   selectedModel = '';
+  selectedDeviceStatus = '';
   selectedTypeId: number | null = null;
   private deviceFilterTimer: ReturnType<typeof setTimeout> | null = null;
   private deviceRequestId = 0;
@@ -158,6 +159,13 @@ export class AdminComponent {
 
   get canManageSuperAdmins(): boolean {
     return this.authService.moduleAccess().IsSuperAdmin;
+  }
+
+  get panelTitle(): string {
+    if (this.authService.hasRole(['Admin'])) return 'Panel de administrador';
+    if (this.authService.hasRole(['UsuarioComun'])) return 'Panel de usuario';
+    if (this.authService.hasRole(['Taller'])) return 'Panel de taller';
+    return 'Panel de gestión';
   }
 
   setUserModule(module: string, checked: boolean): void {
@@ -466,6 +474,7 @@ export class AdminComponent {
     this.searchTerm = '';
     this.selectedBrand = '';
     this.selectedModel = '';
+    this.selectedDeviceStatus = '';
     this.selectedTypeId = null;
     this.selectedRegionalFilterId = null;
     this.selectedBuildingFilterId = null;
@@ -496,6 +505,7 @@ export class AdminComponent {
       RegionalId: this.selectedRegionalFilterId,
       BuildingId: this.selectedBuildingFilterId,
       AreaId: this.selectedAreaFilterId,
+      State: this.selectedDeviceStatus,
     }).pipe(
       timeout({ first: 10000 }),
       finalize(() => {

@@ -89,11 +89,9 @@ input {
     gap: 1.25rem;
     width: 100%;
     max-width: 100%;
-    padding: .7rem .85rem;
-    border: 1px solid #d5e1dd;
-    border-radius: 5px;
+    padding: .35rem 0;
     color: #344b4b;
-    background: #f8fbfa;
+    background: transparent;
     font-size: .82rem;
     font-weight: 700;
 }
@@ -135,8 +133,16 @@ input {
 
 .admin-data-table-wrap {
     overflow-x: auto;
+}
+
+.admin-shell .table-wrap,
+.inventory-shell .table-wrap,
+.workshop-shell .table-wrap,
+.admin-shell .admin-data-table-wrap {
+    width: 100%;
     border: 1px solid #d5e1dd;
-    border-radius: 5px;
+    border-radius: 6px;
+    background: #fff;
 }
 
 .admin-data-table {
@@ -524,7 +530,7 @@ button:focus-visible {
     align-items: center;
     gap: .65rem;
     width: 100%;
-    max-width: 68rem;
+    max-width: none;
 }
 
 .catalog-management .location-selector select {
