@@ -37,7 +37,7 @@ public sealed record EmployeeSearchDto(
     string? NombreRegional,
     IReadOnlyList<EmployeeAssignedDeviceDto> AssignedDevices);
 
-public sealed record UpdateEmployeeDto(string NombreCompleto, string NoPago, int IdArea);
+public sealed record UpdateEmployeeDto(string NombreCompleto, string? NoPago, int IdArea);
 
 public sealed record EmployeeOptionDto(string NoPago, string NombreCompleto, int? IdArea);
 
@@ -65,7 +65,7 @@ public sealed record SaveDepartmentDto(string NombreArea, int IdEdificio);
 public sealed record SaveBuildingDto(string NombreEdificio, int IdRegional);
 
 /// <summary>Employee data maintained in the administrative catalog.</summary>
-public sealed record SaveDirectoryEmployeeDto(string NoPago, string NombreCompleto, int IdArea);
+public sealed record SaveDirectoryEmployeeDto(string? NoPago, string NombreCompleto, int IdArea);
 
 public sealed record EmployeeAssignedDeviceDto(
     int IdEquipo,

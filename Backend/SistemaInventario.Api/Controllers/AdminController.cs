@@ -76,10 +76,9 @@ public sealed class AdminController(
     {
         if (string.IsNullOrWhiteSpace(noPagoActual)
             || string.IsNullOrWhiteSpace(employee.NombreCompleto)
-            || string.IsNullOrWhiteSpace(employee.NoPago)
             || employee.IdArea <= 0)
         {
-            return BadRequest(new { Message = "Nombre, número de pago y departamento son obligatorios." });
+            return BadRequest(new { Message = "Nombre y departamento son obligatorios." });
         }
 
         return await adminService.UpdateEmployee(noPagoActual, employee, cancellationToken)
@@ -215,8 +214,8 @@ public sealed class AdminController(
     [Authorize(Policy = ModulePolicies.Maintenance)]
     public async Task<IActionResult> CreateDirectoryEmployee(SaveDirectoryEmployeeDto employee, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(employee.NoPago) || string.IsNullOrWhiteSpace(employee.NombreCompleto) || employee.IdArea <= 0)
-            return BadRequest(new { Message = "Número de pago, nombre y departamento son obligatorios." });
+        if (string.IsNullOrWhiteSpace(employee.NombreCompleto) || employee.IdArea <= 0)
+            return BadRequest(new { Message = "Nombre y departamento son obligatorios." });
         try
         {
             await adminService.CreateDirectoryEmployee(employee, cancellationToken);
@@ -248,10 +247,9 @@ public sealed class AdminController(
     {
         if (string.IsNullOrWhiteSpace(employeeKey)
             || string.IsNullOrWhiteSpace(employee.NombreCompleto)
-            || string.IsNullOrWhiteSpace(employee.NoPago)
             || employee.IdArea <= 0)
         {
-            return BadRequest(new { Message = "Nombre, número de pago y departamento son obligatorios." });
+            return BadRequest(new { Message = "Nombre y departamento son obligatorios." });
         }
 
         return await adminService.UpdateDirectoryEmployeeByKey(employeeKey, employee, cancellationToken)

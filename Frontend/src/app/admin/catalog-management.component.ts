@@ -453,8 +453,8 @@ export class CatalogManagementComponent {
         ? this.adminService.createDepartment(department)
         : this.adminService.updateDepartment(this.editingId, department);
     } else {
-      if (!this.employeeNoPago.trim() || !this.employeeName.trim() || this.selectedAreaId === null) {
-        return this.requireFields('Completa número de pago, nombre y departamento del empleado.');
+      if (!this.employeeName.trim() || this.selectedAreaId === null) {
+        return this.requireFields('Completa el nombre y el departamento del empleado.');
       }
       const employee = {
         NoPago: this.employeeNoPago.trim(),

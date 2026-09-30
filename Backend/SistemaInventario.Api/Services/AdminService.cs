@@ -322,12 +322,12 @@ public sealed class AdminService(InventoryDbContext dbContext) : IAdminService
         {
             await using var command = CreateCommand(dbContext.Database.GetDbConnection(), null, """
                 UPDATE EMPLEADOS_IHSS
-                SET NPAGO = :noPagoNuevo,
+                SET NPAGO = COALESCE(:noPagoNuevo, NPAGO),
                     NOMBRE_EMPLEADO = :nombreCompleto,
                     DEPARTAMENTO_IHSS_ID = :idArea
                 WHERE TRIM(NPAGO) = TRIM(:noPagoActual)
                 """,
-                ("noPagoNuevo", employee.NoPago.Trim()),
+                ("noPagoNuevo", string.IsNullOrWhiteSpace(employee.NoPago) ? null : employee.NoPago.Trim()),
                 ("nombreCompleto", employee.NombreCompleto.Trim()),
                 ("idArea", employee.IdArea),
                 ("noPagoActual", noPagoActual.Trim()));
@@ -513,7 +513,7 @@ public sealed class AdminService(InventoryDbContext dbContext) : IAdminService
             (EMPLEADOS_IHSS_ID, NPAGO, NOMBRE_EMPLEADO, ESTADO, DEPARTAMENTO_IHSS_ID)
         SELECT NVL(MAX(EMPLEADOS_IHSS_ID), 0) + 1, :noPago, :nombre, 1, :idArea
         FROM EMPLEADOS_IHSS
-        """, cancellationToken, ("noPago", employee.NoPago.Trim()),
+        """, cancellationToken, ("noPago", string.IsNullOrWhiteSpace(employee.NoPago) ? null : employee.NoPago.Trim()),
         ("nombre", employee.NombreCompleto.Trim()), ("idArea", employee.IdArea));
 
     public async Task<bool> DeleteDirectoryEmployee(string noPago, CancellationToken cancellationToken)
@@ -539,12 +539,12 @@ public sealed class AdminService(InventoryDbContext dbContext) : IAdminService
         {
             await using var command = CreateCommand(dbContext.Database.GetDbConnection(), null, """
                 UPDATE EMPLEADOS_IHSS
-                SET NPAGO = :noPagoNuevo,
+                SET NPAGO = COALESCE(:noPagoNuevo, NPAGO),
                     NOMBRE_EMPLEADO = :nombreCompleto,
                     DEPARTAMENTO_IHSS_ID = :idArea
                 WHERE ROWID = CHARTOROWID(:employeeKey)
                 """,
-                ("noPagoNuevo", employee.NoPago.Trim()),
+                ("noPagoNuevo", string.IsNullOrWhiteSpace(employee.NoPago) ? null : employee.NoPago.Trim()),
                 ("nombreCompleto", employee.NombreCompleto.Trim()),
                 ("idArea", employee.IdArea),
                 ("employeeKey", employeeKey));
