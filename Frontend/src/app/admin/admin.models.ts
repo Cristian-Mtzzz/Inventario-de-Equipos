@@ -139,6 +139,7 @@ export interface Reassignment {
   CodigoInventario: string;
   NoPagoAnterior: string | null;
   NoPagoNuevo: string | null;
+  NombreNuevo: string | null;
   NombreEdificio: string | null;
   NombreArea: string | null;
   FechaCambio: string;
@@ -183,11 +184,15 @@ export interface CreateAdminUser {
   IsSuperAdmin: boolean;
 }
 
-export type UpdateAdminUser = Omit<CreateAdminUser, 'Usuario'>;
+export type UpdateAdminUser = CreateAdminUser;
 
 // Tipo de equipo usado por los selectores de inventario y recepción.
 export interface DeviceType {
   IdTipo: number;
   NombreTipo: string;
+}
+
+export interface SaveDeviceType {
+  TipoDispositivo: string;
 }
 

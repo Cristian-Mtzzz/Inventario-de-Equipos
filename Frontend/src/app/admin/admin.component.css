@@ -541,21 +541,7 @@ table .danger {
     background: #dcece6;
 }
 
-.add-user-button {
-    width: fit-content;
-    margin-bottom: 1rem;
-    padding: .75rem 1rem;
-    border: 0;
-    border-radius: 5px;
-    color: #fff;
-    background: #276968;
-    cursor: pointer;
-    font-weight: 700;
-}
-
-.add-user-button:hover {
-    background: #1b5252;
-}
+.devices-section-toolbar{display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;margin-bottom:1rem}.add-user-button,.report-launch-button{width:fit-content;padding:.75rem 1rem;border:0;border-radius:5px;color:#fff;background:#276968;cursor:pointer;font-weight:700}.add-user-button:hover,.report-launch-button:hover{background:#1b5252}
 
 .modal-feedback {
     grid-column: 1 / -1;

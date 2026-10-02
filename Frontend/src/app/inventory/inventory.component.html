@@ -9,7 +9,7 @@
         </div>
         <!--Botones de logOut y refresh-->
         <div class="inventory-header-actions">
-            <button type="button" class="refresh-button" (click)="refreshPanel()">Refrescar panel</button>
+            <button type="button" class="refresh-button" (click)="refreshPanel()">Refrescar</button>
             <button type="button" class="logout-button" (click)="logout()">Cerrar sesión</button>
         </div>
     </header>
@@ -122,9 +122,9 @@
             <table>
                 <thead>
                     <tr>
-                        <th>ID</th>
+                        <th class="table-id-column">ID</th>
                         <th>Código</th>
-                        <th>Serie</th>
+                        <th class="table-serial-column">Serie</th>
                         <th>Marca</th>
                         <th>Modelo</th>
                         <th>Tipo</th>
@@ -146,9 +146,9 @@
                     </tr>
                     } @else {
                     @for (device of pagedDevices; track device.IdEquipo) { <tr>
-                        <td>{{ device.IdEquipo }}</td>
+                        <td class="table-id-column">{{ device.IdEquipo }}</td>
                         <td>{{ device.CodigoInventario }}</td>
-                        <td>{{ device.NoSerie }}</td>
+                        <td class="table-serial-column">{{ device.NoSerie }}</td>
                         <td>{{ device.Marca }}</td>
                         <td>{{ device.Modelo }}</td>
                         <td>{{ device.NombreTipo || device.IdTipo || '-' }}</td>
@@ -228,7 +228,7 @@
                     <select id="inventory-reassignment-employee" [ngModel]="selectedReassignmentEmployeeIndex"
                         (ngModelChange)="selectReassignmentEmployee($event)" name="reassignmentEmployee"
                         [disabled]="newReassignment.IdArea <= 0 || reassignmentEmployees.length === 0" required>
-                        <option [ngValue]="null">{{ newReassignment.IdArea <= 0 ? 'Selecciona primero un departamento' : employeeCatalogError ? 'No se pudo cargar el catálogo' : reassignmentEmployees.length === 0 ? 'No hay empleados en este departamento' : 'Selecciona un empleado' }}</option>
+                        <option [ngValue]="null">{{ newReassignment.IdArea <= 0 ? 'Selecciona primero un departamento' : isLoadingReassignmentEmployees ? 'Cargando empleados...' : employeeCatalogError ? 'No se pudo cargar el catálogo' : reassignmentEmployees.length === 0 ? 'No hay empleados en este departamento' : 'Selecciona un empleado' }}</option>
                         @for (employee of reassignmentEmployees; track $index) {
                         <option [ngValue]="$index">{{ employee.NombreCompleto }}</option>
                         }

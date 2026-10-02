@@ -19,7 +19,7 @@ public interface IAdminService
         CancellationToken cancellationToken);
     Task<IReadOnlyList<DeviceOptionDto>> SearchDeviceOptions(string searchTerm, CancellationToken cancellationToken);
     Task<IReadOnlyList<EmployeeSearchDto>> SearchEmployees(string searchTerm, CancellationToken cancellationToken);
-    Task<IReadOnlyList<EmployeeOptionDto>> GetEmployeeOptions(CancellationToken cancellationToken);
+    Task<IReadOnlyList<EmployeeOptionDto>> GetEmployeeOptions(int idArea, CancellationToken cancellationToken);
     Task<IReadOnlyList<DirectoryEmployeeDto>> GetDirectoryEmployees(CancellationToken cancellationToken);
     Task<IReadOnlyList<RegionalDto>> GetRegionals(CancellationToken cancellationToken);
     Task<IReadOnlyList<CatalogDepartmentDto>> GetCatalogDepartments(CancellationToken cancellationToken);
@@ -38,6 +38,9 @@ public interface IAdminService
     Task<bool> DeleteDirectoryEmployeeByKey(string employeeKey, CancellationToken cancellationToken);
     Task<bool> UpdateEmployee(string noPagoActual, UpdateEmployeeDto employee, CancellationToken cancellationToken);
     Task<IReadOnlyList<DeviceTypeDto>> GetDeviceTypes(CancellationToken cancellationToken);
+    Task CreateDeviceType(SaveDeviceTypeDto deviceType, CancellationToken cancellationToken);
+    Task<bool> UpdateDeviceType(int idTipo, SaveDeviceTypeDto deviceType, CancellationToken cancellationToken);
+    Task<bool> DeleteDeviceType(int idTipo, CancellationToken cancellationToken);
     Task<IReadOnlyList<BuildingDto>> GetBuildings(CancellationToken cancellationToken);
     Task<IReadOnlyList<AreaDto>> GetAreas(int idEdificio, CancellationToken cancellationToken);
     Task CreateDevice(CreateDeviceDto device, CancellationToken cancellationToken);

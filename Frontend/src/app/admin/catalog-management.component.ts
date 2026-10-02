@@ -1,12 +1,12 @@
-import { ChangeDetectorRef, Component, inject, output } from '@angular/core';
+import { ChangeDetectorRef, Component, ElementRef, inject, output, ViewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize, forkJoin, Observable } from 'rxjs';
 import { SearchableSelectDirective } from '../shared/searchable-select.directive';
 import { AdminService } from './admin.service';
-import { Building, CatalogDepartment, DirectoryEmployee, RegionalOption } from './admin.models';
+import { Building, CatalogDepartment, DeviceType, DirectoryEmployee, RegionalOption } from './admin.models';
 
-type CatalogView = 'regionals' | 'buildings' | 'departments' | 'employees';
-type CatalogPanel = 'locations' | 'regionals';
+type CatalogView = 'regionals' | 'buildings' | 'departments' | 'employees' | 'deviceTypes';
+type CatalogPanel = 'locations' | 'regionals' | 'deviceTypes';
 type DeleteRequest = { view: CatalogView; key: number | string; label: string };
 
 @Component({
@@ -17,12 +17,14 @@ type DeleteRequest = { view: CatalogView; key: number | string; label: string };
 })
 export class CatalogManagementComponent {
   readonly changed = output<void>();
+  @ViewChild('employeeSearchInput') private employeeSearchInput?: ElementRef<HTMLInputElement>;
   private readonly changeDetector = inject(ChangeDetectorRef);
   readonly views: { id: CatalogView; label: string }[] = [
     { id: 'regionals', label: 'Regionales' },
     { id: 'buildings', label: 'Edificios' },
     { id: 'departments', label: 'Departamentos' },
     { id: 'employees', label: 'Empleados' },
+    { id: 'deviceTypes', label: 'Tipos de dispositivos' },
   ];
   activePanel: CatalogPanel = 'locations';
   activeView: CatalogView = 'regionals';
@@ -36,6 +38,7 @@ export class CatalogManagementComponent {
   buildings: Building[] = [];
   departments: CatalogDepartment[] = [];
   employees: DirectoryEmployee[] = [];
+  deviceTypes: DeviceType[] = [];
   isLoading = false;
   isSaving = false;
   isDialogOpen = false;
@@ -57,6 +60,7 @@ export class CatalogManagementComponent {
   departmentName = '';
   employeeName = '';
   employeeNoPago = '';
+  deviceTypeName = '';
   employeeSearchTerm = '';
   employeeSearchError = '';
   message = '';
@@ -158,13 +162,18 @@ export class CatalogManagementComponent {
       this.employeeRegionalName(row), this.employeeBuildingName(row), this.employeeDepartmentName(row)]);
   }
 
+  get catalogDeviceTypes(): DeviceType[] {
+    return this.filterRows(this.deviceTypes, (row) => [row.IdTipo, row.NombreTipo]);
+  }
+
   get visibleRegionals(): RegionalOption[] { return this.pageRows(this.catalogRegionals); }
   get visibleBuildings(): Building[] { return this.pageRows(this.catalogBuildings); }
   get visibleDepartments(): CatalogDepartment[] { return this.pageRows(this.catalogDepartments); }
   get visibleEmployees(): DirectoryEmployee[] { return this.pageRows(this.catalogEmployees); }
+  get visibleDeviceTypes(): DeviceType[] { return this.pageRows(this.catalogDeviceTypes); }
 
   get filteredCount(): number {
-    return this.catalogRegionals.length;
+    return this.activePanel === 'deviceTypes' ? this.catalogDeviceTypes.length : this.catalogRegionals.length;
   }
 
   get totalPages(): number {
@@ -194,6 +203,7 @@ export class CatalogManagementComponent {
       buildings: this.adminService.getBuildings(),
       departments: this.adminService.getCatalogDepartments(),
       employees: this.adminService.getDirectoryEmployees(),
+      deviceTypes: this.adminService.getCatalogDeviceTypes(),
     }).pipe(finalize(() => {
       this.isLoading = false;
       this.changeDetector.markForCheck();
@@ -203,6 +213,7 @@ export class CatalogManagementComponent {
         this.buildings = catalogs.buildings;
         this.departments = catalogs.departments;
         this.employees = catalogs.employees;
+        this.deviceTypes = catalogs.deviceTypes;
         this.syncCatalogSelection();
         this.currentPage = Math.min(this.currentPage, this.totalPages);
         this.changeDetector.markForCheck();
@@ -359,6 +370,7 @@ export class CatalogManagementComponent {
     this.employeeSearchTerm = '';
     this.employeeSearchError = '';
     this.isEmployeeSearchOpen = true;
+    setTimeout(() => this.employeeSearchInput?.nativeElement.focus());
   }
 
   closeEmployeeSearch(): void {
@@ -420,6 +432,14 @@ export class CatalogManagementComponent {
     if (this.selectedCatalogEmployee) this.editEmployee(this.selectedCatalogEmployee);
   }
 
+  editDeviceType(deviceType: DeviceType): void {
+    this.activeView = 'deviceTypes';
+    this.resetForm();
+    this.editingId = deviceType.IdTipo;
+    this.deviceTypeName = deviceType.NombreTipo;
+    this.isDialogOpen = true;
+  }
+
   deleteSelectedEmployee(): void {
     if (this.selectedCatalogEmployee) {
       this.askDelete('employees', this.selectedCatalogEmployee.EmployeeKey, this.selectedCatalogEmployee.NombreCompleto);
@@ -440,6 +460,12 @@ export class CatalogManagementComponent {
       request = this.editingId === null
         ? this.adminService.createRegional(regional)
         : this.adminService.updateRegional(this.editingId, regional);
+    } else if (this.activeView === 'deviceTypes') {
+      if (!this.deviceTypeName.trim()) return this.requireFields('Escribe el nombre del tipo de dispositivo.');
+      const deviceType = { TipoDispositivo: this.deviceTypeName.trim() };
+      request = this.editingId === null
+        ? this.adminService.createDeviceType(deviceType)
+        : this.adminService.updateDeviceType(this.editingId, deviceType);
     } else if (this.activeView === 'buildings') {
       if (!this.buildingName.trim() || this.selectedRegionId === null) return this.requireFields('Completa el nombre y la regional del edificio.');
       const building = { NombreEdificio: this.buildingName.trim(), IdRegional: this.selectedRegionId };
@@ -496,6 +522,7 @@ export class CatalogManagementComponent {
     if (!this.pendingDelete) return;
     const { view, key } = this.pendingDelete;
     const request = view === 'regionals' ? this.adminService.deleteRegional(Number(key))
+      : view === 'deviceTypes' ? this.adminService.deleteDeviceType(Number(key))
       : view === 'buildings' ? this.adminService.deleteBuilding(Number(key))
       : view === 'departments' ? this.adminService.deleteDepartment(Number(key))
       : this.adminService.deleteDirectoryEmployeeByKey(String(key));
@@ -575,6 +602,7 @@ export class CatalogManagementComponent {
     this.departmentName = '';
     this.employeeName = '';
     this.employeeNoPago = '';
+    this.deviceTypeName = '';
     this.selectedRegionId = null;
     this.selectedBuildingId = null;
     this.selectedAreaId = null;

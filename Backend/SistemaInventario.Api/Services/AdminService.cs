@@ -8,7 +8,8 @@ using SistemaInventario.Api.Models;
 namespace SistemaInventario.Api.Services;
 
 // Capa de persistencia administrativa. Ejecuta SQL Oracle y usa transacciones
-// cuando una operación modifica varias tablas relacionadas.
+// cuando una operación modifica varias tablas relacionadas
+
 public sealed class AdminService(InventoryDbContext dbContext) : IAdminService
 {
     public async Task<PagedResult<DeviceDto>> GetDevices(
@@ -33,6 +34,8 @@ public sealed class AdminService(InventoryDbContext dbContext) : IAdminService
             LEFT JOIN REGIONAL r ON r.REGIONA_ID = COALESCE(a.REGIONA_ID, b.REGIONA_ID)
             """;
         var conditions = new List<string>();
+
+        // Agrega condiciones de filtro dinámicamente según los parámetros proporcionados
         var parameters = new List<(string Name, object? Value)>();
 
             void AddDeviceFilter(string condition, string parameterName, object? value)
@@ -42,10 +45,11 @@ public sealed class AdminService(InventoryDbContext dbContext) : IAdminService
                 parameters.Add((parameterName, value));
             }
 
+        // Filtro de búsqueda en varios campos, incluyendo código de inventario, número de serie, marca, modelo, número de pago asignado y nombre asignado.
         if (!string.IsNullOrWhiteSpace(searchTerm))
         {
             var pattern = $"%{searchTerm.Trim().ToUpperInvariant()}%";
-            conditions.Add("(UPPER(d.CODIGO_INVENTARIO) LIKE :searchCode OR UPPER(d.NO_SERIE) LIKE :searchSerial OR UPPER(d.MARCA) LIKE :searchBrand OR UPPER(d.MODELO) LIKE :searchModel OR UPPER(d.NUMERO_PAGO_ASIGNADO) LIKE :searchPayment OR UPPER(NULLIF(TRIM(d.NOMBRE_ASIGNADO), '')) LIKE :searchAssignedName OR (NULLIF(TRIM(d.NOMBRE_ASIGNADO), '') IS NULL AND EXISTS (SELECT 1 FROM EMPLEADOS_IHSS e WHERE e.NPAGO = d.NUMERO_PAGO_ASIGNADO AND UPPER(e.NOMBRE_EMPLEADO) LIKE :searchEmployee)))");
+            conditions.Add("(UPPER(d.CODIGO_INVENTARIO) LIKE :searchCode OR UPPER(d.NO_SERIE) LIKE :searchSerial OR UPPER(d.MARCA) LIKE :searchBrand OR UPPER(d.MODELO) LIKE :searchModel OR UPPER(d.NUMERO_PAGO_ASIGNADO) LIKE :searchPayment OR UPPER(NULLIF(TRIM(d.NOMBRE_ASIGNADO), '')) LIKE :searchAssignedName OR (NULLIF(TRIM(d.NOMBRE_ASIGNADO), '') IS NULL AND EXISTS (SELECT 1 FROM EMPLEADOS_IHSS e WHERE TRIM(e.NPAGO) = TRIM(d.NUMERO_PAGO_ASIGNADO) AND UPPER(e.NOMBRE_EMPLEADO) LIKE :searchEmployee)))");
             parameters.Add(("searchCode", pattern));
             parameters.Add(("searchSerial", pattern));
             parameters.Add(("searchBrand", pattern));
@@ -54,7 +58,7 @@ public sealed class AdminService(InventoryDbContext dbContext) : IAdminService
             parameters.Add(("searchAssignedName", pattern));
             parameters.Add(("searchEmployee", pattern));
         }
-
+        // Filtros adicionales para marca, modelo, tipo de dispositivo, regional, edificio, área y estado.
         AddDeviceFilter("UPPER(TRIM(d.MARCA)) = :brand", "brand", brand?.Trim().ToUpperInvariant());
         AddDeviceFilter("UPPER(TRIM(d.MODELO)) = :model", "model", model?.Trim().ToUpperInvariant());
         AddDeviceFilter("d.ID_TIPO = :typeId", "typeId", typeId);
@@ -63,17 +67,19 @@ public sealed class AdminService(InventoryDbContext dbContext) : IAdminService
         AddDeviceFilter("d.ID_AREA = :areaId", "areaId", areaId);
         AddDeviceFilter("UPPER(TRIM(d.ESTADO)) = :state", "state", state?.Trim().ToUpperInvariant());
 
+        //construye el WHERE según las condiciones acumuladas
         var whereSql = conditions.Count == 0 ? string.Empty : $"WHERE {string.Join(" AND ", conditions)}";
         await dbContext.Database.OpenConnectionAsync(cancellationToken);
         try
         {
+            // Obtiene la conexión de la base de datos y construye la consulta SQL para obtener los dispositivos paginados, incluyendo el nombre del empleado asignado si está disponible.
             var connection = dbContext.Database.GetDbConnection();
             var sql = $"""
                 SELECT paged_devices.*,
                        COALESCE(NULLIF(TRIM(paged_devices.NOMBRE_ASIGNADO), ''),
                            (SELECT MAX(e.NOMBRE_EMPLEADO)
                             FROM EMPLEADOS_IHSS e
-                            WHERE e.NPAGO = paged_devices.NUMERO_PAGO_ASIGNADO)) AS ASIGNADO_A
+                            WHERE TRIM(e.NPAGO) = TRIM(paged_devices.NUMERO_PAGO_ASIGNADO))) AS ASIGNADO_A
                 FROM (
                     SELECT * FROM (
                         SELECT d.ID_EQUIPO, d.CODIGO_INVENTARIO, d.NO_SERIE, d.MARCA, d.MODELO,
@@ -93,7 +99,7 @@ public sealed class AdminService(InventoryDbContext dbContext) : IAdminService
                 paged_devices
                 ORDER BY paged_devices.ROW_NUM
                 """;
-
+            // funcion local para leer una página de resultados y devolver la lista de dispositivos junto con el total de registros encontrados.
             async Task<(List<DeviceDto> Items, int TotalCount)> ReadPage(int page)
             {
                 var startRow = (page - 1) * pageSize;
@@ -116,6 +122,7 @@ public sealed class AdminService(InventoryDbContext dbContext) : IAdminService
                 return (items, totalCount);
             }
 
+            // Lee la página solicitada y maneja el caso en que la página solicitada esté fuera de rango, ajustando a la última página disponible si es necesario.
             var page = Math.Max(1, requestedPage);
             var (items, totalCount) = await ReadPage(page);
             if (items.Count == 0 && requestedPage > 1)
@@ -284,19 +291,20 @@ public sealed class AdminService(InventoryDbContext dbContext) : IAdminService
         }
     }
 
-    public async Task<IReadOnlyList<EmployeeOptionDto>> GetEmployeeOptions(CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<EmployeeOptionDto>> GetEmployeeOptions(int idArea, CancellationToken cancellationToken)
     {
         const string sql = """
                  SELECT NPAGO AS NO_PAGO, NOMBRE_EMPLEADO AS NOMBRE_COMPLETO,
                    DEPARTAMENTO_IHSS_ID AS ID_AREA
             FROM EMPLEADOS_IHSS
+            WHERE DEPARTAMENTO_IHSS_ID = :idArea
             ORDER BY UPPER(NOMBRE_EMPLEADO), NPAGO
             """;
         return await ReadList(sql, reader => new EmployeeOptionDto(
             ReadString(reader, "NO_PAGO"),
             ReadString(reader, "NOMBRE_COMPLETO"),
             ReadNullableInt(reader, "ID_AREA")),
-            cancellationToken);
+            cancellationToken, ("idArea", idArea));
     }
 
     public async Task<IReadOnlyList<DirectoryEmployeeDto>> GetDirectoryEmployees(CancellationToken cancellationToken)
@@ -348,6 +356,39 @@ public sealed class AdminService(InventoryDbContext dbContext) : IAdminService
         return await ReadList(sql, reader => new DeviceTypeDto(
             reader.GetInt32(reader.GetOrdinal("ID_TIPO")),
             ReadString(reader, "TIPO_DISPOSITIVO")), cancellationToken);
+    }
+
+    public Task CreateDeviceType(SaveDeviceTypeDto deviceType, CancellationToken cancellationToken) => Execute("""
+        INSERT INTO TIPOS_DISPOSITIVOS (ID_TIPO, TIPO_DISPOSITIVO)
+        SELECT NVL(MAX(ID_TIPO), 0) + 1, :nombre
+        FROM TIPOS_DISPOSITIVOS
+        """, cancellationToken, ("nombre", deviceType.TipoDispositivo.Trim()));
+
+    public async Task<bool> UpdateDeviceType(int idTipo, SaveDeviceTypeDto deviceType, CancellationToken cancellationToken)
+    {
+        await dbContext.Database.OpenConnectionAsync(cancellationToken);
+        try
+        {
+            await using var command = CreateCommand(dbContext.Database.GetDbConnection(), null, """
+                UPDATE TIPOS_DISPOSITIVOS
+                SET TIPO_DISPOSITIVO = :nombre
+                WHERE ID_TIPO = :idTipo
+                """, ("nombre", deviceType.TipoDispositivo.Trim()), ("idTipo", idTipo));
+            return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+        }
+        finally { await dbContext.Database.CloseConnectionAsync(); }
+    }
+
+    public async Task<bool> DeleteDeviceType(int idTipo, CancellationToken cancellationToken)
+    {
+        await dbContext.Database.OpenConnectionAsync(cancellationToken);
+        try
+        {
+            await using var command = CreateCommand(dbContext.Database.GetDbConnection(), null,
+                "DELETE FROM TIPOS_DISPOSITIVOS WHERE ID_TIPO = :idTipo", ("idTipo", idTipo));
+            return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+        }
+        finally { await dbContext.Database.CloseConnectionAsync(); }
     }
 
     public async Task<IReadOnlyList<BuildingDto>> GetBuildings(CancellationToken cancellationToken)
@@ -683,11 +724,17 @@ public sealed class AdminService(InventoryDbContext dbContext) : IAdminService
         const string sql = """
                  SELECT r.ID_REASIGNACION, r.ID_EQUIPO, d.CODIGO_INVENTARIO,
                      r.NO_PAGO_ANTERIOR, r.NO_PAGO_NUEVO,
+                     COALESCE(r.NOMBRE_NUEVO, (
+                         SELECT MAX(e.NOMBRE_EMPLEADO)
+                         FROM EMPLEADOS_IHSS e
+                         WHERE TRIM(e.NPAGO) = TRIM(r.NO_PAGO_NUEVO)
+                     )) AS NOMBRE_NUEVO,
                      b.EDIFICIO_DESCRIPCION AS NOMBRE_EDIFICIO,
                      a.DEPARTAMENTO_IHSS_DESC AS NOMBRE_AREA,
                      r.FECHA_CAMBIO, r.MOTIVO
                  FROM REASIGNACIONES r
                  LEFT JOIN DISPOSITIVOS d ON d.ID_EQUIPO = r.ID_EQUIPO
+                 LEFT JOIN EMPLEADOS_IHSS e ON TRIM(e.NPAGO) = TRIM(r.NO_PAGO_NUEVO)
                  LEFT JOIN DEPARTAMENTO_IHSS a ON a.DEPARTAMENTO_IHSS_ID = d.ID_AREA
                  LEFT JOIN EDIFICIO b ON b.EDIFICIO_ID = a.EDIFICIO_ID
                  ORDER BY r.FECHA_CAMBIO DESC
@@ -724,15 +771,19 @@ public sealed class AdminService(InventoryDbContext dbContext) : IAdminService
             {
                 nuevoPago = await FindEmployeePayment(connection, transaction, reassignment.NombreNuevo.Trim(), cancellationToken);
             }
+            if (nuevoNombre is null && nuevoPago is not null)
+            {
+                nuevoNombre = await FindEmployeeName(connection, transaction, nuevoPago, cancellationToken);
+            }
 
             await Execute(connection, transaction, """
                 INSERT INTO REASIGNACIONES
-                    (ID_EQUIPO, NO_PAGO_ANTERIOR, NO_PAGO_NUEVO, FECHA_CAMBIO, MOTIVO)
-                SELECT ID_EQUIPO, NUMERO_PAGO_ASIGNADO, :nuevoPago, SYSDATE, :motivo
+                    (ID_EQUIPO, NO_PAGO_ANTERIOR, NO_PAGO_NUEVO, NOMBRE_NUEVO, FECHA_CAMBIO, MOTIVO)
+                SELECT ID_EQUIPO, NUMERO_PAGO_ASIGNADO, :nuevoPago, :nuevoNombre, SYSDATE, :motivo
                 FROM DISPOSITIVOS
                 WHERE ID_EQUIPO = :idEquipo
                 """, cancellationToken,
-                ("nuevoPago", nuevoPago), ("motivo", reassignment.Motivo),
+                ("nuevoPago", nuevoPago), ("nuevoNombre", nuevoNombre), ("motivo", reassignment.Motivo),
                 ("idEquipo", reassignment.IdEquipo));
             await Execute(connection, transaction, """
                 UPDATE DISPOSITIVOS
@@ -845,7 +896,8 @@ public sealed class AdminService(InventoryDbContext dbContext) : IAdminService
             var connection = dbContext.Database.GetDbConnection();
             await using var command = CreateCommand(connection, transaction, """
                 UPDATE USUARIOS
-                SET NOMBRE_PERSONA = :nombrePersona,
+                SET USUARIO = :usuario,
+                    NOMBRE_PERSONA = :nombrePersona,
                     FECHA_EXPIRACION = :fechaExpiracion,
                     ESTADO = :estado,
                     DOMINIOP = :dominioP,
@@ -853,6 +905,7 @@ public sealed class AdminService(InventoryDbContext dbContext) : IAdminService
                     ROL = :rol
                 WHERE ID_USUARIO = :idUsuario
                 """,
+                ("usuario", user.Usuario.Trim()),
                 ("nombrePersona", user.NombrePersona.Trim()),
                 ("fechaExpiracion", user.FechaExpiracion),
                 ("estado", user.Estado.Trim().ToUpperInvariant()),
@@ -993,6 +1046,21 @@ public sealed class AdminService(InventoryDbContext dbContext) : IAdminService
         return result is DBNull or null ? null : Convert.ToString(result);
     }
 
+    private static async Task<string?> FindEmployeeName(
+        DbConnection connection,
+        DbTransaction transaction,
+        string paymentNumber,
+        CancellationToken cancellationToken)
+    {
+        await using var command = CreateCommand(connection, transaction, """
+            SELECT MAX(NOMBRE_EMPLEADO)
+            FROM EMPLEADOS_IHSS
+            WHERE TRIM(NPAGO) = TRIM(:noPago)
+            """, ("noPago", paymentNumber));
+        var result = await command.ExecuteScalarAsync(cancellationToken);
+        return result is DBNull or null ? null : Convert.ToString(result);
+    }
+
     private static DbCommand CreateCommand(
         DbConnection connection,
         DbTransaction? transaction,
@@ -1049,6 +1117,7 @@ public sealed class AdminService(InventoryDbContext dbContext) : IAdminService
         ReadString(reader, "CODIGO_INVENTARIO"),
         ReadNullableString(reader, "NO_PAGO_ANTERIOR"),
         ReadNullableString(reader, "NO_PAGO_NUEVO"),
+        ReadNullableString(reader, "NOMBRE_NUEVO"),
         ReadNullableString(reader, "NOMBRE_EDIFICIO"),
         ReadNullableString(reader, "NOMBRE_AREA"),
         reader.GetDateTime(reader.GetOrdinal("FECHA_CAMBIO")),

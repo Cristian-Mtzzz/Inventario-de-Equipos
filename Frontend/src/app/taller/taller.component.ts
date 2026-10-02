@@ -1,7 +1,9 @@
 import { DatePipe } from '@angular/common';
+import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectorRef, Component, inject, Input } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { finalize } from 'rxjs';
+import type ExcelJS from 'exceljs';
+import { finalize, firstValueFrom } from 'rxjs';
 import { Router } from '@angular/router';
 import { AuthService } from '../auth/auth.service';
 import { AdminService } from '../admin/admin.service';
@@ -104,9 +106,13 @@ export class TallerComponent {
     this.reception.IdEdificio = idEdificio;
     this.reception.IdArea = 0;
     this.receptionAreas = [];
-    this.isLoadingReceptionAreas = idEdificio > 0;
+    const shouldLoadAreas = idEdificio > 0 && !this.adminService.hasAreasCache(idEdificio);
+    this.isLoadingReceptionAreas = shouldLoadAreas;
     if (idEdificio > 0) {
-      this.adminService.getAreas(idEdificio).pipe(finalize(() => this.isLoadingReceptionAreas = false)).subscribe({
+      this.adminService.getAreas(idEdificio).pipe(finalize(() => {
+        this.isLoadingReceptionAreas = false;
+        this.changeDetector.markForCheck();
+      })).subscribe({
         next: (areas) => this.receptionAreas = areas,
         error: () => this.errorMessage = 'No se pudieron cargar los departamentos del edificio.',
       });
@@ -153,6 +159,80 @@ export class TallerComponent {
     this.selectedReceptionRegionalId = null;
     this.receptionAreas = [];
     this.activeWindow = 'reception';
+  }
+
+  async exportWorkshopReport(): Promise<void> {
+    this.message = '';
+    this.errorMessage = '';
+    this.isSaving = true;
+    try {
+      const maintenances = await firstValueFrom(this.tallerService.getMaintenances());
+      await this.createWorkshopWorkbook(maintenances);
+      this.message = `Reporte del taller exportado: ${maintenances.length} reparaciones.`;
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === 'AbortError')) {
+        this.errorMessage = error instanceof HttpErrorResponse
+          ? 'No se pudo cargar la información del taller para exportar.'
+          : 'No se pudo exportar el reporte del taller.';
+      }
+    } finally {
+      this.isSaving = false;
+      this.changeDetector.markForCheck();
+    }
+  }
+
+  private async createWorkshopWorkbook(maintenances: Maintenance[]): Promise<void> {
+    const { default: ExcelJSModule } = await import('exceljs');
+    const workbook = new ExcelJSModule.Workbook();
+    workbook.creator = 'Sistema inventario';
+    workbook.created = new Date();
+    workbook.subject = 'Reporte del taller';
+    workbook.title = 'Taller';
+
+    const repairSheet = workbook.addWorksheet('Reparaciones');
+    repairSheet.columns = [
+      { header: 'ID', key: 'IdReparacion', width: 12 },
+      { header: 'Equipo', key: 'CodigoInventario', width: 18 },
+      { header: 'Marca', key: 'Marca', width: 18 },
+      { header: 'Modelo', key: 'Modelo', width: 20 },
+      { header: 'Tipo', key: 'TipoReparacion', width: 20 },
+      { header: 'Dictamen', key: 'Dictamen', width: 28 },
+      { header: 'Detalle', key: 'DetalleReparacion', width: 32 },
+      { header: 'Ingreso', key: 'FechaIngreso', width: 20 },
+      { header: 'Salida', key: 'FechaSalida', width: 20 },
+    ];
+    repairSheet.addRows(maintenances.map((item) => ({
+      IdReparacion: item.IdReparacion,
+      CodigoInventario: item.CodigoInventario,
+      Marca: item.Marca,
+      Modelo: item.Modelo,
+      TipoReparacion: item.TipoReparacion ?? '',
+      Dictamen: item.Dictamen ?? '',
+      DetalleReparacion: item.DetalleReparacion ?? '',
+      FechaIngreso: item.FechaIngreso,
+      FechaSalida: item.FechaSalida ?? '',
+    })));
+    repairSheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    repairSheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F5A5A' } };
+    repairSheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const workbookBytes = new Uint8Array(buffer).slice();
+    if (workbookBytes.byteLength < 4 || workbookBytes[0] !== 0x50 || workbookBytes[1] !== 0x4b) {
+      throw new Error('ExcelJS generó un archivo XLSX vacío o inválido.');
+    }
+    const file = new Blob([workbookBytes.buffer as ArrayBuffer], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+
+    const url = URL.createObjectURL(file);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `reporte-taller-${new Date().toISOString().slice(0, 10)}.xlsx`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
   }
 
   saveReception(): void {

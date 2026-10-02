@@ -13,8 +13,7 @@ namespace SistemaInventario.Api.Controllers;
 // Fachada HTTP del módulo administrativo: valida solicitudes, aplica permisos por módulo y
 // delega inventario, reasignaciones y usuarios al AdminService.
 public sealed class AdminController(
-    IAdminService adminService,
-    IModulePermissionService modulePermissions) : ControllerBase
+    IAdminService adminService) : ControllerBase
 {
     [HttpGet("devices")]
     [Authorize(Policy = ModulePolicies.DeviceSupport)]
@@ -48,6 +47,48 @@ public sealed class AdminController(
     public async Task<ActionResult<IReadOnlyList<DeviceTypeDto>>> GetDeviceTypes(CancellationToken cancellationToken) =>
         Ok(await adminService.GetDeviceTypes(cancellationToken));
 
+    [HttpGet("catalog/device-types")]
+    [Authorize(Policy = ModulePolicies.Maintenance)]
+    public async Task<ActionResult<IReadOnlyList<DeviceTypeDto>>> GetCatalogDeviceTypes(CancellationToken cancellationToken) =>
+        Ok(await adminService.GetDeviceTypes(cancellationToken));
+
+    [HttpPost("device-types")]
+    [Authorize(Policy = ModulePolicies.Maintenance)]
+    public async Task<IActionResult> CreateDeviceType(SaveDeviceTypeDto deviceType, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(deviceType.TipoDispositivo))
+            return BadRequest(new { Message = "El nombre del tipo de dispositivo es obligatorio." });
+        try
+        {
+            await adminService.CreateDeviceType(deviceType, cancellationToken);
+            return CreatedAtAction(nameof(GetCatalogDeviceTypes), null);
+        }
+        catch (OracleException exception) when (exception.Number == 1)
+        {
+            return Conflict(new { Message = "No se pudo crear el tipo de dispositivo por un identificador duplicado." });
+        }
+    }
+
+    [HttpPut("device-types/{idTipo:int}")]
+    [Authorize(Policy = ModulePolicies.Maintenance)]
+    public async Task<IActionResult> UpdateDeviceType(int idTipo, SaveDeviceTypeDto deviceType, CancellationToken cancellationToken)
+    {
+        if (idTipo <= 0 || string.IsNullOrWhiteSpace(deviceType.TipoDispositivo))
+            return BadRequest(new { Message = "El nombre del tipo de dispositivo es obligatorio." });
+        return await adminService.UpdateDeviceType(idTipo, deviceType, cancellationToken) ? NoContent() : NotFound();
+    }
+
+    [HttpDelete("device-types/{idTipo:int}")]
+    [Authorize(Policy = ModulePolicies.Maintenance)]
+    public async Task<IActionResult> DeleteDeviceType(int idTipo, CancellationToken cancellationToken)
+    {
+        try { return await adminService.DeleteDeviceType(idTipo, cancellationToken) ? NoContent() : NotFound(); }
+        catch (OracleException exception) when (exception.Number == 2292)
+        {
+            return Conflict(new { Message = "No se puede eliminar el tipo porque hay equipos que lo utilizan." });
+        }
+    }
+
     [HttpGet("employees/search")]
     [Authorize(Policy = ModulePolicies.AssignmentSupport)]
     public async Task<ActionResult<IReadOnlyList<EmployeeSearchDto>>> SearchEmployees(
@@ -60,8 +101,11 @@ public sealed class AdminController(
     [HttpGet("employees/options")]
     [Authorize(Policy = ModulePolicies.AssignmentSupport)]
     public async Task<ActionResult<IReadOnlyList<EmployeeOptionDto>>> GetEmployeeOptions(
+        [FromQuery] int idArea,
         CancellationToken cancellationToken) =>
-        Ok(await adminService.GetEmployeeOptions(cancellationToken));
+        idArea <= 0
+            ? BadRequest(new { Message = "El departamento es obligatorio." })
+            : Ok(await adminService.GetEmployeeOptions(idArea, cancellationToken));
 
     [HttpGet("employees/directory")]
     [Authorize(Policy = ModulePolicies.Maintenance)]
@@ -420,9 +464,16 @@ public sealed class AdminController(
             return BadRequest(new { Message = validationMessage });
         }
 
-        return await adminService.UpdateUser(idUsuario, user, cancellationToken)
-            ? NoContent()
-            : NotFound();
+        try
+        {
+            return await adminService.UpdateUser(idUsuario, user, cancellationToken)
+                ? NoContent()
+                : NotFound();
+        }
+        catch (OracleException exception) when (exception.Number == 1)
+        {
+            return Conflict(new { Message = "Ya existe un usuario con ese nombre." });
+        }
     }
 
     [HttpPost("users/{idUsuario:int}/reset-password")]
@@ -475,9 +526,9 @@ public sealed class AdminController(
 
     private static string? ValidateUser(UpdateAdminUserDto user)
     {
-        if (string.IsNullOrWhiteSpace(user.NombrePersona))
+        if (string.IsNullOrWhiteSpace(user.Usuario) || string.IsNullOrWhiteSpace(user.NombrePersona))
         {
-            return "El nombre de la persona es obligatorio.";
+            return "El usuario y el nombre de la persona son obligatorios.";
         }
 
         return ValidateUserFields(user.DominioP, user.Dominio, user.Estado);

@@ -298,9 +298,8 @@
     grid-column: 1 / -1;
 }
 
-.catalog-modal {
-    max-height: calc(100dvh - 2rem);
-    overflow-y: auto;
+.edit-modal.catalog-modal {
+    width: min(860px, 100%);
 }
 
 .edit-modal {

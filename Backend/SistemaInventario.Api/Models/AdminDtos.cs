@@ -64,6 +64,9 @@ public sealed record SaveDepartmentDto(string NombreArea, int IdEdificio);
 /// <summary>Editable building name and parent regional.</summary>
 public sealed record SaveBuildingDto(string NombreEdificio, int IdRegional);
 
+/// <summary>Editable device type name.</summary>
+public sealed record SaveDeviceTypeDto(string TipoDispositivo);
+
 /// <summary>Employee data maintained in the administrative catalog.</summary>
 public sealed record SaveDirectoryEmployeeDto(string? NoPago, string NombreCompleto, int IdArea);
 
@@ -107,6 +110,7 @@ public sealed record ReassignmentDto(
     string CodigoInventario,
     string? NoPagoAnterior,
     string? NoPagoNuevo,
+    string? NombreNuevo,
     string? NombreEdificio,
     string? NombreArea,
     DateTime FechaCambio,
@@ -148,6 +152,7 @@ public sealed record CreateAdminUserDto(
     bool IsSuperAdmin);
 
 public sealed record UpdateAdminUserDto(
+    string Usuario,
     string NombrePersona,
     DateTime? FechaExpiracion,
     string Estado,

@@ -26,11 +26,11 @@ export class InventoryComponent {
   isLoadingDevices = false;
   reassignments: Reassignment[] = [];
   areas: Area[] = [];
-  allEmployeeOptions: EmployeeOption[] = [];
   employeesForDeviceArea: EmployeeOption[] = [];
   selectedEmployeeIndex: number | null = null;
   isLoadingEmployeesForDevice = false;
-  isLoadingEmployeeCatalog = true;
+  isLoadingEmployeeCatalog = false;
+  private employeeOptionsRequestId = 0;
   employeeCatalogError = '';
   isLoadingAreas = false;
   buildings: Building[] = [];
@@ -69,6 +69,8 @@ export class InventoryComponent {
   reassignmentRegionalId: number | null = null;
   reassignmentEmployees: EmployeeOption[] = [];
   selectedReassignmentEmployeeIndex: number | null = null;
+  isLoadingReassignmentEmployees = false;
+  private reassignmentEmployeeRequestId = 0;
   selectedInventoryCode = '';
   private deviceOptionSearchTimer: ReturnType<typeof setTimeout> | null = null;
   editingDeviceId: number | null = null;
@@ -80,21 +82,6 @@ export class InventoryComponent {
 
     // metodo constructor que inicializa el componente y carga los catálogos de tipos de dispositivos y edificios.
   constructor() {
-    this.adminService.getEmployeeOptions().subscribe({
-      next: (employees) => {
-        this.allEmployeeOptions = employees;
-        this.isLoadingEmployeeCatalog = false;
-        this.employeesForDeviceArea = this.newDevice.IdArea === null
-          ? []
-          : employees.filter((employee) => employee.IdArea === this.newDevice.IdArea);
-        this.isLoadingEmployeesForDevice = false;
-      },
-      error: () => {
-        this.isLoadingEmployeeCatalog = false;
-        this.isLoadingEmployeesForDevice = false;
-        this.employeeCatalogError = 'No se pudo cargar el catálogo de empleados. Verifica la conexión con la API.';
-      },
-    });
     forkJoin({
       deviceTypes: this.adminService.getDeviceTypes(),
       buildings: this.adminService.getBuildings(),
@@ -278,10 +265,26 @@ export class InventoryComponent {
   selectDeviceArea(idArea: number | null): void {
     this.newDevice.IdArea = idArea;
     this.clearDeviceEmployeeSelection();
-    this.isLoadingEmployeesForDevice = idArea !== null && this.isLoadingEmployeeCatalog;
-    if (idArea !== null && !this.isLoadingEmployeeCatalog) {
-      this.employeesForDeviceArea = this.allEmployeeOptions.filter((employee) => employee.IdArea === idArea);
-    }
+    this.employeeCatalogError = '';
+    if (idArea === null) return;
+
+    const requestId = ++this.employeeOptionsRequestId;
+    this.isLoadingEmployeeCatalog = true;
+    this.isLoadingEmployeesForDevice = true;
+    this.adminService.getEmployeeOptions(idArea).pipe(finalize(() => {
+      if (requestId !== this.employeeOptionsRequestId) return;
+      this.isLoadingEmployeeCatalog = false;
+      this.isLoadingEmployeesForDevice = false;
+    })).subscribe({
+      next: (employees) => {
+        if (requestId === this.employeeOptionsRequestId) this.employeesForDeviceArea = employees;
+      },
+      error: () => {
+        if (requestId === this.employeeOptionsRequestId) {
+          this.employeeCatalogError = 'No se pudo cargar el catálogo de empleados. Verifica la conexión con la API.';
+        }
+      },
+    });
   }
 
   selectDeviceEmployee(employeeIndex: number | null): void {
@@ -292,11 +295,13 @@ export class InventoryComponent {
   }
 
   private clearDeviceEmployeeSelection(): void {
+    this.employeeOptionsRequestId++;
     this.employeesForDeviceArea = [];
     this.selectedEmployeeIndex = null;
     this.newDevice.NumeroPagoAsignado = null;
     this.newDevice.NombreAsignado = null;
-    this.isLoadingEmployeesForDevice = this.isLoadingEmployeeCatalog;
+    this.isLoadingEmployeeCatalog = false;
+    this.isLoadingEmployeesForDevice = false;
   }
 
   // Método que maneja los cambios en el estado del dispositivo, ajustando los campos relacionados 
@@ -465,7 +470,24 @@ export class InventoryComponent {
   selectReassignmentArea(idArea: number): void {
     this.newReassignment.IdArea = Number(idArea);
     this.clearReassignmentEmployee();
-    this.reassignmentEmployees = this.allEmployeeOptions.filter((employee) => employee.IdArea === this.newReassignment.IdArea);
+    if (this.newReassignment.IdArea <= 0) return;
+
+    const requestId = ++this.reassignmentEmployeeRequestId;
+    this.isLoadingReassignmentEmployees = true;
+    this.employeeCatalogError = '';
+    this.adminService.getEmployeeOptions(this.newReassignment.IdArea).pipe(finalize(() => {
+      if (requestId !== this.reassignmentEmployeeRequestId) return;
+      this.isLoadingReassignmentEmployees = false;
+    })).subscribe({
+      next: (employees) => {
+        if (requestId === this.reassignmentEmployeeRequestId) this.reassignmentEmployees = employees;
+      },
+      error: () => {
+        if (requestId === this.reassignmentEmployeeRequestId) {
+          this.employeeCatalogError = 'No se pudo cargar el catálogo de empleados. Verifica la conexión con la API.';
+        }
+      },
+    });
   }
 
   selectReassignmentEmployee(employeeIndex: number | null): void {
@@ -476,8 +498,10 @@ export class InventoryComponent {
   }
 
   private clearReassignmentEmployee(): void {
+    this.reassignmentEmployeeRequestId++;
     this.reassignmentEmployees = [];
     this.selectedReassignmentEmployeeIndex = null;
+    this.isLoadingReassignmentEmployees = false;
     this.newReassignment.NoPagoNuevo = null;
     this.newReassignment.NombreNuevo = '';
   }

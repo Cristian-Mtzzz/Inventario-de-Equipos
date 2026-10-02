@@ -1,6 +1,6 @@
 <!-- Panel protegido para administrar inventario, usuarios, reasignaciones y taller.
   La plantilla muestra una sola sección activa para evitar mezclar formularios. -->
-<main class="admin-shell">
+<main class="admin-shell" [class.admin-red-theme]="hasAdminButtonTheme">
   <header class="admin-header">
     <div>
       <p class="eyebrow">CONTROL ADMINISTRATIVO</p>
@@ -8,7 +8,7 @@
 
     </div>
     <div class="admin-header-actions">
-      <button type="button" class="refresh-button" (click)="loadData()">Refrescar panel </button>
+      <button type="button" class="refresh-button" (click)="loadData()">Refrescar</button>
       <button type="button" class="logout-button" (click)="logout()">Cerrar sesión</button>
     </div>
   </header>
@@ -17,10 +17,6 @@
     @if (canAccessAdminSection('devices')) {
     <button type="button" [class.active]="activeSection === 'devices'"
       (click)="selectSection('devices')">Dispositivos</button>
-    }
-    @if (canAccessAdminSection('reports')) {
-    <button type="button" [class.active]="activeSection === 'reports'"
-      (click)="selectSection('reports')">Reportes</button>
     }
     @if (canAccessAdminSection('reassignments')) {
     <button type="button" [class.active]="activeSection === 'reassignments'"
@@ -44,7 +40,11 @@
   <!-- Sección de dispositivos -->
   @if (activeSection === 'devices') {
   <section class="admin-section">
-    <button type="button" class="add-user-button" (click)="openDeviceCreateDialog()">Agregar dispositivo</button>
+    <div class="devices-section-toolbar">
+      <button type="button" class="add-user-button" (click)="openDeviceCreateDialog()">Agregar dispositivo</button>
+      <button type="button" class="report-launch-button" (click)="isDeviceReportsOpen = true"
+        aria-haspopup="dialog">Reportes</button>
+    </div>
 
     <!-- Filtros de búsqueda y tabla de dispositivos -->
     <div class="filter-bar device-filter-bar">
@@ -92,10 +92,10 @@
       <table>
         <thead>
           <tr>
-            <th>ID</th>
+            <th class="table-id-column">ID</th>
             <th>Código inventario</th>
-            <th>Número de serie</th>
-            <th>Marca</th>
+            <th class="table-serial-column">Número de serie</th>
+            <th class="table-brand-column">Marca</th>
             <th>Modelo</th>
             <th>Tipo</th>
             <th>Estado</th>
@@ -110,16 +110,20 @@
 
         <!-- tabla de dispositivos-->
         <tbody>
-          @if (filteredDevices.length === 0) {
+          @if (!hasDeviceQuery) {
+          <tr>
+            <td colspan="13" class="empty">Busca un dispositivo o selecciona un filtro para mostrar resultados.</td>
+          </tr>
+          } @else if (filteredDevices.length === 0) {
           <tr>
             <td colspan="13">No se encontraron equipos con los filtros actuales.</td>
           </tr>
           } @else {
           @for (device of pagedDevices; track device.IdEquipo) { <tr>
-            <td>{{ device.IdEquipo }}</td>
+            <td class="table-id-column">{{ device.IdEquipo }}</td>
             <td>{{ device.CodigoInventario }}</td>
-            <td>{{ device.NoSerie }}</td>
-            <td>{{ device.Marca }}</td>
+            <td class="table-serial-column">{{ device.NoSerie }}</td>
+            <td class="table-brand-column">{{ device.Marca }}</td>
             <td>{{ device.Modelo }}</td>
             <td>{{ device.NombreTipo || device.IdTipo || '-' }}</td>
             <td>{{ device.Estado }}</td>
@@ -135,17 +139,19 @@
         </tbody>
       </table>
     </div>
+    @if (hasDeviceQuery) {
     <nav class="pagination" aria-label="Paginación de dispositivos">
       <button type="button" (click)="goToPage(currentPage - 1)" [disabled]="currentPage === 1">Anterior</button>
       <span>Página {{ currentPage }} de {{ totalPages }} · {{ totalDeviceCount }} registros</span>
       <button type="button" (click)="goToPage(currentPage + 1)"
         [disabled]="currentPage === totalPages">Siguiente</button>
     </nav>
+    }
   </section>
   }
 
-  @if (activeSection === 'reports') {
-  <app-device-reports />
+  @if (isDeviceReportsOpen) {
+  <app-device-reports (closed)="isDeviceReportsOpen = false" />
   }
 
   @if (activeSection === 'catalogs') {
@@ -155,8 +161,11 @@
   <!-- Formulario y tabla de cambios de responsable. -->
   @if (activeSection === 'reassignments') {
   <section class="admin-section">
-    <form class="admin-form compact" novalidate (ngSubmit)="addReassignment()">
+    <div class="devices-section-toolbar">
       <h2>Registrar reasignación</h2>
+      <button type="button" class="report-launch-button" (click)="exportReassignmentReport()">Exportar reporte</button>
+    </div>
+    <form class="admin-form compact" novalidate (ngSubmit)="addReassignment()">
       <input [(ngModel)]="deviceOptionSearch" (ngModelChange)="searchDeviceOptions()" name="deviceOptionSearch"
         placeholder="Código, serie o modelo del equipo" />
       <select [ngModel]="selectedInventoryCode" (ngModelChange)="selectDeviceForReassignment($event)" name="equipo"
@@ -205,7 +214,7 @@
           <select id="admin-reassignment-employee" [ngModel]="selectedReassignmentEmployeeIndex"
             (ngModelChange)="selectReassignmentEmployee($event)" name="reassignmentEmployee"
             [disabled]="newReassignment.IdArea <= 0 || reassignmentEmployees.length === 0" required>
-            <option [ngValue]="null">{{ newReassignment.IdArea <= 0 ? 'Selecciona primero un departamento' : reassignmentEmployees.length === 0 ? 'No hay empleados en este departamento' : 'Selecciona un empleado' }}</option>
+            <option [ngValue]="null">{{ newReassignment.IdArea <= 0 ? 'Selecciona primero un departamento' : isLoadingReassignmentEmployees ? 'Cargando empleados...' : employeeCatalogError ? 'No se pudo cargar el catálogo' : reassignmentEmployees.length === 0 ? 'No hay empleados en este departamento' : 'Selecciona un empleado' }}</option>
             @for (employee of reassignmentEmployees; track $index) {
             <option [ngValue]="$index">{{ employee.NombreCompleto }}</option>
             }
@@ -231,7 +240,7 @@
         <tbody>@for (item of reassignments; track item.IdReasignacion) { <tr>
             <td>{{ item.CodigoInventario || getInventoryCode(item.IdEquipo) }}</td>
             <td>{{ item.NoPagoAnterior || '-' }}</td>
-            <td>{{ item.NoPagoNuevo || '-' }}</td>
+            <td>{{ item.NombreNuevo || item.NoPagoNuevo || '-' }}</td>
             <td>{{ item.FechaCambio | date }}</td>
             <td>{{ item.Motivo }}</td>
             <td><button type="button" class="danger"
@@ -244,6 +253,7 @@
 
 
 
+  
   @if (activeSection === 'users') {
   <section class="admin-section">
     <button type="button" class="add-user-button" (click)="openUserDialog()">Añadir usuario</button>
@@ -259,7 +269,7 @@
       <table class="users-table">
         <thead>
           <tr>
-            <th>ID</th>
+            <th class="table-id-column">ID</th>
             <th>Usuario</th>
             <th>Nombre</th>
             <th>Dominio</th>
@@ -276,7 +286,7 @@
           </tr>
           } @else {
           @for (user of filteredUsers; track user.IdUsuario) { <tr>
-            <td>{{ user.IdUsuario }}</td>
+            <td class="table-id-column">{{ user.IdUsuario }}</td>
             <td>{{ user.Usuario }}</td>
             <td>{{ user.NombrePersona }}</td>
             <td>{{ user.DominioP }}</td>
@@ -335,12 +345,12 @@
         <div class="user-field">
           <label for="modalUsuario">Usuario:</label>
           <input id="modalUsuario" [(ngModel)]="newUser.Usuario" name="modalUsuario" autocomplete="new-username"
-            [readonly]="editingUserId !== null" placeholder="Usuario" required />
+            placeholder="Usuario" required />
         </div>
         <div class="user-field">
           <label for="modalNombrePersona">Nombre de la persona:</label>
           <input id="modalNombrePersona" [(ngModel)]="newUser.NombrePersona" name="modalNombrePersona"
-            [readonly]="editingUserId !== null" placeholder="Nombre completo" required />
+            placeholder="Nombre completo" required />
         </div>
         <div class="user-field">
           <label for="modalFechaExpiracion">Fecha de expiración:</label>

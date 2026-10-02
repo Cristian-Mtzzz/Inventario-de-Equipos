@@ -23,6 +23,27 @@ input {
     font: inherit;
 }
 
+.table-id-column {
+    width: 4.25rem;
+    min-width: 4.25rem;
+    max-width: 4.25rem;
+    white-space: nowrap;
+}
+
+.table-brand-column {
+    width: 4.25rem;
+    min-width: 4.25rem;
+    max-width: 4.25rem;
+}
+
+.table-serial-column {
+    width: 14rem;
+    min-width: 14rem;
+    max-width: 14rem;
+    overflow-wrap: normal;
+    white-space: nowrap;
+}
+
 .refresh-button,
 .admin-shell .refresh-button,
 .inventory-shell .refresh-button,
@@ -120,6 +141,33 @@ input {
     grid-column: 1 / -1;
     justify-self: end;
     width: fit-content;
+}
+
+.admin-shell .devices-section-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: .25rem;
+}
+
+.admin-shell .devices-section-toolbar .add-user-button {
+    margin-bottom: 0;
+}
+
+.admin-shell .report-launch-button {
+    min-height: 2.65rem;
+    padding: .65rem 1rem;
+    border: 1px solid #276968;
+    border-radius: 5px;
+    color: #276968;
+    background: transparent;
+    cursor: pointer;
+    font-weight: 700;
+}
+
+.admin-shell .report-launch-button:hover {
+    background: #e8f2ee;
 }
 
 .admin-shell .filter-bar.user-filter-bar {
@@ -290,6 +338,86 @@ button:active:not(:disabled) {
 button:focus-visible {
     outline: 2px solid #276968;
     outline-offset: 2px;
+}
+
+.admin-shell.admin-red-theme {
+    --admin-button-text: #203238;
+    --admin-button-fill: #f54927;
+    --admin-button-fill-hover: #d83d20;
+}
+
+.admin-shell.admin-red-theme > .admin-header .eyebrow {
+    color: var(--admin-button-fill);
+}
+
+.admin-shell.admin-red-theme .add-user-button,
+.admin-shell.admin-red-theme .report-launch-button,
+.admin-shell.admin-red-theme .refresh-button,
+.admin-shell.admin-red-theme .admin-form button:not(.secondary):not(.searchable-select-toggle),
+.admin-shell.admin-red-theme .modal-actions button:not(.secondary):not(.danger),
+.admin-shell.admin-red-theme .employee-search-controls button,
+.admin-shell.admin-red-theme .workshop-actions button:not(.secondary),
+.admin-shell.admin-red-theme .workshop-modal button[type='submit'],
+.admin-shell.admin-red-theme .form-actions button:not(.secondary):not(.danger),
+.admin-shell.admin-red-theme .report-actions button:not(.secondary) {
+    border-color: var(--admin-button-fill) !important;
+    background-color: var(--admin-button-fill) !important;
+}
+
+.admin-shell.admin-red-theme .add-user-button:hover,
+.admin-shell.admin-red-theme .report-launch-button:hover,
+.admin-shell.admin-red-theme .refresh-button:hover:not(:disabled),
+.admin-shell.admin-red-theme .admin-form button:not(.secondary):not(.searchable-select-toggle):hover:not(:disabled),
+.admin-shell.admin-red-theme .modal-actions button:not(.secondary):not(.danger):hover:not(:disabled),
+.admin-shell.admin-red-theme .employee-search-controls button:hover:not(:disabled),
+.admin-shell.admin-red-theme .workshop-actions button:not(.secondary):hover:not(:disabled),
+.admin-shell.admin-red-theme .workshop-modal button[type='submit']:hover:not(:disabled),
+.admin-shell.admin-red-theme .form-actions button:not(.secondary):not(.danger):hover:not(:disabled),
+.admin-shell.admin-red-theme .report-actions button:not(.secondary):hover:not(:disabled) {
+    border-color: var(--admin-button-fill-hover) !important;
+    background-color: var(--admin-button-fill-hover) !important;
+}
+
+.admin-shell.admin-red-theme .logout-button,
+.admin-shell.admin-red-theme .secondary,
+.admin-shell.admin-red-theme .reset-password-button,
+.admin-shell.admin-red-theme .catalog-search-button,
+.admin-shell.admin-red-theme .pagination button:not(.active):not(:hover),
+.admin-shell.admin-red-theme .catalog-page-buttons button:not(.active),
+.admin-shell.admin-red-theme .admin-page-buttons button:not(.active),
+.admin-shell.admin-red-theme .confirm-inline button,
+.admin-shell.admin-red-theme .catalog-field-actions .secondary,
+.admin-shell.admin-red-theme .catalog-row-actions .secondary,
+.admin-shell.admin-red-theme .report-actions button.secondary {
+    color: var(--admin-button-text) !important;
+}
+
+.admin-shell.admin-red-theme .danger,
+.admin-shell.admin-red-theme .modal-danger,
+.admin-shell.admin-red-theme .modal-close,
+.admin-shell.admin-red-theme .catalog-sort,
+.admin-shell.admin-red-theme .searchable-select-toggle {
+    color: var(--admin-button-text) !important;
+}
+
+.admin-shell.admin-red-theme .catalog-row-actions button.secondary {
+    border-color: #aac9c1 !important;
+    color: #23615e !important;
+    background-color: #fff !important;
+}
+
+.admin-shell.admin-red-theme .catalog-row-actions button.danger {
+    border-color: #e4b9b4 !important;
+    color: #a23f38 !important;
+    background-color: #fff !important;
+}
+
+.admin-shell.admin-red-theme .admin-tabs button:hover,
+.admin-shell.admin-red-theme .admin-tabs button.active,
+.admin-shell.admin-red-theme .inventory-tabs button.active,
+.admin-shell.admin-red-theme .catalog-tabs button:hover,
+.admin-shell.admin-red-theme .catalog-tabs button.active {
+    color: var(--admin-button-text) !important;
 }
 
 /* Animación de entrada compartida por todas las ventanas emergentes (admin, taller, inventario). */

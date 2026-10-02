@@ -1,7 +1,7 @@
 import { Component, inject } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { EMPTY, catchError, fromEvent, merge, switchMap, throttleTime, timer } from 'rxjs';
+import { EMPTY, catchError, exhaustMap, fromEvent, merge, throttleTime, timer } from 'rxjs';
 import { AuthService } from './auth/auth.service';
 
 @Component({
@@ -32,8 +32,8 @@ export class App {
       takeUntilDestroyed(),
     ).subscribe(() => this.authService.recordActivity());
 
-    timer(0, 5000).pipe(
-      switchMap(() => this.authService.isAuthenticated()
+    timer(0, 30_000).pipe(
+      exhaustMap(() => this.authService.isAuthenticated()
         ? this.authService.refreshModuleAccess().pipe(catchError(() => EMPTY))
         : EMPTY),
       takeUntilDestroyed(),

@@ -2,6 +2,7 @@ import { ChangeDetectorRef, Component, ViewChild, inject } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
+import type ExcelJS from 'exceljs';
 import { SearchableSelectDirective } from '../shared/searchable-select.directive';
 import { finalize, forkJoin, Observable, retry, timeout } from 'rxjs';
 import { AuthService } from '../auth/auth.service';
@@ -12,7 +13,7 @@ import { DeviceReportsComponent } from './device-reports.component';
 import { EmployeeSearchDialogComponent } from './employee-search-dialog.component';
 import { CatalogManagementComponent } from './catalog-management.component';
 
-type AdminSection = 'devices' | 'reports' | 'reassignments' | 'users' | 'workshop' | 'catalogs';
+type AdminSection = 'devices' | 'reassignments' | 'users' | 'workshop' | 'catalogs';
 
 @Component({
   selector: 'app-admin',
@@ -20,6 +21,7 @@ type AdminSection = 'devices' | 'reports' | 'reassignments' | 'users' | 'worksho
   templateUrl: './admin.component.html',
   styleUrl: './admin.component.css',
 })
+// Componente principal de la sección administrativa: gestiona dispositivos, reasignaciones, usuarios y taller.
 export class AdminComponent {
   // Orquesta las cuatro secciones administrativas: dispositivos, reasignaciones,
   // usuarios y taller. También conserva formularios, modales, mensajes y paginación.
@@ -29,6 +31,7 @@ export class AdminComponent {
   private readonly router = inject(Router);
   private readonly changeDetector = inject(ChangeDetectorRef);
   activeSection: AdminSection = 'devices';
+  isDeviceReportsOpen = false;
   devices: Device[] = [];
   totalDeviceCount = 0;
   reassignments: Reassignment[] = [];
@@ -37,12 +40,12 @@ export class AdminComponent {
   private usersLoaded = false;
   private usersRequestInFlight = false;
   areas: Area[] = [];
-  allEmployeeOptions: EmployeeOption[] = [];
   employeesForDeviceArea: EmployeeOption[] = [];
   selectedEmployeeIndex: number | null = null;
   isLoadingEmployeesForDevice = false;
-  isLoadingEmployeeCatalog = true;
+  isLoadingEmployeeCatalog = false;
   employeeCatalogError = '';
+  private employeeOptionsRequestId = 0;
   isLoadingAreas = false;
   isLoadingFilterAreas = false;
   isLoadingReassignmentAreas = false;
@@ -115,6 +118,8 @@ export class AdminComponent {
   reassignmentAreas: Area[] = [];
   reassignmentEmployees: EmployeeOption[] = [];
   selectedReassignmentEmployeeIndex: number | null = null;
+  isLoadingReassignmentEmployees = false;
+  private reassignmentEmployeeRequestId = 0;
   selectedInventoryCode = '';
   private deviceOptionSearchTimer: ReturnType<typeof setTimeout> | null = null;
   newUser: CreateAdminUser = {
@@ -125,21 +130,6 @@ export class AdminComponent {
   constructor() {
     this.activeSection = this.firstPermittedAdminSection();
     if (this.canAccessAdminSection('users')) this.loadUsers();
-    this.adminService.getEmployeeOptions().subscribe({
-      next: (employees) => {
-        this.allEmployeeOptions = employees;
-        this.isLoadingEmployeeCatalog = false;
-        this.employeesForDeviceArea = this.newDevice.IdArea === null
-          ? []
-          : employees.filter((employee) => employee.IdArea === this.newDevice.IdArea);
-        this.isLoadingEmployeesForDevice = false;
-      },
-      error: () => {
-        this.isLoadingEmployeeCatalog = false;
-        this.isLoadingEmployeesForDevice = false;
-        this.employeeCatalogError = 'No se pudo cargar el catálogo de empleados. Verifica la conexión con la API.';
-      },
-    });
     this.loadData();
   }
 
@@ -150,7 +140,6 @@ export class AdminComponent {
   canAccessAdminSection(section: AdminSection): boolean {
     const modules: Record<AdminSection, string> = {
       devices: 'DISPOSITIVOS',
-      reports: 'DISPOSITIVOS',
       reassignments: 'REASIGNACIONES',
       workshop: 'TALLER',
       users: 'USUARIOS',
@@ -168,6 +157,10 @@ export class AdminComponent {
     if (this.authService.hasRole(['UsuarioComun'])) return 'Panel de usuario';
     if (this.authService.hasRole(['Taller'])) return 'Panel de taller';
     return 'Panel de gestión';
+  }
+
+  get hasAdminButtonTheme(): boolean {
+    return this.authService.hasRole(['Admin']);
   }
 
   setUserModule(module: string, checked: boolean): void {
@@ -190,6 +183,17 @@ export class AdminComponent {
 
   // Métodos auxiliares para el filtrado y paginación de dispositivos y usuarios.
   get filteredDevices(): Device[] { return this.devices; }
+
+  get hasDeviceQuery(): boolean {
+    return this.searchTerm.trim().length > 0
+      || this.selectedBrand.trim().length > 0
+      || this.selectedModel.trim().length > 0
+      || this.selectedDeviceStatus.trim().length > 0
+      || this.selectedTypeId !== null
+      || this.selectedRegionalFilterId !== null
+      || this.selectedBuildingFilterId !== null
+      || this.selectedAreaFilterId !== null;
+  }
 
   // Métodos para la paginación de dispositivos.
   get totalPages(): number {
@@ -218,7 +222,7 @@ export class AdminComponent {
     const search = this.reassignmentSearchTerm.trim().toLocaleLowerCase();
     const filtered = search
       ? this.reassignments.filter((item) => [item.CodigoInventario, item.NombreEdificio, item.NombreArea,
-        item.FechaCambio, item.Motivo, item.NoPagoAnterior, item.NoPagoNuevo]
+        item.FechaCambio, item.Motivo, item.NoPagoAnterior, item.NoPagoNuevo, item.NombreNuevo]
         .some((value) => String(value ?? '').toLocaleLowerCase().includes(search)))
       : [...this.reassignments];
     if (!this.reassignmentSortColumn) return filtered;
@@ -293,10 +297,7 @@ export class AdminComponent {
   }
 
   refreshEmployeeOptions(): void {
-    this.adminService.getEmployeeOptions().subscribe({
-      next: (employees) => this.allEmployeeOptions = employees,
-      error: () => this.employeeCatalogError = 'No se pudo actualizar el catálogo de empleados.',
-    });
+    this.adminService.clearEmployeeOptionsCache();
   }
   // Fin de los métodos auxiliares para el filtrado de usuarios.
 
@@ -324,7 +325,8 @@ export class AdminComponent {
           this.changeDetector.markForCheck();
         },
       });
-      this.loadDevicePage();
+      if (this.hasDeviceQuery) this.loadDevicePage();
+      else this.clearDeviceResults();
       return;
     }
 
@@ -342,11 +344,6 @@ export class AdminComponent {
     }
 
     if (this.activeSection === 'catalogs') {
-      this.isLoading = false;
-      return;
-    }
-
-    if (this.activeSection === 'reports') {
       this.isLoading = false;
       return;
     }
@@ -374,6 +371,7 @@ export class AdminComponent {
     });
   }
 
+      // Cambia la sección activa del panel administrativo y dispara la recarga de datos si es necesario.
   selectSection(section: AdminSection): void {
     // Cambia de sección, limpia mensajes y dispara su recarga.
     if (!this.canAccessAdminSection(section)) return;
@@ -385,6 +383,7 @@ export class AdminComponent {
     this.loadData();
   }
 
+  // Carga la lista de usuarios desde el backend, con control de estado y reintentos.
   private loadUsers(force = false): void {
     if (this.usersRequestInFlight || (this.usersLoaded && !force)) return;
 
@@ -470,6 +469,11 @@ export class AdminComponent {
   applyFilters(): void {
     this.currentPage = 1;
     if (this.deviceFilterTimer) clearTimeout(this.deviceFilterTimer);
+    if (!this.hasDeviceQuery) {
+      this.deviceFilterTimer = null;
+      this.clearDeviceResults();
+      return;
+    }
     this.deviceFilterTimer = setTimeout(() => {
       this.deviceFilterTimer = null;
       this.loadDevicePage();
@@ -495,11 +499,15 @@ export class AdminComponent {
       this.deviceFilterTimer = null;
     }
     this.errorMessage = '';
-    this.loadDevicePage();
+    this.clearDeviceResults();
   }
 
   loadDevicePage(): void {
     if (this.activeSection !== 'devices') return;
+    if (!this.hasDeviceQuery) {
+      this.clearDeviceResults();
+      return;
+    }
     this.isLoadingDevices = true;
     const requestId = ++this.deviceRequestId;
     this.adminService.getDevices({
@@ -538,6 +546,15 @@ export class AdminComponent {
     });
   }
 
+  private clearDeviceResults(): void {
+    this.deviceRequestId++;
+    this.devices = [];
+    this.totalDeviceCount = 0;
+    this.currentPage = 1;
+    this.isLoadingDevices = false;
+    this.changeDetector.markForCheck();
+  }
+
   selectRegionalFilter(idRegional: number | null): void {
     this.selectedRegionalFilterId = idRegional;
     this.selectedBuildingFilterId = null;
@@ -553,7 +570,8 @@ export class AdminComponent {
     this.selectedAreaFilterId = null;
     this.filterAreas = [];
     const requestId = ++this.filterAreaRequestId;
-    this.isLoadingFilterAreas = idEdificio !== null;
+    const shouldLoadAreas = idEdificio !== null && !this.adminService.hasAreasCache(idEdificio);
+    this.isLoadingFilterAreas = shouldLoadAreas;
     if (idEdificio !== null) {
       this.adminService.getAreas(idEdificio).pipe(finalize(() => {
         if (requestId !== this.filterAreaRequestId) return;
@@ -617,7 +635,8 @@ export class AdminComponent {
     this.newDevice.IdArea = null;
     this.areas = [];
     if (this.isCreateDeviceDialogOpen) this.clearDeviceEmployeeSelection();
-    this.isLoadingAreas = buildingId > 0;
+    const shouldLoadAreas = buildingId > 0 && !this.adminService.hasAreasCache(buildingId);
+    this.isLoadingAreas = shouldLoadAreas;
     if (buildingId > 0) {
       this.adminService.getAreas(buildingId).pipe(finalize(() => this.isLoadingAreas = false)).subscribe({
         next: (areas) => this.areas = areas,
@@ -629,10 +648,29 @@ export class AdminComponent {
   selectDeviceArea(idArea: number | null): void {
     this.newDevice.IdArea = idArea;
     this.clearDeviceEmployeeSelection();
-    this.isLoadingEmployeesForDevice = idArea !== null && this.isLoadingEmployeeCatalog;
-    if (idArea !== null && !this.isLoadingEmployeeCatalog) {
-      this.employeesForDeviceArea = this.allEmployeeOptions.filter((employee) => employee.IdArea === idArea);
-    }
+    this.employeeCatalogError = '';
+    if (idArea === null) return;
+
+    const requestId = ++this.employeeOptionsRequestId;
+    this.isLoadingEmployeeCatalog = true;
+    this.isLoadingEmployeesForDevice = true;
+    this.adminService.getEmployeeOptions(idArea).pipe(finalize(() => {
+      if (requestId !== this.employeeOptionsRequestId) return;
+      this.isLoadingEmployeeCatalog = false;
+      this.isLoadingEmployeesForDevice = false;
+      this.changeDetector.markForCheck();
+    })).subscribe({
+      next: (employees) => {
+        if (requestId !== this.employeeOptionsRequestId) return;
+        this.employeesForDeviceArea = employees;
+        this.changeDetector.markForCheck();
+      },
+      error: () => {
+        if (requestId !== this.employeeOptionsRequestId) return;
+        this.employeeCatalogError = 'No se pudo cargar el catálogo de empleados. Verifica la conexión con la API.';
+        this.changeDetector.markForCheck();
+      },
+    });
   }
 
   selectDeviceEmployee(employeeIndex: number | null): void {
@@ -643,11 +681,13 @@ export class AdminComponent {
   }
 
   private clearDeviceEmployeeSelection(): void {
+    this.employeeOptionsRequestId++;
     this.employeesForDeviceArea = [];
     this.selectedEmployeeIndex = null;
     this.newDevice.NumeroPagoAsignado = null;
     this.newDevice.NombreAsignado = null;
-    this.isLoadingEmployeesForDevice = this.isLoadingEmployeeCatalog;
+    this.isLoadingEmployeeCatalog = false;
+    this.isLoadingEmployeesForDevice = false;
   }
 
   handleDeviceStateChange(state: string): void {
@@ -855,6 +895,73 @@ export class AdminComponent {
     else this.confirmRemoveReassignment();
   }
 
+  exportReassignmentReport(): void {
+    this.message = '';
+    this.errorMessage = '';
+    this.adminService.getReassignments().subscribe({
+      next: async (reassignments) => {
+        try {
+          await this.createReassignmentWorkbook(reassignments);
+          this.message = `Reporte de reasignaciones exportado: ${reassignments.length} registros.`;
+        } catch {
+          this.errorMessage = 'No se pudo exportar el reporte de reasignaciones.';
+        }
+      },
+      error: () => this.errorMessage = 'No se pudo cargar el historial de reasignaciones para exportar.',
+    });
+  }
+
+  private async createReassignmentWorkbook(reassignments: Reassignment[]): Promise<void> {
+    const { default: ExcelJSModule } = await import('exceljs');
+    const workbook = new ExcelJSModule.Workbook();
+    workbook.creator = 'Sistema inventario';
+    workbook.created = new Date();
+    workbook.subject = 'Reporte de reasignaciones';
+    workbook.title = 'Reasignaciones';
+
+    const sheet = workbook.addWorksheet('Reasignaciones');
+    sheet.columns = [
+      { header: 'ID', key: 'IdReasignacion', width: 12 },
+      { header: 'Código inventario', key: 'CodigoInventario', width: 18 },
+      { header: 'Edificio', key: 'NombreEdificio', width: 24 },
+      { header: 'Departamento', key: 'NombreArea', width: 24 },
+      { header: 'Pago anterior', key: 'NoPagoAnterior', width: 18 },
+      { header: 'Pago nuevo', key: 'NoPagoNuevo', width: 18 },
+      { header: 'Fecha cambio', key: 'FechaCambio', width: 20 },
+      { header: 'Motivo', key: 'Motivo', width: 42 },
+    ];
+
+    sheet.addRows(reassignments.map((item) => ({
+      IdReasignacion: item.IdReasignacion,
+      CodigoInventario: item.CodigoInventario,
+      NombreEdificio: item.NombreEdificio ?? '',
+      NombreArea: item.NombreArea ?? '',
+      NoPagoAnterior: item.NoPagoAnterior ?? '',
+      NoPagoNuevo: item.NoPagoNuevo ?? '',
+      FechaCambio: item.FechaCambio ?? '',
+      Motivo: item.Motivo ?? '',
+    })));
+
+    sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F5A5A' } };
+    sheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const workbookBytes = new Uint8Array(buffer as ArrayBuffer);
+    const file = new Blob([workbookBytes.buffer], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+
+    const url = URL.createObjectURL(file);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `reporte-reasignaciones-${new Date().toISOString().slice(0, 10)}.xlsx`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  }
+
   // Agrega una nueva reasignación.
   addReassignment(): void {
     this.clearMessages();
@@ -928,14 +1035,12 @@ export class AdminComponent {
         next: (areas) => {
           if (requestId !== this.reassignmentAreaRequestId) return;
           this.reassignmentAreas = areas;
-          this.syncReassignmentEmployees();
           this.changeDetector.markForCheck();
         },
         error: () => {
           if (requestId !== this.reassignmentAreaRequestId) return;
           this.errorMessage = 'No se pudieron cargar los departamentos del edificio.';
           this.reassignmentAreas = [];
-          this.syncReassignmentEmployees();
           this.changeDetector.markForCheck();
         },
       });
@@ -944,17 +1049,28 @@ export class AdminComponent {
 
   selectReassignmentArea(idArea: number): void {
     this.newReassignment.IdArea = Number(idArea);
-    this.syncReassignmentEmployees();
-  }
+    this.clearReassignmentEmployee();
+    if (this.newReassignment.IdArea <= 0) return;
 
-  private syncReassignmentEmployees(): void {
-    if (this.newReassignment.IdArea > 0) {
-      this.reassignmentEmployees = this.allEmployeeOptions.filter((employee) => employee.IdArea === this.newReassignment.IdArea);
-      return;
-    }
-
-    const areaIds = new Set(this.reassignmentAreas.map((area) => area.IdArea));
-    this.reassignmentEmployees = this.allEmployeeOptions.filter((employee) => areaIds.has(employee.IdArea));
+    this.employeeCatalogError = '';
+    const requestId = ++this.reassignmentEmployeeRequestId;
+    this.isLoadingReassignmentEmployees = true;
+    this.adminService.getEmployeeOptions(this.newReassignment.IdArea).pipe(finalize(() => {
+      if (requestId !== this.reassignmentEmployeeRequestId) return;
+      this.isLoadingReassignmentEmployees = false;
+      this.changeDetector.markForCheck();
+    })).subscribe({
+      next: (employees) => {
+        if (requestId !== this.reassignmentEmployeeRequestId) return;
+        this.reassignmentEmployees = employees;
+        this.changeDetector.markForCheck();
+      },
+      error: () => {
+        if (requestId !== this.reassignmentEmployeeRequestId) return;
+        this.employeeCatalogError = 'No se pudo cargar el catálogo de empleados. Verifica la conexión con la API.';
+        this.changeDetector.markForCheck();
+      },
+    });
   }
 
   selectReassignmentEmployee(employeeIndex: number | null): void {
@@ -965,8 +1081,10 @@ export class AdminComponent {
   }
 
   private clearReassignmentEmployee(): void {
+    this.reassignmentEmployeeRequestId++;
     this.reassignmentEmployees = [];
     this.selectedReassignmentEmployeeIndex = null;
+    this.isLoadingReassignmentEmployees = false;
     this.newReassignment.NoPagoNuevo = null;
     this.newReassignment.NombreNuevo = '';
   }
@@ -1041,12 +1159,13 @@ export class AdminComponent {
 
       
     this.clearMessages();
-    if (!this.newUser.NombrePersona.trim()) {
-      this.errorMessage = 'El nombre de la persona es obligatorio.';
+    if (!this.newUser.Usuario.trim() || !this.newUser.NombrePersona.trim()) {
+      this.errorMessage = 'El usuario y el nombre de la persona son obligatorios.';
       return;
     }
-
+      // El input de fecha envía '' cuando queda vacío; el backend solo acepta null.
     const userToUpdate: UpdateAdminUser = {
+      Usuario: this.newUser.Usuario.trim(),
       NombrePersona: this.newUser.NombrePersona.trim(),
       FechaExpiracion: this.newUser.FechaExpiracion?.trim() || null,
       Estado: this.newUser.Estado,
@@ -1056,6 +1175,7 @@ export class AdminComponent {
       Modules: [...this.newUser.Modules],
       IsSuperAdmin: this.newUser.IsSuperAdmin,
     };
+    // Llama al servicio para actualizar el usuario en el backend.
     this.adminService.updateUser(this.editingUserId, userToUpdate).subscribe({
       next: () => {
         this.message = 'Usuario actualizado correctamente.';

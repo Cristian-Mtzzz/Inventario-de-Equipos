@@ -1,7 +1,7 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { catchError, map, Observable, shareReplay, tap, throwError } from 'rxjs';
-import { AdminUser, Area, Building, CatalogDepartment, CreateAdminUser, CreateDevice, CreateReassignment, Device, DeviceOption, DevicePageQuery, DeviceType, DirectoryEmployee, EmployeeOption, EmployeeSearchResult, PagedResult, RegionalOption, Reassignment, SaveBuilding, SaveDepartment, SaveDirectoryEmployee, SaveRegional, UpdateAdminUser, UpdateEmployee } from './admin.models';
+import { AdminUser, Area, Building, CatalogDepartment, CreateAdminUser, CreateDevice, CreateReassignment, Device, DeviceOption, DevicePageQuery, DeviceType, DirectoryEmployee, EmployeeOption, EmployeeSearchResult, PagedResult, RegionalOption, Reassignment, SaveBuilding, SaveDepartment, SaveDeviceType, SaveDirectoryEmployee, SaveRegional, UpdateAdminUser, UpdateEmployee } from './admin.models';
 
 const API_ADMIN_URL = '/api/admin';
 
@@ -41,9 +41,10 @@ export class AdminService {
   private deviceTypesCache$?: Observable<DeviceType[]>;
   private buildingsCache$?: Observable<Building[]>;
   private readonly areasCacheByBuilding = new Map<number, Observable<Area[]>>();
-  private employeeOptionsCache$?: Observable<EmployeeOption[]>;
+  private readonly employeeOptionsCacheByArea = new Map<number, Observable<EmployeeOption[]>>();
   constructor(private readonly httpClient: HttpClient) { }
 
+  // Consulta dispositivos paginados con filtros; Reportes recorre todas las páginas coincidentes.
   getDevices(query: DevicePageQuery): Observable<PagedResult<Device>> {
     let params = new HttpParams()
       .set('page', query.Page)
@@ -109,16 +110,23 @@ export class AdminService {
     return this.httpClient.put<void>(`${API_ADMIN_URL}/employees/directory/by-key`, employee, { params });
   }
 
-  getEmployeeOptions(): Observable<EmployeeOption[]> {
-    if (this.employeeOptionsCache$) return this.employeeOptionsCache$;
-    this.employeeOptionsCache$ = this.httpClient.get<Array<EmployeeOption & {
+  getEmployeeOptions(idArea: number): Observable<EmployeeOption[]> {
+    const cachedOptions = this.employeeOptionsCacheByArea.get(idArea);
+    if (cachedOptions) return cachedOptions;
+
+    const params = new HttpParams().set('idArea', idArea);
+    const request = this.httpClient.get<Array<EmployeeOption & {
       noPago?: string; nombreCompleto?: string; idArea?: number;
-    }>>(`${API_ADMIN_URL}/employees/options`).pipe(map((employees) => employees.map((employee) => ({
+    }>>(`${API_ADMIN_URL}/employees/options`, { params }).pipe(map((employees) => employees.map((employee) => ({
       NoPago: employee.NoPago ?? employee.noPago ?? '',
       NombreCompleto: employee.NombreCompleto ?? employee.nombreCompleto ?? '',
       IdArea: employee.IdArea ?? employee.idArea ?? 0,
-    }))), shareReplay({ bufferSize: 1, refCount: false }));
-    return this.employeeOptionsCache$;
+    }))), shareReplay({ bufferSize: 1, refCount: false }), catchError((error) => {
+      this.employeeOptionsCacheByArea.delete(idArea);
+      return throwError(() => error);
+    }));
+    this.employeeOptionsCacheByArea.set(idArea, request);
+    return request;
   }
 
   getDirectoryEmployees(): Observable<DirectoryEmployee[]> {
@@ -132,7 +140,7 @@ export class AdminService {
     }))));
   }
 
-  clearEmployeeOptionsCache(): void { this.employeeOptionsCache$ = undefined; }
+  clearEmployeeOptionsCache(): void { this.employeeOptionsCacheByArea.clear(); }
 
   getRegionals(): Observable<RegionalOption[]> {
     return this.httpClient.get<Array<RegionalOption & { idRegional?: number; nombreRegional?: string }>>(
@@ -184,6 +192,26 @@ export class AdminService {
   deleteDepartment(id: number): Observable<void> {
     return this.httpClient.delete<void>(`${API_ADMIN_URL}/departments/${id}`).pipe(tap(() => this.clearAreasCache()));
   }
+  getCatalogDeviceTypes(): Observable<DeviceType[]> {
+    return this.httpClient.get<Array<DeviceType & { idTipo?: number; nombreTipo?: string; tipoDispositivo?: string }>>(
+      `${API_ADMIN_URL}/catalog/device-types`,
+    ).pipe(map((types) => types.map((type) => ({
+      IdTipo: type.IdTipo ?? type.idTipo ?? 0,
+      NombreTipo: type.NombreTipo ?? type.nombreTipo ?? type.tipoDispositivo ?? '',
+    }))));
+  }
+  createDeviceType(deviceType: SaveDeviceType): Observable<void> {
+    return this.httpClient.post<void>(`${API_ADMIN_URL}/device-types`, deviceType)
+      .pipe(tap(() => this.clearDeviceTypesCache()));
+  }
+  updateDeviceType(id: number, deviceType: SaveDeviceType): Observable<void> {
+    return this.httpClient.put<void>(`${API_ADMIN_URL}/device-types/${id}`, deviceType)
+      .pipe(tap(() => this.clearDeviceTypesCache()));
+  }
+  deleteDeviceType(id: number): Observable<void> {
+    return this.httpClient.delete<void>(`${API_ADMIN_URL}/device-types/${id}`)
+      .pipe(tap(() => this.clearDeviceTypesCache()));
+  }
   createDirectoryEmployee(employee: SaveDirectoryEmployee): Observable<void> { return this.httpClient.post<void>(`${API_ADMIN_URL}/employees/directory`, employee); }
   deleteDirectoryEmployee(noPago: string): Observable<void> { return this.httpClient.delete<void>(`${API_ADMIN_URL}/employees/directory/${encodeURIComponent(noPago)}`); }
   deleteDirectoryEmployeeByKey(employeeKey: string): Observable<void> {
@@ -203,6 +231,8 @@ export class AdminService {
     );
     return this.deviceTypesCache$;
   }
+
+  private clearDeviceTypesCache(): void { this.deviceTypesCache$ = undefined; }
 
   getBuildings(): Observable<Building[]> {
     if (this.buildingsCache$) return this.buildingsCache$;
@@ -249,6 +279,10 @@ export class AdminService {
     return request;
   }
 
+  hasAreasCache(idEdificio: number): boolean {
+    return this.areasCacheByBuilding.has(idEdificio);
+  }
+
   private clearAreasCache(): void {
     this.areasCacheByBuilding.clear();
   }
@@ -283,13 +317,15 @@ export class AdminService {
     // Consulta el historial de cambios de responsable.
     return this.httpClient.get<Array<Reassignment & {
       idReasignacion?: number; idEquipo?: number; codigoInventario?: string; noPagoAnterior?: string | null;
-      noPagoNuevo?: string | null; nombreEdificio?: string | null; nombreArea?: string | null; fechaCambio?: string; motivo?: string;
+      noPagoNuevo?: string | null; nombreNuevo?: string | null; nombreEdificio?: string | null;
+      nombreArea?: string | null; fechaCambio?: string; motivo?: string;
     }>>(`${API_ADMIN_URL}/reassignments`).pipe(map((items) => items.map((item) => ({
       IdReasignacion: item.IdReasignacion ?? item.idReasignacion ?? 0,
       IdEquipo: item.IdEquipo ?? item.idEquipo ?? 0,
       CodigoInventario: item.CodigoInventario ?? item.codigoInventario ?? '',
       NoPagoAnterior: item.NoPagoAnterior ?? item.noPagoAnterior ?? null,
       NoPagoNuevo: item.NoPagoNuevo ?? item.noPagoNuevo ?? null,
+      NombreNuevo: item.NombreNuevo ?? item.nombreNuevo ?? null,
       NombreEdificio: item.NombreEdificio ?? item.nombreEdificio ?? null,
       NombreArea: item.NombreArea ?? item.nombreArea ?? null,
       FechaCambio: item.FechaCambio ?? item.fechaCambio ?? '',
