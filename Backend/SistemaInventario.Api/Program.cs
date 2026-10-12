@@ -32,8 +32,8 @@ if (!string.IsNullOrWhiteSpace(oracleTnsAdmin))
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
-// La conexión se obtiene desde User Secrets o variables de entorno para cambiar
-// de base de datos sin guardar usuarios ni contraseñas en el repositorio.
+// La conexión puede definirse en appsettings.Development.json local o mediante
+// variables de entorno sin guardar credenciales en el repositorio.
 var oracleConnection = builder.Configuration.GetConnectionString("OracleConnection");
 if (string.IsNullOrWhiteSpace(oracleConnection))
 {

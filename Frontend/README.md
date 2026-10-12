@@ -1,48 +1,66 @@
 # SistemaInventario
 
-Frontend Angular y API ASP.NET Core para el login contra Oracle.
+Frontend Angular y API ASP.NET Core para autenticación y gestión de inventario con Oracle.
 
-## Configurar Oracle y JWT
+## Requisitos para ejecutar el proyecto
 
-Desde `../Backend/SistemaInventario.Api` ejecuta:
+- Node.js compatible con Angular 22 y npm.
+- .NET 8 SDK.
+- Acceso de red (y VPN, si aplica) al servidor Oracle, credenciales autorizadas y el archivo `tnsnames.ora` que define el alias `HIHSS_APP`.
+- Para autenticar usuarios de dominio, ejecutar la API en Windows con acceso al Active Directory correspondiente.
 
-```powershell
-dotnet user-secrets init
-dotnet user-secrets set "ConnectionStrings:OracleConnection" "User Id=USUARIO;Password=CONTRASENA;Data Source=10.1.19.230:1521/hihss"
-dotnet user-secrets set "Jwt:Key" "una-clave-local-de-32-caracteres-o-mas"
+`npm install` instala únicamente las dependencias del frontend. No instala ni inicia la API, no configura Oracle y no da acceso a la base de datos.
+
+## Configuración local de Oracle
+
+Después de clonar el repositorio, crea `Backend\SistemaInventario.Api\appsettings.Development.json`. El archivo está excluido de Git; cada desarrollador debe configurarlo en su equipo:
+
+```json
+{
+  "ConnectionStrings": {
+    "OracleConnection": "User Id=USUARIO;Password=CONTRASENA;Data Source=HIHSS_APP"
+  },
+  "Oracle": {
+    "TnsAdmin": "C:\\ruta\\a\\la\\carpeta\\de\\Oracle"
+  }
+}
 ```
 
-La cadena usa Easy Connect directamente (`host:puerto/servicio`); no requiere `tnsnames.ora`. Reemplaza `USUARIO` y `CONTRASENA` por las credenciales autorizadas. La API no crea ni modifica tablas. Usa la tabla empresarial `USUARIOS` que ya existe en Oracle y consulta `ID_USUARIO`, `USUARIO`, `PASSWORD_HASH` y `ROL`. La verificacion usa `ORA_HASH(password, 4294967295) || ORA_HASH(usuario, 4294967295)`, igual que la actualizacion existente de usuarios.
+Reemplaza `USUARIO`, `CONTRASENA` y la ruta por valores proporcionados de forma segura por el administrador. La carpeta `TnsAdmin` debe contener `tnsnames.ora` con una entrada `HIHSS_APP`. No subas este archivo ni publiques credenciales.
 
-## Ejecutar en desarrollo
+La API espera que ya existan en Oracle las tablas y datos de la aplicación, incluidos `USUARIOS` y `USUARIO_MODULOS`; no crea ni modifica el esquema. La autenticación de usuarios de dominio también requiere que el servidor de API pueda comunicarse con Active Directory.
+
+## Instalar y ejecutar
+
+Desde la raíz del repositorio, en dos terminales:
 
 Terminal 1, API:
 
 ```powershell
-Set-Location ../Backend/SistemaInventario.Api
+Set-Location Backend\SistemaInventario.Api
+dotnet restore
 dotnet run --launch-profile http
 ```
 
-Terminal 2, Angular:
+La API queda en `http://localhost:5074` y Swagger en `http://localhost:5074/swagger`.
+
+Terminal 2, frontend:
 
 ```powershell
-npm.cmd start
+Set-Location Frontend
+npm ci
+npm start
 ```
 
-Abre `http://localhost:4200/login`. El proxy de Angular redirige `/api` a `http://localhost:5074`.
+Abre `http://localhost:4200/login`. El proxy de Angular redirige las peticiones `/api` a la API en `http://localhost:5074`.
 
-## Verificar la conexion
+## Validación
 
-```powershell
-Invoke-RestMethod http://localhost:5074/api/health
-```
-
-Una respuesta correcta es `{ "status": "ok", "database": "oracle" }`. El login usa `POST /api/auth/login` y devuelve un JWT con el usuario y su rol.
-
-## Validacion
+Desde la raíz del repositorio:
 
 ```powershell
-dotnet build ../Backend/SistemaInventario.Api/SistemaInventario.Api.csproj
-npm.cmd run build
-npm.cmd test -- --watch=false --no-progress
+dotnet build Backend\SistemaInventario.Api\SistemaInventario.Api.csproj
+Set-Location Frontend
+npm run build
+npm test -- --watch=false --no-progress
 ```

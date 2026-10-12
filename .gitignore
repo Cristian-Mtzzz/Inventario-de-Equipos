@@ -13,6 +13,7 @@ npm-debug.log*
 
 # Local secrets and environment files
 **/appsettings.Local.json
+**/appsettings.Development.json
 **/.env
 **/.env.*
 !**/.env.example
