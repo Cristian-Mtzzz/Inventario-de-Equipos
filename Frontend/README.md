@@ -13,13 +13,17 @@ Frontend Angular y API ASP.NET Core para autenticación y gestión de inventario
 
 ## Contraseña local de Oracle
 
-Los datos no secretos de Oracle ya están configurados en `Backend\SistemaInventario.Api\appsettings.json`. La contraseña no se guarda en Git: cada desarrollador debe configurar la variable de entorno `ORACLE_PASSWORD` en su equipo antes de iniciar la API. Por ejemplo, en PowerShell, solo para la terminal actual:
+Los datos de conexión no secretos están configurados en `Backend\SistemaInventario.Api\appsettings.json`. La contraseña no se guarda en Git. La API arranca aunque no esté configurada; para iniciar sesión y consultar Oracle, `ORACLE_PASSWORD` debe existir en las variables de entorno del usuario que ejecuta la API.
+
+Configúrala una sola vez en las variables de entorno de usuario de Windows; las terminales nuevas la heredarán y no habrá que escribirla cada vez. Si aún no está configurada, puedes establecerla de forma persistente desde PowerShell; Windows te pedirá la contraseña sin mostrarla:
 
 ```powershell
-$env:ORACLE_PASSWORD = "CONTRASENA"
+$securePassword = Read-Host "Contraseña Oracle" -AsSecureString
+$credential = [PSCredential]::new("oracle", $securePassword)
+[Environment]::SetEnvironmentVariable("ORACLE_PASSWORD", $credential.GetNetworkCredential().Password, "User")
 ```
 
-Reemplaza el valor por la contraseña proporcionada por el administrador. No guardes una contraseña real en archivos versionados, comandos compartidos, ni capturas o registros.
+Después, cierra y vuelve a abrir la terminal y ejecuta la API normalmente. Cada persona que clone el repositorio debe configurar sus propias credenciales autorizadas. No guardes una contraseña real en archivos versionados.
 
 La API espera que ya existan en Oracle las tablas y datos de la aplicación, incluidos `USUARIOS` y `USUARIO_MODULOS`; no crea ni modifica el esquema. La autenticación de usuarios de dominio también requiere que el servidor de API pueda comunicarse con Active Directory.
 

@@ -18,8 +18,8 @@ const string AngularCorsPolicy = "AngularCorsPolicy";
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
-// Los datos de conexión no secretos están versionados; la contraseña se entrega
-// por separado para evitar publicarla junto al código.
+// Los datos no secretos están versionados. La contraseña puede configurarse
+// localmente mediante ORACLE_PASSWORD sin impedir que la API arranque.
 var oracleConnection = builder.Configuration.GetConnectionString("OracleConnection");
 if (string.IsNullOrWhiteSpace(oracleConnection))
 {
@@ -28,17 +28,14 @@ if (string.IsNullOrWhiteSpace(oracleConnection))
 }
 
 var oraclePassword = Environment.GetEnvironmentVariable("ORACLE_PASSWORD");
-if (string.IsNullOrWhiteSpace(oraclePassword))
+if (!string.IsNullOrWhiteSpace(oraclePassword))
 {
-    throw new InvalidOperationException(
-        "Falta configurar la variable de entorno ORACLE_PASSWORD con la contraseña de Oracle.");
+    var oracleConnectionBuilder = new OracleConnectionStringBuilder(oracleConnection)
+    {
+        Password = oraclePassword,
+    };
+    oracleConnection = oracleConnectionBuilder.ConnectionString;
 }
-
-var oracleConnectionBuilder = new OracleConnectionStringBuilder(oracleConnection)
-{
-    Password = oraclePassword,
-};
-oracleConnection = oracleConnectionBuilder.ConnectionString;
 
 // Registra servicios que concentran reglas y SQL de cada módulo, manteniendo los
 // controladores enfocados en HTTP y validaciones básicas.
