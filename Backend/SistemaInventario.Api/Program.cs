@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Oracle.ManagedDataAccess.Client;
 using SistemaInventario.Api.Data;
 using SistemaInventario.Api.Services;
 
@@ -11,6 +12,20 @@ using SistemaInventario.Api.Services;
 var builder = WebApplication.CreateBuilder(args);
 
 const string AngularCorsPolicy = "AngularCorsPolicy";
+
+// ODP.NET no lee Oracle:TnsAdmin de la configuración de ASP.NET Core por sí
+// mismo; hay que aplicarlo antes de crear conexiones para resolver alias TNS.
+var oracleTnsAdmin = builder.Configuration["Oracle:TnsAdmin"];
+if (!string.IsNullOrWhiteSpace(oracleTnsAdmin))
+{
+    if (!Directory.Exists(oracleTnsAdmin))
+    {
+        throw new InvalidOperationException(
+            "Oracle:TnsAdmin debe apuntar a un directorio existente con la configuración de Oracle.");
+    }
+
+    OracleConfiguration.TnsAdmin = oracleTnsAdmin;
+}
 
 // Habilita controladores para exponer endpoints, Swagger para probarlos y EF Core
 // para administrar la conexión compartida con Oracle.
