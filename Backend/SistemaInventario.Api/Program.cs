@@ -13,33 +13,32 @@ var builder = WebApplication.CreateBuilder(args);
 
 const string AngularCorsPolicy = "AngularCorsPolicy";
 
-// ODP.NET no lee Oracle:TnsAdmin de la configuración de ASP.NET Core por sí
-// mismo; hay que aplicarlo antes de crear conexiones para resolver alias TNS.
-var oracleTnsAdmin = builder.Configuration["Oracle:TnsAdmin"];
-if (!string.IsNullOrWhiteSpace(oracleTnsAdmin))
-{
-    if (!Directory.Exists(oracleTnsAdmin))
-    {
-        throw new InvalidOperationException(
-            "Oracle:TnsAdmin debe apuntar a un directorio existente con la configuración de Oracle.");
-    }
-
-    OracleConfiguration.TnsAdmin = oracleTnsAdmin;
-}
-
 // Habilita controladores para exponer endpoints, Swagger para probarlos y EF Core
 // para administrar la conexión compartida con Oracle.
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
-// La conexión puede definirse en appsettings.Development.json local o mediante
-// variables de entorno sin guardar credenciales en el repositorio.
+// Los datos de conexión no secretos están versionados; la contraseña se entrega
+// por separado para evitar publicarla junto al código.
 var oracleConnection = builder.Configuration.GetConnectionString("OracleConnection");
 if (string.IsNullOrWhiteSpace(oracleConnection))
 {
     throw new InvalidOperationException(
-        "Falta configurar ConnectionStrings:OracleConnection mediante User Secrets o una variable de entorno.");
+        "Falta configurar ConnectionStrings:OracleConnection en appsettings.json.");
 }
+
+var oraclePassword = Environment.GetEnvironmentVariable("ORACLE_PASSWORD");
+if (string.IsNullOrWhiteSpace(oraclePassword))
+{
+    throw new InvalidOperationException(
+        "Falta configurar la variable de entorno ORACLE_PASSWORD con la contraseña de Oracle.");
+}
+
+var oracleConnectionBuilder = new OracleConnectionStringBuilder(oracleConnection)
+{
+    Password = oraclePassword,
+};
+oracleConnection = oracleConnectionBuilder.ConnectionString;
 
 // Registra servicios que concentran reglas y SQL de cada módulo, manteniendo los
 // controladores enfocados en HTTP y validaciones básicas.
