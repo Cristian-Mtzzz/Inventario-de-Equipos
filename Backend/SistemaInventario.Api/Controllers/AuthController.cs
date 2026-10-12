@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using Oracle.ManagedDataAccess.Client;
 using SistemaInventario.Api.Models;
 using SistemaInventario.Api.Services;
 
@@ -10,7 +11,10 @@ namespace SistemaInventario.Api.Controllers;
 [ApiController]
 [Route("api/auth")]
 // Expone el inicio de sesión y devuelve el token junto con los datos del usuario.
-public sealed class AuthController(IAuthService authService, IModulePermissionService modulePermissions) : ControllerBase
+public sealed class AuthController(
+    IAuthService authService,
+    IModulePermissionService modulePermissions,
+    ILogger<AuthController> logger) : ControllerBase
 {
     [HttpPost("login")]
     [AllowAnonymous]
@@ -19,12 +23,20 @@ public sealed class AuthController(IAuthService authService, IModulePermissionSe
         LoginRequestDto loginRequest,
         CancellationToken cancellationToken)
     {
-     
-       
-        var loginResponse = await authService.AuthenticateUser(loginRequest, cancellationToken);
-        return loginResponse is null
-            ? Unauthorized(new { Message = "Credenciales invalidas." })
-            : Ok(loginResponse);
+        try
+        {
+            var loginResponse = await authService.AuthenticateUser(loginRequest, cancellationToken);
+            return loginResponse is null
+                ? Unauthorized(new { Message = "Credenciales invalidas." })
+                : Ok(loginResponse);
+        }
+        catch (OracleException exception)
+        {
+            logger.LogError(exception, "No se pudo consultar Oracle durante el inicio de sesión.");
+            return StatusCode(
+                StatusCodes.Status503ServiceUnavailable,
+                new { Message = "El servicio de autenticación no está disponible temporalmente." });
+        }
     }
 
     [HttpGet("permissions")]

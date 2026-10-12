@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-using Oracle.ManagedDataAccess.Client;
 using SistemaInventario.Api.Data;
 using SistemaInventario.Api.Services;
 
@@ -25,12 +24,6 @@ if (string.IsNullOrWhiteSpace(oracleConnection))
 {
     throw new InvalidOperationException(
         "Falta configurar ConnectionStrings:OracleConnection mediante User Secrets o una variable de entorno.");
-}
-
-var tnsAdmin = builder.Configuration["Oracle:TnsAdmin"];
-if (!string.IsNullOrWhiteSpace(tnsAdmin))
-{
-    OracleConfiguration.TnsAdmin = tnsAdmin;
 }
 
 // Registra servicios que concentran reglas y SQL de cada módulo, manteniendo los

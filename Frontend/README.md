@@ -8,11 +8,11 @@ Desde `../Backend/SistemaInventario.Api` ejecuta:
 
 ```powershell
 dotnet user-secrets init
-dotnet user-secrets set "ConnectionStrings:OracleConnection" "User Id=INVENTARIO;Password=TU_PASSWORD;Data Source=localhost:1521/XEPDB1"
+dotnet user-secrets set "ConnectionStrings:OracleConnection" "User Id=USUARIO;Password=CONTRASENA;Data Source=10.1.19.230:1521/hihss"
 dotnet user-secrets set "Jwt:Key" "una-clave-local-de-32-caracteres-o-mas"
 ```
 
-La API no crea ni modifica tablas. Usa la tabla empresarial `USUARIOS` que ya existe en Oracle y consulta `ID_USUARIO`, `USUARIO`, `PASSWORD_HASH` y `ROL`. La verificacion usa `ORA_HASH(password, 4294967295) || ORA_HASH(usuario, 4294967295)`, igual que la actualizacion existente de usuarios.
+La cadena usa Easy Connect directamente (`host:puerto/servicio`); no requiere `tnsnames.ora`. Reemplaza `USUARIO` y `CONTRASENA` por las credenciales autorizadas. La API no crea ni modifica tablas. Usa la tabla empresarial `USUARIOS` que ya existe en Oracle y consulta `ID_USUARIO`, `USUARIO`, `PASSWORD_HASH` y `ROL`. La verificacion usa `ORA_HASH(password, 4294967295) || ORA_HASH(usuario, 4294967295)`, igual que la actualizacion existente de usuarios.
 
 ## Ejecutar en desarrollo
 
