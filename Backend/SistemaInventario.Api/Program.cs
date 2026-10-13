@@ -13,13 +13,51 @@ var builder = WebApplication.CreateBuilder(args);
 
 const string AngularCorsPolicy = "AngularCorsPolicy";
 
+// Carga ORACLE_PASSWORD desde .env local si no está definida en el entorno.
+var localEnvPath = Path.Combine(builder.Environment.ContentRootPath, ".env");
+if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ORACLE_PASSWORD"))
+    && File.Exists(localEnvPath))
+{
+    foreach (var line in File.ReadLines(localEnvPath))
+    {
+        var setting = line.Trim();
+        if (setting.Length == 0 || setting.StartsWith('#'))
+        {
+            continue;
+        }
+
+        var separatorIndex = setting.IndexOf('=');
+        if (separatorIndex < 0
+            || !string.Equals(setting[..separatorIndex].Trim(), "ORACLE_PASSWORD", StringComparison.Ordinal))
+        {
+            continue;
+        }
+
+        var password = setting[(separatorIndex + 1)..].Trim();
+        if (password.Length >= 2
+            && ((password[0] == '"' && password[^1] == '"')
+                || (password[0] == '\'' && password[^1] == '\'')))
+        {
+            password = password[1..^1];
+        }
+
+        if (string.IsNullOrWhiteSpace(password))
+        {
+            throw new InvalidDataException("ORACLE_PASSWORD no puede estar vacío en el archivo .env local.");
+        }
+
+        Environment.SetEnvironmentVariable("ORACLE_PASSWORD", password);
+        break;
+    }
+}
+
 // Habilita controladores para exponer endpoints, Swagger para probarlos y EF Core
 // para administrar la conexión compartida con Oracle.
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
-// Los datos no secretos están versionados. La contraseña puede configurarse
-// localmente mediante ORACLE_PASSWORD sin impedir que la API arranque.
+// Los datos no secretos están versionados; la contraseña se carga desde el
+// entorno o desde el archivo .env local ignorado por Git.
 var oracleConnection = builder.Configuration.GetConnectionString("OracleConnection");
 if (string.IsNullOrWhiteSpace(oracleConnection))
 {
