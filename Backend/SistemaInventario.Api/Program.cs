@@ -4,7 +4,6 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
-using Oracle.ManagedDataAccess.Client;
 using SistemaInventario.Api.Data;
 using SistemaInventario.Api.Services;
 using SistemaInventario.Api.Swagger;
@@ -14,44 +13,6 @@ using SistemaInventario.Api.Swagger;
 var builder = WebApplication.CreateBuilder(args);
 
 const string AngularCorsPolicy = "AngularCorsPolicy";
-
-// Carga ORACLE_PASSWORD desde .env local si no está definida en el entorno.
-var localEnvPath = Path.Combine(builder.Environment.ContentRootPath, ".env");
-if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ORACLE_PASSWORD"))
-    && File.Exists(localEnvPath))
-{
-    foreach (var line in File.ReadLines(localEnvPath))
-    {
-        var setting = line.Trim();
-        if (setting.Length == 0 || setting.StartsWith('#'))
-        {
-            continue;
-        }
-
-        var separatorIndex = setting.IndexOf('=');
-        if (separatorIndex < 0
-            || !string.Equals(setting[..separatorIndex].Trim(), "ORACLE_PASSWORD", StringComparison.Ordinal))
-        {
-            continue;
-        }
-
-        var password = setting[(separatorIndex + 1)..].Trim();
-        if (password.Length >= 2
-            && ((password[0] == '"' && password[^1] == '"')
-                || (password[0] == '\'' && password[^1] == '\'')))
-        {
-            password = password[1..^1];
-        }
-
-        if (string.IsNullOrWhiteSpace(password))
-        {
-            throw new InvalidDataException("ORACLE_PASSWORD no puede estar vacío en el archivo .env local.");
-        }
-
-        Environment.SetEnvironmentVariable("ORACLE_PASSWORD", password);
-        break;
-    }
-}
 
 // Habilita controladores para exponer endpoints, Swagger para probarlos y EF Core
 // para administrar la conexión compartida con Oracle.
@@ -75,23 +36,13 @@ builder.Services.AddSwaggerGen(options =>
     });
     options.OperationFilter<AuthorizeCheckOperationFilter>();
 });
-// Los datos no secretos están versionados; la contraseña se carga desde el
-// entorno o desde el archivo .env local ignorado por Git.
+// La cadena completa se configura en appsettings.json o en el archivo
+// específico del entorno, por ejemplo appsettings.Development.json.
 var oracleConnection = builder.Configuration.GetConnectionString("OracleConnection");
 if (string.IsNullOrWhiteSpace(oracleConnection))
 {
     throw new InvalidOperationException(
         "Falta configurar ConnectionStrings:OracleConnection en appsettings.json.");
-}
-
-var oraclePassword = Environment.GetEnvironmentVariable("ORACLE_PASSWORD");
-if (!string.IsNullOrWhiteSpace(oraclePassword))
-{
-    var oracleConnectionBuilder = new OracleConnectionStringBuilder(oracleConnection)
-    {
-        Password = oraclePassword,
-    };
-    oracleConnection = oracleConnectionBuilder.ConnectionString;
 }
 
 // Registra servicios que concentran reglas y SQL de cada módulo, manteniendo los
@@ -106,7 +57,18 @@ builder.Services.AddScoped<IAuthorizationHandler, ModuleAccessAuthorizationHandl
 
 // Configura la validación JWT. Los claims del token identifican al usuario y sus
 // roles para que cada endpoint pueda decidir qué operaciones permite.
-var jwtKey = builder.Configuration["Jwt:Key"] ?? "SistemaInventarioLocalDevelopmentKey1234567890";
+var jwtKey = builder.Configuration["Jwt:Key"];
+if (string.IsNullOrWhiteSpace(jwtKey))
+{
+    if (!builder.Environment.IsDevelopment())
+    {
+        throw new InvalidOperationException(
+            "Falta configurar Jwt:Key mediante la configuración del entorno (por ejemplo, Jwt__Key).");
+    }
+
+    jwtKey = "SistemaInventarioLocalDevelopmentKey1234567890";
+}
+
 if (jwtKey.Length < 32)
 {
     throw new InvalidOperationException("Jwt:Key debe tener al menos 32 caracteres.");
