@@ -1,9 +1,10 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { catchError, map, Observable, shareReplay, tap, throwError } from 'rxjs';
+import { apiUrl } from '../api-url';
 import { AdminUser, Area, Building, CatalogDepartment, CreateAdminUser, CreateDevice, CreateReassignment, Device, DeviceOption, DevicePageQuery, DeviceType, DirectoryEmployee, EmployeeOption, EmployeeSearchResult, PagedResult, RegionalOption, Reassignment, SaveBuilding, SaveDepartment, SaveDeviceType, SaveDirectoryEmployee, SaveRegional, UpdateAdminUser, UpdateEmployee } from './admin.models';
 
-const API_ADMIN_URL = '/api/admin';
+const API_ADMIN_URL = apiUrl('admin');
 
 type ApiDevice = Device & {
   idEquipo?: number; codigoInventario?: string; noSerie?: string; marca?: string;

@@ -19,7 +19,8 @@ Los datos de conexión no secretos están configurados en `Backend\SistemaInvent
 ORACLE_PASSWORD=contraseña-proporcionada-por-el-administrador
 ```
 
-La API carga el archivo automáticamente al arrancar, así que no tienes que volver a escribir la contraseña. Cada persona que clone el repositorio debe crear su propio `.env` con las credenciales Oracle que le hayan compartido. No subas ese archivo a GitHub.
+La API carga el archivo automáticamente al arrancar, así que no tienes que volver a escribir la contraseña. Cada persona que clone el repositorio debe crear su propio `.env` y agregar esta linea "ORACLE_PASSWORD="ts26ihss*"
+
 
 La API espera que ya existan en Oracle las tablas y datos de la aplicación, incluidos `USUARIOS` y `USUARIO_MODULOS`; no crea ni modifica el esquema. La autenticación de usuarios de dominio también requiere que el servidor de API pueda comunicarse con Active Directory.
 
@@ -36,6 +37,10 @@ dotnet run --launch-profile http
 ```
 
 La API queda en `http://localhost:5074` y Swagger en `http://localhost:5074/swagger`.
+
+En el servidor, Swagger queda disponible en `http://10.1.22.55/desInventariosTic/swagger` y el documento OpenAPI en `http://10.1.22.55/desInventariosTic/swagger/v1/swagger.json`. Para probar rutas protegidas desde Swagger UI, usa **Authorize** e ingresa el JWT recibido en `/api/auth/login` sin anteponer `Bearer `.
+
+El build de producción configura Angular para publicarse bajo `/desInventariosTic/`; las solicitudes del frontend se envían a `/desInventariosTic/api`. Si se publica la aplicación bajo otro prefijo, actualiza `baseHref` en `Frontend/angular.json` para que coincida con la ruta virtual del servidor.
 
 Terminal 2, frontend:
 

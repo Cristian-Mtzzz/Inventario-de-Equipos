@@ -1,9 +1,10 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable, map } from 'rxjs';
+import { apiUrl } from '../api-url';
 import { Maintenance, MaintenanceEditRequest, MaintenanceEntryRequest, MaintenanceExitRequest, ReceptionEntryRequest, WorkshopDevice } from './taller.models';
 
-const API_TALLER_URL = '/api/taller';
+const API_TALLER_URL = apiUrl('taller');
 
 // Cliente HTTP de recepción y mantenimiento; adapta la respuesta de Oracle al frontend.
 @Injectable({ providedIn: 'root' })

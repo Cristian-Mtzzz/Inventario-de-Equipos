@@ -3,9 +3,11 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
 using Oracle.ManagedDataAccess.Client;
 using SistemaInventario.Api.Data;
 using SistemaInventario.Api.Services;
+using SistemaInventario.Api.Swagger;
 
 // Punto de entrada de la API. Aquí se conectan configuración, Oracle, servicios,
 // autenticación JWT, CORS y el pipeline HTTP que atiende al frontend.
@@ -55,7 +57,24 @@ if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ORACLE_PASSWOR
 // para administrar la conexión compartida con Oracle.
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "SistemaInventario API",
+        Version = "v1",
+    });
+    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        In = ParameterLocation.Header,
+        Description = "Ingresa el token JWT obtenido desde /api/auth/login.",
+    });
+    options.OperationFilter<AuthorizeCheckOperationFilter>();
+});
 // Los datos no secretos están versionados; la contraseña se carga desde el
 // entorno o desde el archivo .env local ignorado por Git.
 var oracleConnection = builder.Configuration.GetConnectionString("OracleConnection");
@@ -149,12 +168,10 @@ builder.Services.AddCors(options => options.AddPolicy(AngularCorsPolicy, policy 
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+// La documentación también está disponible en despliegues: /swagger y
+// /swagger/v1/swagger.json.
+app.UseSwagger();
+app.UseSwaggerUI();
 
 // El orden garantiza CORS, autenticación y autorización antes de ejecutar controladores.
 app.UseCors(AngularCorsPolicy);

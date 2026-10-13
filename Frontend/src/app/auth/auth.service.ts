@@ -2,13 +2,14 @@ import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Injectable, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { BehaviorSubject, EMPTY, Observable, catchError, finalize, map, tap } from 'rxjs';
+import { apiUrl } from '../api-url';
 import { AuthUser, LoginRequest, LoginResponse, ModuleAccess, UserRole } from './auth.models';
 
 const WELCOME_TOAST_DURATION_MS = 2000;
 const SESSION_IDLE_TIMEOUT_MS = 30 * 60 * 1000;
 const TOKEN_REFRESH_MARGIN_MS = 2 * 60 * 1000;
 
-const API_AUTH_URL = '/api/auth';
+const API_AUTH_URL = apiUrl('auth');
 const AUTH_TOKEN_KEY = 'sistema_inventario_token';
 const AUTH_USER_KEY = 'sistema_inventario_user';
 const LAST_ACTIVITY_KEY = 'sistema_inventario_last_activity';
@@ -85,7 +86,7 @@ export class AuthService {
 
   // Cambia la contraseña inicial del usuario.
   changeInitialPassword(currentPassword: string, newPassword: string): Observable<void> {
-    return this.httpClient.post<void>('/api/auth/change-initial-password', {
+    return this.httpClient.post<void>(`${API_AUTH_URL}/change-initial-password`, {
       CurrentPassword: currentPassword,
       NewPassword: newPassword,
     });
