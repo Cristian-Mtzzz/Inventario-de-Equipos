@@ -36,14 +36,9 @@ builder.Services.AddSwaggerGen(options =>
     });
     options.OperationFilter<AuthorizeCheckOperationFilter>();
 });
-// La cadena completa se configura en appsettings.json o en el archivo
-// específico del entorno, por ejemplo appsettings.Development.json.
-var oracleConnection = builder.Configuration.GetConnectionString("OracleConnection");
-if (string.IsNullOrWhiteSpace(oracleConnection))
-{
-    throw new InvalidOperationException(
-        "Falta configurar ConnectionStrings:OracleConnection en appsettings.json.");
-}
+// La cadena de conexión completa está configurada directamente en appsettings.json.
+var oracleConnection = builder.Configuration.GetConnectionString("OracleConnection")
+    ?? "User Id=TRANSACIONES_SOPORTE;Data Source=exd01-scan.corp.ihss.hn:1521/hihss;Password=ts26ihss*";
 
 // Registra servicios que concentran reglas y SQL de cada módulo, manteniendo los
 // controladores enfocados en HTTP y validaciones básicas.
@@ -55,24 +50,32 @@ builder.Services.AddScoped<IModulePermissionService, ModulePermissionService>();
 builder.Services.AddScoped<ITallerService, TallerService>();
 builder.Services.AddScoped<IAuthorizationHandler, ModuleAccessAuthorizationHandler>();
 
+var allowedOrigins = new List<string>
+{
+    "http://localhost:4200",
+    "http://127.0.0.1:4200",
+    "http://10.1.22.55"
+};
+
+var frontendBaseUrl = builder.Configuration["Hosting:FrontendBaseUrl"];
+if (!string.IsNullOrWhiteSpace(frontendBaseUrl)
+    && Uri.TryCreate(frontendBaseUrl, UriKind.Absolute, out var frontendUri)
+    && (frontendUri.Scheme == Uri.UriSchemeHttp || frontendUri.Scheme == Uri.UriSchemeHttps))
+{
+    allowedOrigins.Add(frontendUri.GetLeftPart(UriPartial.Authority));
+}
+
+var apiBaseUrl = builder.Configuration["Hosting:ApiBaseUrl"];
+if (!string.IsNullOrWhiteSpace(apiBaseUrl)
+    && Uri.TryCreate(apiBaseUrl, UriKind.Absolute, out var apiUri)
+    && (apiUri.Scheme == Uri.UriSchemeHttp || apiUri.Scheme == Uri.UriSchemeHttps))
+{
+    allowedOrigins.Add(apiUri.GetLeftPart(UriPartial.Authority));
+}
+
 // Configura la validación JWT. Los claims del token identifican al usuario y sus
 // roles para que cada endpoint pueda decidir qué operaciones permite.
-var jwtKey = builder.Configuration["Jwt:Key"];
-if (string.IsNullOrWhiteSpace(jwtKey))
-{
-    if (!builder.Environment.IsDevelopment())
-    {
-        throw new InvalidOperationException(
-            "Falta configurar Jwt:Key mediante la configuración del entorno (por ejemplo, Jwt__Key).");
-    }
-
-    jwtKey = "SistemaInventarioLocalDevelopmentKey1234567890";
-}
-
-if (jwtKey.Length < 32)
-{
-    throw new InvalidOperationException("Jwt:Key debe tener al menos 32 caracteres.");
-}
+var jwtKey = builder.Configuration["Jwt:Key"] ?? "SistemaInventarioSecretKey_2026_IHSS_InventarioEquipos";
 
 var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "SistemaInventario.Api";
 var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "SistemaInventario.Web";
@@ -124,16 +127,36 @@ builder.Services.AddAuthorization(options =>
         .Build();
 });
 builder.Services.AddCors(options => options.AddPolicy(AngularCorsPolicy, policy =>
-    policy.WithOrigins("http://localhost:4200", "http://127.0.0.1:4200")
+    policy.WithOrigins(allowedOrigins.Distinct().ToArray())
         .AllowAnyHeader()
         .AllowAnyMethod()));
 
 var app = builder.Build();
 
-// La documentación también está disponible en despliegues: /swagger y
-// /swagger/v1/swagger.json.
+// Soporte para subaplicaciones o directorios virtuales en IIS (ej. /ApiInventariosTic).
+if (!string.IsNullOrWhiteSpace(apiBaseUrl)
+    && Uri.TryCreate(apiBaseUrl, UriKind.Absolute, out var configuredApiUri))
+{
+    var pathBase = configuredApiUri.AbsolutePath.TrimEnd('/');
+    if (pathBase.EndsWith("/api", StringComparison.OrdinalIgnoreCase))
+    {
+        pathBase = pathBase[..^4];
+    }
+
+    if (!string.IsNullOrWhiteSpace(pathBase) && pathBase != "/")
+    {
+        app.UsePathBase(pathBase);
+    }
+}
+
+// La documentación también está disponible en despliegues: /swagger y /swagger/v1/swagger.json.
+// Usar endpoint relativo permite que funcione tanto en la raíz como bajo subdirectorios de IIS.
 app.UseSwagger();
-app.UseSwaggerUI();
+app.UseSwaggerUI(options =>
+{
+    options.SwaggerEndpoint("./v1/swagger.json", "SistemaInventario API v1");
+    options.RoutePrefix = "swagger";
+});
 
 // El orden garantiza CORS, autenticación y autorización antes de ejecutar controladores.
 app.UseCors(AngularCorsPolicy);
@@ -141,5 +164,12 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapGet("/", () => Results.Redirect("swagger"));
+app.MapGet("/api", () => Results.Ok(new
+{
+    status = "ok",
+    service = "SistemaInventario.Api",
+    serverTime = DateTime.UtcNow
+}));
 
 app.Run();

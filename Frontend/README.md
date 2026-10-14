@@ -23,12 +23,7 @@ La cadena de conexión completa se configura en `Backend\SistemaInventario.Api\a
 }
 ```
 
-ASP.NET Core carga este archivo automáticamente cuando `ASPNETCORE_ENVIRONMENT` está en `Development`. Cada instalación debe completar la cadena con las credenciales y el servicio Oracle autorizados. No se requiere la variable `ORACLE_PASSWORD`.
-
-
-La API espera que ya existan en Oracle las tablas y datos de la aplicación, incluidos `USUARIOS` y `USUARIO_MODULOS`; no crea ni modifica el esquema. La autenticación de usuarios de dominio también requiere que el servidor de API pueda comunicarse con Active Directory.
-
-En producción configura `Jwt__Key` como variable de entorno con una clave secreta única de al menos 32 caracteres. La clave de desarrollo local solo se usa cuando ASP.NET Core está en el entorno `Development`.
+Tanto la conexión a Oracle como la clave JWT están configuradas directamente en `Backend\SistemaInventario.Api\appsettings.json`, por lo que no se requiere configurar variables de entorno en el servidor ni archivos de secretos separados.
 
 ## Instalar y ejecutar
 
@@ -46,9 +41,23 @@ La API queda en `http://localhost:5074` y Swagger en `http://localhost:5074/swag
 
 En el servidor, Swagger queda disponible en `http://10.1.22.55/ApiInventariosTic/swagger` y el documento OpenAPI en `http://10.1.22.55/ApiInventariosTic/swagger/v1/swagger.json`. Para probar rutas protegidas desde Swagger UI, usa **Authorize** e ingresa el JWT recibido en `/api/auth/login` sin anteponer `Bearer `.
 
-El build de producción configura Angular para publicarse bajo `/desInventariosTic/`. La API se publica en la aplicación IIS `/ApiInventariosTic/`, por lo que el frontend envía sus solicitudes a `/ApiInventariosTic/api`. Comprueba la disponibilidad de la API en `http://10.1.22.55/ApiInventariosTic/api/health`. Si cambia la ruta virtual de la API, actualiza `API_BASE_PATH` en `Frontend/src/app/api-url.ts`.
+El build de producción configura el `base href` `/desInventariosTic/` en `Frontend\angular.json`. El frontend llama a `/ApiInventariosTic/api/`, definido en `Frontend\src\app\api-url.ts`; el proxy de desarrollo redirige esa ruta a `http://localhost:5074`. Si cambia alguna ruta virtual, actualiza estos valores en los archivos existentes y vuelve a compilar el frontend. Comprueba la API en `http://10.1.22.55/ApiInventariosTic/api/health`.
 
-Para que IIS lea la cadena Oracle, establece `ASPNETCORE_ENVIRONMENT=Development` en la configuración de la aplicación IIS y publica la API desde el equipo que tiene `appsettings.Development.json`. Verifica que el archivo quede junto a la DLL publicada; al no estar en Git, una publicación hecha desde un clon limpio no lo tendrá. Después de copiar la publicación al servidor, reinicia la aplicación IIS.
+En desarrollo, `npm start` usa el proxy de Angular en `/api` hacia `http://localhost:5074`; no requiere cambiar `appsettings.json`.
+
+### Publicar la API para IIS
+
+Desde `Backend\SistemaInventario.Api`, genera una publicación autocontenida de 64 bits:
+
+```powershell
+dotnet publish -c Release -p:PublishIIS=true
+```
+
+El resultado queda en `bin\Release\net8.0\win-x64\publish`. Copia **todo** su contenido al directorio físico que IIS ya tiene asignado a `/ApiInventariosTic/`. El proyecto compila la API con el runtime de .NET 8 y genera la configuración IIS para ejecutar la API fuera del proceso de IIS (`OutOfProcess`), integrado directamente en el archivo `.csproj` sin requerir perfiles `.pubxml` externos ni scripts adicionales.
+
+La publicación no puede instalar el módulo ASP.NET Core de IIS (ANCM), crear la aplicación IIS ni cambiar su directorio físico o grupo de aplicaciones. Esos requisitos deben existir previamente y no pueden resolverse desde `dotnet publish` si no tienes permisos de administración. Si ANCM no está instalado, un paquete autocontenido tampoco elimina el error 500.31. La primera solicitud después de copiar los archivos normalmente hace que IIS inicie la aplicación; reciclar el grupo dedicado a esta API puede ser necesario para reemplazar una instancia que siga ejecutándose, pero no hace falta reiniciar todo IIS.
+
+
 
 Terminal 2, frontend:
 

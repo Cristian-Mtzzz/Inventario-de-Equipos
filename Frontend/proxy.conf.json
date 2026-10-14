@@ -4,5 +4,14 @@
     "secure": false,
     "changeOrigin": true,
     "logLevel": "debug"
+  },
+  "/ApiInventariosTic/api": {
+    "target": "http://localhost:5074",
+    "secure": false,
+    "changeOrigin": true,
+    "pathRewrite": {
+      "^/ApiInventariosTic/api": "/api"
+    },
+    "logLevel": "debug"
   }
 }
