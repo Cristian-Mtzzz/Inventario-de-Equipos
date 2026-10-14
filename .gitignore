@@ -4,9 +4,6 @@
 *.user
 *.suo
 
-# Local configuration
-Backend/SistemaInventario.Api/.env
-Backend/SistemaInventario.Api/appsettings.Development.json
 
 # Angular and Node dependencies/build output
 **/node_modules/
