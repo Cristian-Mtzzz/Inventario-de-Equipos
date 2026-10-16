@@ -1,4 +1,4 @@
-<div class="report-backdrop" role="presentation" (click)="closeDialog()">
+<div class="report-backdrop" role="presentation">
   <section class="report-dialog" role="dialog" aria-modal="true" aria-labelledby="device-report-title"
     (click)="$event.stopPropagation()">
     <header class="report-header">
@@ -38,6 +38,7 @@
           <span>Tipo de dispositivo</span>
           <select [(ngModel)]="typeId" name="reportDeviceType" required>
             <option [ngValue]="null">Selecciona un tipo</option>
+            <option [ngValue]="comboType">Computadoras escritorio (combos)</option>
             @for (type of deviceTypes; track type.IdTipo) {
             <option [ngValue]="type.IdTipo">{{ type.NombreTipo }}</option>
             }

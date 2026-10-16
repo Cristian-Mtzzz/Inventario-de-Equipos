@@ -127,6 +127,9 @@ export class AuthService {
       case 'Admin': return '/admin';
       case 'UsuarioComun': return '/usuario';
       case 'Taller': return '/taller';
+      case 'RecepcionTaller': return '/taller/recepcion';
+      case 'TecnicoTaller': return '/taller/tecnico';
+      case 'AdminTaller': return '/taller';
       default: return '/sin-acceso';
     }
   }
@@ -224,7 +227,7 @@ export class AuthService {
     const userName = String(claims['unique_name'] ?? claims['name'] ?? '').trim();
     const rawRole = claims['role'] ?? claims['http://schemas.microsoft.com/ws/2008/06/identity/claims/role'];
     const role = Array.isArray(rawRole) ? rawRole[0] : rawRole;
-    if (!userName || !['Admin', 'UsuarioComun', 'Taller'].includes(String(role))) return null;
+    if (!userName || !['Admin', 'UsuarioComun', 'Taller', 'RecepcionTaller', 'TecnicoTaller', 'AdminTaller'].includes(String(role))) return null;
 
     return {
       UserId: String(claims['sub'] ?? ''),

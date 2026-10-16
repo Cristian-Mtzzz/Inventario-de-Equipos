@@ -44,6 +44,132 @@ input {
     white-space: nowrap;
 }
 
+.combo-inventory-table {
+    min-width: 1120px;
+}
+
+.combo-inventory-table .combo-shared-cell {
+    vertical-align: middle;
+    background: #e4f1dc;
+}
+
+.combo-inventory-table .combo-group-alt td {
+    background: #f1f7ed;
+}
+
+.combo-inventory-table .combo-group-alt .combo-shared-cell {
+    background: #e4f1dc;
+}
+
+.combo-inventory-table .combo-actions {
+    white-space: nowrap;
+}
+
+.admin-shell .edit-modal.device-create-modal {
+    width: min(1080px, 100%);
+    max-height: calc(100dvh - 2rem);
+    overflow-y: auto;
+    padding: clamp(1.25rem, 2vw, 2rem);
+}
+
+.admin-shell .modal-form.device-create-form {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1rem;
+}
+
+.admin-shell .device-create-top-row {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(130px, 1fr);
+    align-items: end;
+    gap: 1rem;
+}
+
+.admin-shell .device-create-identification,
+.admin-shell .device-create-assignment-location,
+.admin-shell .device-create-employee-fields {
+    display: grid;
+    gap: .85rem 1rem;
+}
+
+.admin-shell .device-create-identification,
+.admin-shell .device-create-assignment-location {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.admin-shell .device-create-employee-fields {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.admin-shell .device-create-field {
+    display: grid;
+    min-width: 0;
+    gap: .35rem;
+    color: #294649;
+    font-size: .76rem;
+    font-weight: 700;
+}
+
+.admin-shell .device-create-field input,
+.admin-shell .device-create-field select {
+    width: 100%;
+    min-width: 0;
+    font: inherit;
+    font-size: .9rem;
+    font-weight: 400;
+}
+
+.admin-shell .device-create-combo-number {
+    max-width: 360px;
+}
+
+.admin-shell .desktop-combo-components {
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1rem;
+}
+
+.admin-shell .desktop-combo-component {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .75rem;
+    margin: 0;
+    padding: 1rem;
+    border: 1px solid #d8e4e0;
+    border-radius: 8px;
+    background: #f8fbfa;
+}
+
+.admin-shell .desktop-combo-component legend {
+    padding: 0 .35rem;
+    color: #276968;
+    font-size: .85rem;
+    font-weight: 700;
+}
+
+@media (max-width: 760px) {
+    .admin-shell .device-create-identification,
+    .admin-shell .device-create-assignment-location {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .admin-shell .desktop-combo-components {
+        grid-template-columns: 1fr;
+    }
+
+    .admin-shell .device-create-employee-fields {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 520px) {
+    .admin-shell .device-create-top-row,
+    .admin-shell .device-create-identification,
+    .admin-shell .device-create-assignment-location {
+        grid-template-columns: 1fr;
+    }
+}
+
 .refresh-button,
 .admin-shell .refresh-button,
 .inventory-shell .refresh-button,
@@ -153,6 +279,12 @@ input {
 
 .admin-shell .devices-section-toolbar .add-user-button {
     margin-bottom: 0;
+}
+
+.admin-shell .devices-toolbar-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .6rem;
 }
 
 .admin-shell .report-launch-button {
@@ -359,7 +491,9 @@ button:focus-visible {
 .admin-shell.admin-red-theme .workshop-actions button:not(.secondary),
 .admin-shell.admin-red-theme .workshop-modal button[type='submit'],
 .admin-shell.admin-red-theme .form-actions button:not(.secondary):not(.danger),
-.admin-shell.admin-red-theme .report-actions button:not(.secondary) {
+.admin-shell.admin-red-theme .report-actions button:not(.secondary),
+.admin-shell.admin-red-theme .import-actions .primary,
+.admin-shell.admin-red-theme .import-file-button {
     border-color: var(--admin-button-fill) !important;
     background-color: var(--admin-button-fill) !important;
 }
@@ -373,7 +507,8 @@ button:focus-visible {
 .admin-shell.admin-red-theme .workshop-actions button:not(.secondary):hover:not(:disabled),
 .admin-shell.admin-red-theme .workshop-modal button[type='submit']:hover:not(:disabled),
 .admin-shell.admin-red-theme .form-actions button:not(.secondary):not(.danger):hover:not(:disabled),
-.admin-shell.admin-red-theme .report-actions button:not(.secondary):hover:not(:disabled) {
+.admin-shell.admin-red-theme .report-actions button:not(.secondary):hover:not(:disabled),
+.admin-shell.admin-red-theme .import-actions .primary:hover:not(:disabled) {
     border-color: var(--admin-button-fill-hover) !important;
     background-color: var(--admin-button-fill-hover) !important;
 }
@@ -413,11 +548,17 @@ button:focus-visible {
 }
 
 .admin-shell.admin-red-theme .admin-tabs button:hover,
-.admin-shell.admin-red-theme .admin-tabs button.active,
 .admin-shell.admin-red-theme .inventory-tabs button.active,
 .admin-shell.admin-red-theme .catalog-tabs button:hover,
 .admin-shell.admin-red-theme .catalog-tabs button.active {
     color: var(--admin-button-text) !important;
+}
+
+/* La pestaña activa del panel usa el mismo relleno que los botones principales del tema. */
+.admin-shell.admin-red-theme .admin-tabs button.active {
+    color: #fff !important;
+    background: var(--admin-button-fill) !important;
+    box-shadow: 0 4px 10px rgba(245, 73, 39, .22);
 }
 
 /* Animación de entrada compartida por todas las ventanas emergentes (admin, taller, inventario). */
@@ -928,12 +1069,7 @@ button:focus-visible {
 }
 
 .searchable-select-listbox {
-    position: absolute;
-    z-index: 1000;
-    top: calc(100% + .3rem);
-    right: 0;
-    left: 0;
-    max-height: 16rem;
+    max-height: 280px;
     overflow-y: auto;
     border: 1px solid #c8d7d2;
     border-radius: 4px;
@@ -990,4 +1126,334 @@ button:focus-visible {
     .location-search-controls {
         flex-direction: column;
     }
+}
+/* ------------------------------------------------------------------
+   Estructura común de los paneles (Admin, Inventario y Taller):
+   título de la página, pestañas de sección, tarjetas y mensajes.
+   ------------------------------------------------------------------ */
+.panel-heading {
+    padding: 1.6rem 0 1.25rem;
+}
+
+.panel-heading .eyebrow {
+    margin-bottom: .4rem;
+}
+
+.panel-heading h1 {
+    font-size: clamp(1.55rem, 3vw, 2.1rem);
+    line-height: 1.15;
+}
+
+.admin-tabs,
+.inventory-tabs {
+    display: flex;
+    gap: .3rem;
+    width: fit-content;
+    max-width: 100%;
+    padding: .3rem;
+    overflow-x: auto;
+    border: 1px solid #d8e4e0;
+    border-radius: 10px;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(23, 63, 67, .05);
+}
+
+.admin-tabs button,
+.inventory-tabs button {
+    flex: none;
+    padding: .6rem 1.1rem;
+    border: 0;
+    border-radius: 7px;
+    color: #617573;
+    background: transparent;
+    cursor: pointer;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.admin-tabs button:hover,
+.inventory-tabs button:hover {
+    color: #276968;
+    background: #e8f2ee;
+}
+
+.admin-tabs button.active,
+.inventory-tabs button.active {
+    color: #fff;
+    background: #276968;
+    box-shadow: 0 4px 10px rgba(39, 105, 104, .18);
+}
+
+/* Cada sección del panel se presenta como una tarjeta blanca sobre el fondo verde claro. */
+.admin-shell .admin-section,
+.inventory-shell .inventory-section,
+.workshop-shell .workshop-section {
+    padding: clamp(1rem, 2vw, 1.5rem);
+    border: 1px solid #dfe9e5;
+    border-radius: 12px;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(23, 63, 67, .05), 0 10px 28px rgba(23, 63, 67, .04);
+}
+
+.admin-shell .feedback,
+.inventory-shell .feedback,
+.workshop-shell .feedback {
+    border-left: 4px solid currentColor;
+    border-radius: 6px;
+}
+
+@media (max-width: 640px) {
+    .admin-tabs,
+    .inventory-tabs {
+        width: 100%;
+    }
+}
+
+/* Diálogo de edición de dispositivo: No. de pago tomado del empleado y responsable actual. */
+.admin-shell .readonly-field {
+    color: #31504d;
+    background: #f2f7f5;
+    cursor: default;
+}
+
+.admin-shell .current-assignment {
+    grid-column: 1 / -1;
+    margin: 0;
+    padding: .6rem .8rem;
+    border-radius: 6px;
+    color: #344b4b;
+    background: #edf4f1;
+    font-size: .8rem;
+}
+
+/* Alcance de la edición de una pieza de combo. */
+.admin-shell .combo-edit-scope {
+    display: grid;
+    grid-column: 1 / -1;
+    gap: .3rem;
+    padding: .7rem .85rem;
+    border: 1px solid #d5e1dd;
+    border-radius: 6px;
+    background: #f8fbfa;
+}
+
+.admin-shell .combo-edit-scope label {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    color: #294649;
+    font-size: .84rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.admin-shell .combo-edit-scope input {
+    width: 1rem;
+    height: 1rem;
+    margin: 0;
+    padding: 0;
+    accent-color: #276968;
+}
+
+.admin-shell .combo-edit-scope small {
+    color: #617573;
+    font-size: .76rem;
+}
+
+/* ------------------------------------------------------------------
+   Estilo unificado de tablas, filtros y botones en todos los módulos
+   (Admin, Inventario, Taller, catálogos, importación y reportes).
+   Solo define forma, espaciado y sombras: los colores siguen viniendo
+   de cada componente y del tema rojo del panel Admin.
+   ------------------------------------------------------------------ */
+:is(.admin-shell, .inventory-shell, .workshop-shell) {
+    --ui-radius: 8px;
+    --ui-line: #e3ece9;
+    --ui-head: #f6f9f8;
+}
+
+/* Tablas: contenedor con borde redondeado, encabezado gris en mayúsculas y filas separadas. */
+:is(.admin-shell, .inventory-shell, .workshop-shell) :is(.table-wrap, .import-table-wrap) {
+    overflow-x: auto;
+    border: 1px solid #d5e1dd;
+    border-radius: 10px;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(23, 63, 67, .04);
+}
+
+:is(.admin-shell, .inventory-shell, .workshop-shell) :is(.table-wrap, .import-table-wrap) table {
+    border-collapse: collapse;
+    color: #243a40;
+    font-size: .78rem;
+}
+
+:is(.admin-shell, .inventory-shell, .workshop-shell) :is(.table-wrap, .import-table-wrap) th {
+    padding: .85rem .75rem;
+    border-bottom: 1px solid #dfe9e5;
+    color: #617573;
+    background: var(--ui-head);
+    font-size: .66rem;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-align: left;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+:is(.admin-shell, .inventory-shell, .workshop-shell) :is(.table-wrap, .import-table-wrap) td {
+    padding: .8rem .75rem;
+    border-bottom: 1px solid var(--ui-line);
+}
+
+:is(.admin-shell, .inventory-shell, .workshop-shell) :is(.table-wrap, .import-table-wrap) tbody tr:last-child td {
+    border-bottom: 0;
+}
+
+:is(.admin-shell, .inventory-shell, .workshop-shell) :is(.table-wrap, .import-table-wrap) tbody tr {
+    transition: background .15s ease;
+}
+
+/* Mismo patrón que la tabla de combos: filas alternas en verde claro y la primera
+   columna (identificador del registro) resaltada. La tabla de combos ya alterna por grupo. */
+:is(.admin-shell, .inventory-shell, .workshop-shell) :is(.table-wrap, .import-table-wrap) table:not(.combo-inventory-table) tbody tr:nth-child(even) > td {
+    background: #f1f7ed;
+}
+
+:is(.admin-shell, .inventory-shell, .workshop-shell) :is(.table-wrap, .import-table-wrap) table:not(.combo-inventory-table) tbody tr > td:first-child {
+    color: #18383b;
+    background: #eaf4e4;
+    font-weight: 700;
+}
+
+:is(.admin-shell, .inventory-shell, .workshop-shell) :is(.table-wrap, .import-table-wrap) table:not(.combo-inventory-table) tbody tr:nth-child(even) > td:first-child {
+    background: #e4f1dc;
+}
+
+:is(.admin-shell, .inventory-shell, .workshop-shell) :is(.table-wrap, .import-table-wrap) tbody tr:hover > td:not(.combo-shared-cell) {
+    background: #e8f2ef;
+}
+
+:is(.admin-shell, .inventory-shell, .workshop-shell) :is(.table-wrap, .import-table-wrap) table:not(.combo-inventory-table) tbody tr:hover > td:first-child {
+    background: #dcecd4;
+}
+
+/* Filtros: mismos campos redondeados en todas las barras de búsqueda. */
+:is(.admin-shell, .inventory-shell, .workshop-shell) :is(.filter-bar, .report-filter-grid, .catalog-selector-grid, .location-filter, .admin-table-toolbar) :is(input, select, .searchable-select-input) {
+    min-height: 2.65rem;
+    border: 1px solid #d3dfdb;
+    border-radius: var(--ui-radius);
+    background-color: #fff;
+    box-shadow: 0 1px 2px rgba(23, 63, 67, .03);
+    transition: border-color .15s ease, box-shadow .15s ease;
+}
+
+:is(.admin-shell, .inventory-shell, .workshop-shell) :is(.filter-bar, .report-filter-grid, .catalog-selector-grid, .location-filter, .admin-table-toolbar) :is(input, select, .searchable-select-input):hover:not(:disabled) {
+    border-color: #b9d1ca;
+}
+
+:is(.admin-shell, .inventory-shell, .workshop-shell) :is(.filter-bar, .report-filter-grid, .catalog-selector-grid, .location-filter, .admin-table-toolbar) :is(input, select, .searchable-select-input):focus {
+    border-color: #397b78;
+    box-shadow: 0 0 0 3px rgba(57, 123, 120, .14);
+}
+
+/* Botones principales: esquinas redondeadas, peso medio y sombra suave que se eleva al pasar el cursor. */
+:is(.admin-shell, .inventory-shell, .workshop-shell) button:is(
+    .add-user-button,
+    .report-launch-button,
+    .report-export,
+    .import-file-button,
+    .primary,
+    .modal-danger
+),
+:is(.admin-shell, .inventory-shell, .workshop-shell) :is(
+    .admin-form,
+    .inventory-form,
+    .modal-actions,
+    .form-actions,
+    .workshop-actions,
+    .import-actions,
+    .location-search-controls,
+    .employee-search-controls
+) button:not(.secondary):not(.danger):not(.searchable-select-toggle),
+:is(.admin-shell, .inventory-shell, .workshop-shell) .workshop-modal button[type='submit'] {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: .45rem;
+    min-height: 2.65rem;
+    border-radius: var(--ui-radius) !important;
+    font-weight: 600;
+    letter-spacing: .01em;
+    box-shadow: 0 1px 2px rgba(16, 40, 42, .1), 0 4px 12px rgba(39, 105, 104, .14);
+}
+
+:is(.admin-shell, .inventory-shell, .workshop-shell) button:is(
+    .add-user-button,
+    .report-launch-button,
+    .report-export,
+    .import-file-button,
+    .primary,
+    .modal-danger
+):hover:not(:disabled),
+:is(.admin-shell, .inventory-shell, .workshop-shell) :is(
+    .admin-form,
+    .inventory-form,
+    .modal-actions,
+    .form-actions,
+    .workshop-actions,
+    .import-actions,
+    .location-search-controls,
+    .employee-search-controls
+) button:not(.secondary):not(.danger):not(.searchable-select-toggle):hover:not(:disabled),
+:is(.admin-shell, .inventory-shell, .workshop-shell) .workshop-modal button[type='submit']:hover:not(:disabled) {
+    box-shadow: 0 2px 4px rgba(16, 40, 42, .1), 0 8px 20px rgba(39, 105, 104, .2);
+    transform: translateY(-1px);
+}
+
+/* Botones secundarios y de peligro fuera de las tablas: contorno suave. */
+:is(.admin-shell, .inventory-shell, .workshop-shell) button:is(.secondary, .danger, .logout-button, .catalog-search-button, .location-clear-selection, .location-search-trigger) {
+    border-radius: var(--ui-radius) !important;
+    font-weight: 600;
+    box-shadow: 0 1px 2px rgba(16, 40, 42, .06);
+}
+
+:is(.admin-shell, .inventory-shell, .workshop-shell) button:is(.secondary, .catalog-search-button, .location-clear-selection, .location-search-trigger):hover:not(:disabled) {
+    border-color: #8fb5ab;
+    box-shadow: 0 3px 10px rgba(39, 105, 104, .12);
+}
+
+:is(.admin-shell, .inventory-shell, .workshop-shell) button.danger:hover:not(:disabled) {
+    border-color: #d99b93;
+    box-shadow: 0 3px 10px rgba(155, 63, 56, .12);
+}
+
+/* Acciones dentro de las tablas (Editar, Quitar, etc.): compactas y del mismo tamaño. */
+:is(.admin-shell, .inventory-shell, .workshop-shell) :is(.table-wrap, .import-table-wrap) td button:not(.reset-password-button) {
+    min-height: 1.95rem;
+    padding: .35rem .75rem;
+    border-radius: 6px !important;
+    font-size: .72rem;
+    font-weight: 600;
+    box-shadow: none;
+}
+
+:is(.admin-shell, .inventory-shell, .workshop-shell) :is(.table-wrap, .import-table-wrap) td button:not(.reset-password-button):hover:not(:disabled) {
+    box-shadow: 0 2px 8px rgba(23, 63, 67, .1);
+    transform: translateY(-1px);
+}
+
+/* Paginación y botón de refrescar con la misma forma redondeada. */
+:is(.admin-shell, .inventory-shell, .workshop-shell) :is(.pagination, .admin-page-buttons, .catalog-page-buttons) button,
+.refresh-button {
+    border-radius: var(--ui-radius) !important;
+    font-weight: 600;
+}
+
+:is(.admin-shell, .inventory-shell, .workshop-shell) :is(.pagination, .admin-page-buttons, .catalog-page-buttons) button:hover:not(:disabled):not(.active) {
+    border-color: #8fb5ab;
+}
+
+/* Botón de cierre de los diálogos. */
+:is(.admin-shell, .inventory-shell, .workshop-shell) :is(.report-close, .location-search-close) {
+    border-radius: var(--ui-radius);
 }

@@ -1,0 +1,151 @@
+<div class="import-backdrop" role="presentation">
+  <section class="import-dialog" role="dialog" aria-modal="true" aria-labelledby="device-import-title"
+    (click)="$event.stopPropagation()">
+    <header class="import-header">
+      <div>
+        <p class="eyebrow">CARGA MASIVA</p>
+        <h2 id="device-import-title">Importar dispositivos desde Excel</h2>
+      </div>
+      <button type="button" class="import-close" aria-label="Cerrar importación" [disabled]="isImporting"
+        (click)="closeDialog()">×</button>
+    </header>
+
+    <p class="import-help">
+      El archivo debe tener las columnas <strong>EQUIPO</strong>, <strong>MARCA</strong>, <strong>MODELO</strong>,
+      <strong>SERIE</strong> e <strong>INVENTARIO</strong>; <strong>No.</strong> agrupa los combos. En EQUIPO va el tipo de dispositivo
+      (Impresora, Laptop, Escaner…). Un mismo No. con CPU, teclado y monitor se registra como
+      <strong>combo de computadora de escritorio</strong>; las demás filas se registran como dispositivos individuales.
+      Cada equipo recibe un número de ingreso <strong>número-mes-año</strong> (por ejemplo 00001-01-2026) y
+      <strong>cada tipo lleva su propia numeración</strong>: los combos usan su No. y los demás se numeran 1, 2, 3…
+      por tipo en el orden del archivo. Todo queda
+      <strong>disponible</strong>: el empleado, la fecha de asignación y el área se asignan después.
+    </p>
+
+    @if (errorMessage) { <p class="feedback error" role="alert">{{ errorMessage }}</p> }
+
+    <div class="import-controls">
+      <label class="import-file" [class.disabled]="isImporting">
+        <input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          [disabled]="isImporting || isReading" (change)="selectFile($any($event.target))" />
+        <span class="import-file-button">{{ fileName ? 'Cambiar archivo' : 'Seleccionar archivo .xlsx' }}</span>
+        <span class="import-file-name">{{ isReading ? 'Leyendo archivo…' : (fileName || 'Ningún archivo seleccionado') }}</span>
+      </label>
+
+      <fieldset class="import-period" [disabled]="isImporting || hasFinished">
+        <legend>Mes y año de ingreso *</legend>
+        <select [(ngModel)]="ingresoMonth" name="ingresoMonth" aria-label="Mes de ingreso" required>
+          <option [ngValue]="null">Mes…</option>
+          @for (month of months; track month.value) { <option [ngValue]="month.value">{{ month.name }}</option> }
+        </select>
+        <input type="number" [(ngModel)]="ingresoYear" name="ingresoYear" aria-label="Año de ingreso"
+          min="2000" step="1" placeholder="Año" required />
+      </fieldset>
+    </div>
+    @if (entries.length > 0 && !hasIngresoPeriod) {
+    <p class="feedback warning" role="status">
+      Selecciona el mes y el año de ingreso. Con ellos se arma el número de cada equipo, por ejemplo 00001-01-2026.
+    </p>
+    }
+
+    @for (fileError of fileErrors; track fileError) {
+    <p class="feedback error" role="alert">{{ fileError }}</p>
+    }
+
+    @if (newTypes.length > 0 && !hasFinished) {
+    <fieldset class="import-new-types" [disabled]="isImporting">
+      <legend>Tipos que no existen en el catálogo</legend>
+      <p>Marca los que quieras crear al importar. Revisa que no sean errores de escritura de un tipo existente;
+        los que no marques no se importarán.</p>
+      <div class="new-type-list">
+        @for (option of newTypes; track option.key) {
+        <label class="new-type-option" [class.selected]="option.create">
+          <input type="checkbox" [checked]="option.create"
+            (change)="toggleNewType(option, $any($event.target).checked)" />
+          <span><strong>{{ option.name }}</strong> · {{ option.count }} {{ option.count === 1 ? 'equipo' : 'equipos' }}</span>
+        </label>
+        }
+      </div>
+    </fieldset>
+    }
+
+    @if (entries.length > 0) {
+    <div class="import-summary" role="status">
+      <span class="summary-chip">{{ comboCount }} combos · {{ deviceCount }} dispositivos</span>
+      @if (!hasFinished && !isImporting) {
+      <span class="summary-chip ready">{{ readyCount }} listos para importar</span>
+      @if (needsTypeCount > 0) { <span class="summary-chip warning">{{ needsTypeCount }} con tipo no registrado</span> }
+      @if (invalidCount > 0) { <span class="summary-chip invalid">{{ invalidCount }} con errores (no se importarán)</span> }
+      } @else {
+      <span class="summary-chip">Procesados {{ processedCount }} de {{ totalToImport }}</span>
+      <span class="summary-chip ready">{{ savedCount }} registrados</span>
+      @if (failedCount > 0) { <span class="summary-chip invalid">{{ failedCount }} rechazados</span> }
+      @if (invalidCount + needsTypeCount > 0) { <span class="summary-chip">{{ invalidCount + needsTypeCount }} omitidos</span> }
+      }
+    </div>
+
+    <app-table-page-size [(page)]="entryPage" [(pageSize)]="entryPageSize" />
+    <div class="import-table-wrap">
+      <table class="import-table">
+        <thead>
+          <tr>
+            <th>No. ingreso</th>
+            <th>Tipo</th>
+            <th>Marca</th>
+            <th>Modelo</th>
+            <th>Serie</th>
+            <th>Inventario</th>
+            <th>Estado</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (entry of entries | page: entryPage : entryPageSize; track $index) {
+          @for (row of entry.item.rows; track row.rowNumber; let first = $first) {
+          <tr [class.entry-start]="first" [class.row-invalid]="entry.status === 'invalid' || entry.status === 'failed'"
+            [class.row-warning]="entry.status === 'needs-type'">
+            @if (first) {
+            <td class="combo-cell" [class.single]="entry.item.kind === 'device'" [attr.rowspan]="entry.item.rows.length">
+              {{ ingresoNumber(entry.item) }}
+              @if (entry.item.kind === 'combo') { <small>Combo</small> }
+            </td>
+            }
+            <td>{{ typeLabel(row.equipoKey, row.equipo) || 'Sin tipo' }}</td>
+            <td>{{ row.marca }}</td>
+            <td>{{ row.modelo }}</td>
+            <td [class.missing]="!row.serie">{{ row.serie || 'Sin serie' }}</td>
+            <td [class.missing]="!row.inventario">{{ row.inventario || 'Sin inventario' }}</td>
+            @if (first) {
+            <td class="status-cell" [attr.rowspan]="entry.item.rows.length">
+              @switch (entry.status) {
+              @case ('ready') { <span class="status ready">Listo</span> }
+              @case ('needs-type') { <span class="status warning">Tipo no registrado</span> }
+              @case ('saving') { <span class="status saving">Guardando…</span> }
+              @case ('saved') { <span class="status saved">Registrado</span> }
+              @case ('failed') { <span class="status invalid">Rechazado</span> }
+              @case ('invalid') { <span class="status invalid">Con errores</span> }
+              }
+              @for (message of entry.messages; track message) {
+              <small [class.status-message]="entry.status !== 'ready'">{{ message }}</small>
+              }
+            </td>
+            }
+          </tr>
+          }
+          }
+        </tbody>
+      </table>
+    </div>
+    <app-table-paginator [total]="entries.length" [(page)]="entryPage" [pageSize]="entryPageSize" label="Paginación de la importación" />
+    }
+
+    <footer class="import-actions">
+      <button type="button" class="secondary" [disabled]="isImporting" (click)="closeDialog()">
+        {{ hasFinished ? 'Cerrar' : 'Cancelar' }}
+      </button>
+      @if (!hasFinished) {
+      <button type="button" class="primary" [disabled]="!canImport" (click)="importDevices()">
+        {{ isImporting ? 'Importando ' + processedCount + ' de ' + totalToImport + '…' : 'Importar ' + readyCount + ' elementos' }}
+      </button>
+      }
+    </footer>
+  </section>
+</div>

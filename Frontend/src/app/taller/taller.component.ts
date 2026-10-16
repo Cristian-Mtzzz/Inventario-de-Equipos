@@ -2,19 +2,22 @@ import { DatePipe } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectorRef, Component, inject, Input } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { PagePipe, TablePageSizeComponent, TablePaginatorComponent } from '../shared/table-paginator';
 import type ExcelJS from 'exceljs';
 import { finalize, firstValueFrom } from 'rxjs';
 import { Router } from '@angular/router';
 import { AuthService } from '../auth/auth.service';
 import { AdminService } from '../admin/admin.service';
 import { SearchableSelectDirective } from '../shared/searchable-select.directive';
+import { apiErrorMessage } from '../shared/api-response';
+import { AppHeaderComponent } from '../shared/app-header.component';
 import { Area, Building, DeviceType, RegionalOption } from '../admin/admin.models';
-import { Maintenance, MaintenanceEditRequest, MaintenanceEntryRequest, MaintenanceExitRequest, ReceptionEntryRequest, WorkshopDevice } from './taller.models';
+import { Maintenance, MaintenanceAssessmentRequest, MaintenanceEntryRequest, MaintenanceExitRequest, ReceptionEntryRequest, WorkshopDevice } from './taller.models';
 import { TallerService } from './taller.service';
 
 @Component({
   selector: 'app-taller',
-  imports: [DatePipe, FormsModule, SearchableSelectDirective],
+  imports: [DatePipe, FormsModule, SearchableSelectDirective, AppHeaderComponent, PagePipe, TablePageSizeComponent, TablePaginatorComponent],
   templateUrl: './taller.component.html',
   styleUrl: './taller.component.css',
 })
@@ -29,52 +32,95 @@ export class TallerComponent {
   private readonly changeDetector = inject(ChangeDetectorRef);
   devices: WorkshopDevice[] = [];
   maintenances: Maintenance[] = [];
+  // Página actual y tamaño de página de la tabla (paginación en el navegador).
+  maintenancePage = 1;
+  maintenancePageSize = 10;
   deviceTypes: DeviceType[] = [];
   regionals: RegionalOption[] = [];
   buildings: Building[] = [];
   receptionAreas: Area[] = [];
   selectedReceptionRegionalId: number | null = null;
+  selectedReceptionOriginId: number | null = null;
   selectedMaintenance: Maintenance | null = null;
   pendingDeleteMaintenance: Maintenance | null = null;
-  activeWindow: 'reception' | 'entry' | 'exit' | 'edit' | null = null;
+  activeWindow: 'reception' | 'entry' | 'exit' | 'assessment' | null = null;
   isLoading = false;
   isSaving = false;
   isLoadingReceptionAreas = false;
+  private receptionAreasRequestId = 0;
   message = '';
   errorMessage = '';
   reception: ReceptionEntryRequest = {
     CodigoInventario: '',
+    NoSerie: '',
     TipoDispositivo: '',
+    DescripcionEquipo: '',
+    EquipoEnGarantia: '',
+    MemoNumero: '',
+    Recibe: '',
+    Tecnico: '',
+    Departamento: '',
     IdEdificio: 0,
     IdArea: 0,
     FechaIngreso: this.getCurrentDateTime(),
   };
   entry: MaintenanceEntryRequest = { IdEquipo: 0, Dictamen: '', TipoReparacion: '', FechaIngreso: this.getCurrentDateTime() };
-  exit: MaintenanceExitRequest = { DetalleReparacion: '', FechaSalida: this.getCurrentDateTime() };
-  edit: MaintenanceEditRequest = { IdEquipo: 0, Dictamen: '', TipoReparacion: '', FechaIngreso: '', DetalleReparacion: '', FechaSalida: null };
+  exit: MaintenanceExitRequest = { EquipoFuncional: '', TecnicoEntrega: '', ClienteRecibe: '', FechaEntrega: this.getCurrentDateTime() };
+  assessment: MaintenanceAssessmentRequest = { Dictamen: '', PiezasSustituidas: '', Observaciones: '' };
 
-  constructor() { this.loadData(); }
+  constructor() {
+    if (this.isReceptionOnly) this.activeWindow = 'reception';
+    this.loadData();
+  }
 
   loadData(): void {
     // Refresca en paralelo las tablas y datos de equipos, reparaciones y tipos disponibles.
     this.errorMessage = '';
-    this.loadDevices();
-    this.loadMaintenances();
-    this.loadDeviceTypes();
-    this.loadRegionals();
-    this.loadBuildings();
+    if (this.canWorkOnRepairs) this.loadMaintenances();
+    if (this.isWorkshopAdmin) this.loadDevices();
+    if (this.canReceive) {
+      this.loadDeviceTypes();
+      this.loadRegionals();
+      this.loadBuildings();
+    }
+  }
+
+  get isWorkshopAdmin(): boolean { return this.authService.hasRole(['Admin', 'AdminTaller', 'Taller']); }
+  get isReceptionOnly(): boolean { return this.authService.hasRole(['RecepcionTaller']) && !this.isWorkshopAdmin; }
+  get isTechnicianOnly(): boolean { return this.authService.hasRole(['TecnicoTaller']) && !this.isWorkshopAdmin; }
+  get canReceive(): boolean { return this.isWorkshopAdmin || this.isReceptionOnly; }
+  get canWorkOnRepairs(): boolean { return this.isWorkshopAdmin || this.authService.hasRole(['TecnicoTaller']); }
+
+  get combinedOrigins(): { IdEdificio: number; Label: string }[] {
+    return this.buildings.map((b) => {
+      const reg = this.regionals.find((r) => r.IdRegional === b.IdRegional);
+      return {
+        IdEdificio: b.IdEdificio,
+        Label: reg ? `${b.NombreEdificio} (${reg.NombreRegional})` : b.NombreEdificio,
+      };
+    }).sort((a, b) => a.Label.localeCompare(b.Label));
   }
 
   get receptionBuildings(): Building[] {
-    if (this.selectedReceptionRegionalId === null) return [];
-    return this.buildings.filter((building) => building.IdRegional === this.selectedReceptionRegionalId);
+    return this.selectedReceptionRegionalId === null
+      ? []
+      : this.buildings.filter((building) => building.IdRegional === this.selectedReceptionRegionalId);
   }
 
   loadDeviceTypes(): void {
-    // Carga los tipos de dispositivo que aparecen en la recepción.
+    // Carga los tipos de dispositivo que aparecen en la recepción, asegurando Teléfono y Fotocopiadora.
     this.adminService.getDeviceTypes().subscribe({
-      next: (types) => this.deviceTypes = types,
-      error: () => this.deviceTypes = [],
+      next: (types) => {
+        const list = [...types];
+        if (!list.some((t) => t.NombreTipo.trim().toUpperCase() === 'TELÉFONO' || t.NombreTipo.trim().toUpperCase() === 'TELEFONO')) {
+          list.push({ IdTipo: -1, NombreTipo: 'Teléfono' });
+        }
+        if (!list.some((t) => t.NombreTipo.trim().toUpperCase() === 'FOTOCOPIADORA')) {
+          list.push({ IdTipo: -2, NombreTipo: 'Fotocopiadora' });
+        }
+        this.deviceTypes = list.sort((a, b) => a.NombreTipo.localeCompare(b.NombreTipo));
+      },
+      error: () => this.errorMessage = 'No se pudieron cargar los tipos de dispositivo.',
     });
   }
 
@@ -82,41 +128,79 @@ export class TallerComponent {
     // Carga los edificios para filtrar después los departamentos de recepción.
     this.adminService.getBuildings().subscribe({
       next: (buildings) => this.buildings = buildings,
-      error: () => this.buildings = [],
+      error: () => this.errorMessage = 'No se pudieron cargar los edificios de origen.',
     });
   }
 
   loadRegionals(): void {
     this.adminService.getRegionals().subscribe({
       next: (regionals) => this.regionals = regionals,
-      error: () => this.regionals = [],
+      error: () => this.errorMessage = 'No se pudieron cargar las regionales.',
     });
   }
 
-  selectReceptionRegion(idRegional: number | null): void {
-    this.selectedReceptionRegionalId = idRegional;
-    this.reception.IdEdificio = 0;
+  selectReceptionOrigin(idEdificio: number | null): void {
+    const requestId = ++this.receptionAreasRequestId;
+    const building = this.receptionBuildings.find((item) => item.IdEdificio === idEdificio);
+    this.selectedReceptionOriginId = building?.IdEdificio ?? null;
+    this.reception.IdEdificio = building?.IdEdificio ?? 0;
     this.reception.IdArea = 0;
+    this.reception.Departamento = '';
     this.receptionAreas = [];
     this.isLoadingReceptionAreas = false;
-  }
+    this.errorMessage = '';
 
-  selectReceptionBuilding(idEdificio: number): void {
-    // Cada edificio limita el catálogo de departamentos que puede elegir el usuario.
-    this.reception.IdEdificio = idEdificio;
-    this.reception.IdArea = 0;
-    this.receptionAreas = [];
-    const shouldLoadAreas = idEdificio > 0 && !this.adminService.hasAreasCache(idEdificio);
+    if (!building) {
+      return;
+    }
+
+    const shouldLoadAreas = !this.adminService.hasAreasCache(building.IdEdificio);
     this.isLoadingReceptionAreas = shouldLoadAreas;
-    if (idEdificio > 0) {
-      this.adminService.getAreas(idEdificio).pipe(finalize(() => {
+    this.adminService.getAreas(building.IdEdificio).pipe(finalize(() => {
+      if (requestId === this.receptionAreasRequestId) {
         this.isLoadingReceptionAreas = false;
         this.changeDetector.markForCheck();
-      })).subscribe({
-        next: (areas) => this.receptionAreas = areas,
-        error: () => this.errorMessage = 'No se pudieron cargar los departamentos del edificio.',
-      });
-    }
+      }
+    })).subscribe({
+      next: (areas) => {
+        if (requestId !== this.receptionAreasRequestId) return;
+        this.receptionAreas = areas;
+        if (areas.length === 0) {
+          this.errorMessage = 'El centro seleccionado no tiene departamentos configurados.';
+        }
+      },
+      error: () => {
+        if (requestId === this.receptionAreasRequestId) {
+          this.errorMessage = 'No se pudieron cargar los departamentos del centro o regional.';
+        }
+      },
+    });
+  }
+
+  selectReceptionBuilding(idEdificio: number | null): void {
+    this.selectReceptionOrigin(idEdificio);
+  }
+
+  selectReceptionRegional(idRegional: number | null): void {
+    this.selectedReceptionRegionalId = this.regionals.some((regional) => regional.IdRegional === idRegional)
+      ? idRegional
+      : null;
+    this.selectedReceptionOriginId = null;
+    this.reception.IdEdificio = 0;
+    this.reception.IdArea = 0;
+    this.reception.Departamento = '';
+    this.receptionAreas = [];
+    this.receptionAreasRequestId++;
+    this.isLoadingReceptionAreas = false;
+    this.errorMessage = '';
+  }
+
+  selectReceptionArea(idArea: number | null): void {
+    const area = this.receptionAreas.find((item) => item.IdArea === idArea
+      && item.IdEdificio === this.reception.IdEdificio);
+    this.reception.IdArea = area?.IdArea ?? 0;
+    this.reception.Departamento = area?.NombreArea ?? '';
+    this.errorMessage = '';
   }
 
   loadDevices(): void {
@@ -146,22 +230,29 @@ export class TallerComponent {
 
   openReceptionWindow(): void {
     // Inicializa una recepción nueva con la fecha/hora actual del navegador.
-  
+    if (!this.canReceive) return;
     this.message = '';
     this.errorMessage = '';
-    this.reception = {
-      CodigoInventario: '',
-      TipoDispositivo: '',
-      IdEdificio: 0,
-      IdArea: 0,
-      FechaIngreso: this.getCurrentDateTime(),
-    };
-    this.selectedReceptionRegionalId = null;
-    this.receptionAreas = [];
+    this.resetReceptionForm();
     this.activeWindow = 'reception';
   }
 
+  private resetReceptionForm(): void {
+    this.receptionAreasRequestId++;
+    this.isLoadingReceptionAreas = false;
+    this.reception = {
+      CodigoInventario: '', NoSerie: '', TipoDispositivo: '',
+      DescripcionEquipo: '', EquipoEnGarantia: '', MemoNumero: '',
+      Recibe: '', Tecnico: '', Departamento: '',
+      IdEdificio: 0, IdArea: 0, FechaIngreso: this.getCurrentDateTime(),
+    };
+    this.selectedReceptionRegionalId = null;
+    this.selectedReceptionOriginId = null;
+    this.receptionAreas = [];
+  }
+
   async exportWorkshopReport(): Promise<void> {
+    if (!this.isWorkshopAdmin) return;
     this.message = '';
     this.errorMessage = '';
     this.isSaving = true;
@@ -189,32 +280,63 @@ export class TallerComponent {
     workbook.subject = 'Reporte del taller';
     workbook.title = 'Taller';
 
-    const repairSheet = workbook.addWorksheet('Reparaciones');
-    repairSheet.columns = [
-      { header: 'ID', key: 'IdReparacion', width: 12 },
-      { header: 'Equipo', key: 'CodigoInventario', width: 18 },
-      { header: 'Marca', key: 'Marca', width: 18 },
-      { header: 'Modelo', key: 'Modelo', width: 20 },
-      { header: 'Tipo', key: 'TipoReparacion', width: 20 },
-      { header: 'Dictamen', key: 'Dictamen', width: 28 },
-      { header: 'Detalle', key: 'DetalleReparacion', width: 32 },
-      { header: 'Ingreso', key: 'FechaIngreso', width: 20 },
-      { header: 'Salida', key: 'FechaSalida', width: 20 },
+    // Misma presentación que el reporte de dispositivos: título, resumen y tabla con filtros.
+    const repairSheet = workbook.addWorksheet('Reparaciones', { properties: { tabColor: { argb: 'FF4F8A83' } } });
+    const columns: Array<[string, number, (item: Maintenance) => string | number | Date]> = [
+      ['ID', 10, (item) => item.IdReparacion],
+      ['Equipo', 16, (item) => item.CodigoInventario],
+      ['No. serie', 22, (item) => item.NoSerie],
+      ['Marca', 16, (item) => item.Marca],
+      ['Modelo', 20, (item) => item.Modelo],
+      ['Tipo de reparación', 22, (item) => item.TipoReparacion ?? ''],
+      ['Memo', 16, (item) => item.MemoNumero ?? ''],
+      ['Recibe', 24, (item) => item.Recibe ?? ''],
+      ['Técnico', 24, (item) => item.Tecnico ?? ''],
+      ['Área', 28, (item) => item.Departamento ?? ''],
+      ['Descripción del equipo', 36, (item) => item.DescripcionEquipo ?? ''],
+      ['Garantía', 12, (item) => item.EquipoEnGarantia ?? ''],
+      ['Tipo de dispositivo', 22, (item) => item.TipoDispositivo ?? ''],
+      ['Dictamen', 28, (item) => item.Dictamen ?? ''],
+      ['Piezas sustituidas', 32, (item) => item.PiezasSustituidas ?? ''],
+      ['Observaciones', 32, (item) => item.Observaciones ?? ''],
+      ['Ingreso', 18, (item) => this.toExcelDate(item.FechaIngreso)],
+      ['Equipo funcional', 16, (item) => item.EquipoFuncional ?? ''],
+      ['Técnico que entrega', 24, (item) => item.TecnicoEntrega ?? ''],
+      ['Cliente que recibe', 24, (item) => item.ClienteRecibe ?? ''],
+      ['Fecha de entrega', 18, (item) => this.toExcelDate(item.FechaEntrega)],
     ];
-    repairSheet.addRows(maintenances.map((item) => ({
-      IdReparacion: item.IdReparacion,
-      CodigoInventario: item.CodigoInventario,
-      Marca: item.Marca,
-      Modelo: item.Modelo,
-      TipoReparacion: item.TipoReparacion ?? '',
-      Dictamen: item.Dictamen ?? '',
-      DetalleReparacion: item.DetalleReparacion ?? '',
-      FechaIngreso: item.FechaIngreso,
-      FechaSalida: item.FechaSalida ?? '',
-    })));
-    repairSheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
-    repairSheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F5A5A' } };
-    repairSheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
+
+    const lastColumn = repairSheet.getColumn(columns.length).letter;
+    repairSheet.mergeCells(`A1:${lastColumn}1`);
+    repairSheet.getCell('A1').value = 'REPORTE DEL TALLER';
+    repairSheet.getCell('A1').font = { name: 'Aptos Display', size: 16, bold: true, color: { argb: 'FFFFFFFF' } };
+    repairSheet.getCell('A1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF173F43' } };
+    repairSheet.getCell('A1').alignment = { vertical: 'middle' };
+    repairSheet.getRow(1).height = 31;
+    repairSheet.mergeCells(`A2:${lastColumn}2`);
+    const delivered = maintenances.filter((item) => item.FechaEntrega).length;
+    repairSheet.getCell('A2').value = `${maintenances.length} reparaciones · ${delivered} entregadas · `
+      + `${maintenances.length - delivered} en taller · Generado ${new Date().toLocaleString('es-HN')}`;
+    repairSheet.getCell('A2').font = { name: 'Aptos', size: 10, color: { argb: 'FF617573' }, italic: true };
+
+    repairSheet.addTable({
+      name: 'ReporteTaller',
+      ref: 'A4',
+      headerRow: true,
+      totalsRow: false,
+      style: { theme: 'TableStyleMedium2', showRowStripes: true },
+      columns: columns.map(([name]) => ({ name })),
+      // Una tabla de Excel necesita al menos una fila de datos.
+      rows: maintenances.length > 0
+        ? maintenances.map((item) => columns.map(([, , value]) => value(item)))
+        : [columns.map(() => '')],
+    });
+    columns.forEach(([header, width], index) => {
+      const column = repairSheet.getColumn(index + 1);
+      column.width = width;
+      if (header === 'Ingreso' || header === 'Fecha de entrega') column.numFmt = 'dd/mm/yyyy hh:mm';
+    });
+    repairSheet.views = [{ state: 'frozen', ySplit: 4 }];
 
     const buffer = await workbook.xlsx.writeBuffer();
     const workbookBytes = new Uint8Array(buffer).slice();
@@ -235,30 +357,62 @@ export class TallerComponent {
     window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
   }
 
+  // Convierte la fecha de la API en fecha de Excel para que se pueda ordenar y filtrar.
+  private toExcelDate(value: string | null | undefined): Date | string {
+    if (!value) return '';
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? value : date;
+  }
+
   saveReception(): void {
     // Valida y registra la recepción con la fecha/hora generada por el sistema.
     this.message = '';
     this.errorMessage = '';
-    if (!this.reception.CodigoInventario.trim() || !this.reception.TipoDispositivo.trim()
-      || this.selectedReceptionRegionalId === null || this.reception.IdEdificio <= 0
-      || this.reception.IdArea <= 0 || !this.reception.FechaIngreso) {
-      this.errorMessage = 'Completa el número de inventario, tipo, regional, edificio, departamento y fecha de ingreso.';
+    if (!this.reception.CodigoInventario.trim()
+      || !this.reception.NoSerie.trim()
+      || !this.reception.TipoDispositivo.trim()
+      || !this.reception.DescripcionEquipo.trim()
+      || !this.reception.EquipoEnGarantia
+      || !this.reception.Recibe.trim()
+      || !this.reception.Tecnico.trim()
+      || this.reception.IdEdificio <= 0
+      || !this.reception.FechaIngreso) {
+      this.errorMessage = 'Completa los campos obligatorios del formato físico de recepción.';
       return;
     }
 
+    if (!this.reception.Departamento?.trim()) {
+      this.reception.Departamento = '-';
+    }
+    if (!this.reception.IdArea) {
+      this.reception.IdArea = 0;
+    }
+
     this.isSaving = true;
-    this.tallerService.createReceptionEntry(this.reception).pipe(finalize(() => this.isSaving = false)).subscribe({
+    this.tallerService.createReceptionEntry(this.reception).pipe(
+      finalize(() => { this.isSaving = false; this.changeDetector.markForCheck(); })
+    ).subscribe({
       next: () => {
-        this.message = 'Recepción registrada correctamente. El equipo quedó en espera de revisión.';
-        this.closeWindow();
-        this.loadData();
+        this.message = 'Recepción registrada correctamente.';
+        this.resetReceptionForm();
+        if (this.isReceptionOnly) {
+          this.activeWindow = 'reception';
+        } else {
+          this.closeWindow();
+        }
+        if (this.canWorkOnRepairs) this.loadMaintenances();
+        this.changeDetector.markForCheck();
       },
-      error: (error) => this.errorMessage = error.error?.Message ?? error.error?.message ?? 'No se pudo registrar la recepción.',
+      error: (error) => {
+        this.errorMessage = apiErrorMessage(error, 'No se pudo registrar la recepción.');
+        this.changeDetector.markForCheck();
+      },
     });
   }
 
   openEntryWindow(): void {
     // Abre el flujo tradicional de ingreso para un equipo ya registrado.
+    if (!this.isWorkshopAdmin) return;
     this.message = '';
     this.errorMessage = '';
     this.entry = { IdEquipo: 0, Dictamen: '', TipoReparacion: '', FechaIngreso: this.getCurrentDateTime() };
@@ -271,73 +425,110 @@ export class TallerComponent {
     this.errorMessage = '';
     if (this.entry.IdEquipo <= 0 || !this.entry.FechaIngreso) {
       this.errorMessage = 'Selecciona un equipo e indica la fecha de ingreso.';
+      this.changeDetector.markForCheck();
       return;
     }
     this.isSaving = true;
-    this.tallerService.createMaintenance(this.entry).pipe(finalize(() => this.isSaving = false)).subscribe({
-      next: () => { this.message = 'Ingreso al taller registrado.'; this.closeWindow(); this.loadMaintenances(); },
-      error: (error) => this.errorMessage = error.error?.Message ?? error.error?.message ?? 'No se pudo registrar el ingreso.',
+    this.tallerService.createMaintenance(this.entry).pipe(
+      finalize(() => { this.isSaving = false; this.changeDetector.markForCheck(); })
+    ).subscribe({
+      next: () => {
+        this.message = 'Registro guardado correctamente.';
+        this.closeWindow();
+        this.openEntryWindow();
+        this.loadMaintenances();
+        this.changeDetector.markForCheck();
+      },
+      error: (error) => {
+        this.errorMessage = apiErrorMessage(error, 'No se pudo registrar el ingreso.');
+        this.changeDetector.markForCheck();
+      },
     });
   }
 
   openExitWindow(item: Maintenance): void {
     // Prepara la salida usando la reparación elegida como contexto.
+    if (!this.canWorkOnRepairs || !this.isOpenMaintenance(item)) return;
     this.message = '';
     this.errorMessage = '';
     this.selectedMaintenance = item;
-    this.exit = { DetalleReparacion: item.DetalleReparacion ?? '', FechaSalida: this.getCurrentDateTime() };
+    this.exit = {
+      EquipoFuncional: item.EquipoFuncional ?? '',
+      TecnicoEntrega: item.TecnicoEntrega ?? '',
+      ClienteRecibe: item.ClienteRecibe ?? '',
+      FechaEntrega: this.getCurrentDateTime(),
+    };
     this.activeWindow = 'exit';
   }
 
   saveExit(): void {
-    // Registra la salida solo cuando existe detalle de reparación.
+    // Registra la condición funcional y la constancia de entrega.
     this.message = '';
     this.errorMessage = '';
-    if (!this.selectedMaintenance || !this.exit.FechaSalida || !this.exit.DetalleReparacion.trim()) {
-      this.errorMessage = 'Indica la fecha de salida y describe lo que se le hizo al equipo.';
+    if (!this.selectedMaintenance || !this.exit.FechaEntrega
+      || !this.exit.EquipoFuncional || !this.exit.TecnicoEntrega.trim() || !this.exit.ClienteRecibe.trim()) {
+      this.errorMessage = 'Completa el estado funcional, quién entrega, quién recibe y la fecha de entrega.';
+      this.changeDetector.markForCheck();
       return;
     }
     this.isSaving = true;
-    this.tallerService.updateMaintenance(this.selectedMaintenance.IdReparacion, this.exit).pipe(finalize(() => this.isSaving = false)).subscribe({
-      next: () => { this.message = 'Salida del taller registrada.'; this.closeWindow(); this.loadMaintenances(); },
-      error: (error) => this.errorMessage = error.error?.Message ?? error.error?.message ?? 'No se pudo registrar la salida.',
+    this.tallerService.updateMaintenance(this.selectedMaintenance.IdReparacion, this.exit).pipe(
+      finalize(() => { this.isSaving = false; this.changeDetector.markForCheck(); })
+    ).subscribe({
+      next: () => {
+        this.message = 'Entrega del equipo registrada.';
+        this.closeWindow();
+        this.loadMaintenances();
+        this.changeDetector.markForCheck();
+      },
+      error: (error) => {
+        this.errorMessage = apiErrorMessage(error, 'No se pudo registrar la salida.');
+        this.changeDetector.markForCheck();
+      },
     });
   }
 
-  get isAdmin(): boolean { return this.authService.hasRole(['Admin']); }
+  get isAdmin(): boolean { return this.isWorkshopAdmin; }
 
-  openEditWindow(item: Maintenance): void {
-    // Copia una reparación al formulario que solo puede usar Admin.
+  openAssessmentWindow(item: Maintenance): void {
+    if (!this.canWorkOnRepairs) return;
     this.message = '';
     this.errorMessage = '';
     this.selectedMaintenance = item;
-    this.edit = {
-      IdEquipo: item.IdEquipo,
+    this.assessment = {
       Dictamen: item.Dictamen ?? '',
-      TipoReparacion: item.TipoReparacion ?? '',
-      FechaIngreso: this.toDateTimeLocal(item.FechaIngreso),
-      DetalleReparacion: item.DetalleReparacion ?? '',
-      FechaSalida: item.FechaSalida ? this.toDateTimeLocal(item.FechaSalida) : null,
+      PiezasSustituidas: item.PiezasSustituidas ?? '',
+      Observaciones: item.Observaciones ?? '',
     };
-    this.activeWindow = 'edit';
+    this.activeWindow = 'assessment';
   }
 
-  // Guarda la información editada de una reparación.
-  saveEdit(): void {
-    if (!this.selectedMaintenance || this.edit.IdEquipo <= 0 || !this.edit.FechaIngreso) {
-      this.errorMessage = 'Selecciona un equipo e indica la fecha de ingreso.';
+  saveAssessment(): void {
+    if (!this.selectedMaintenance || !this.assessment.Dictamen.trim()) {
+      this.errorMessage = 'Ingresa el diagnóstico del equipo.';
+      this.changeDetector.markForCheck();
       return;
     }
     this.isSaving = true;
-    this.tallerService.editMaintenance(this.selectedMaintenance.IdReparacion, this.edit).pipe(finalize(() => this.isSaving = false)).subscribe({
-      next: () => { this.message = 'Reparación actualizada.'; this.closeWindow(); this.loadMaintenances(); },
-      error: (error) => this.errorMessage = error.error?.Message ?? error.error?.message ?? 'No se pudo actualizar la reparación.',
+    this.tallerService.updateAssessment(this.selectedMaintenance.IdReparacion, this.assessment).pipe(
+      finalize(() => { this.isSaving = false; this.changeDetector.markForCheck(); })
+    ).subscribe({
+      next: () => {
+        this.message = 'Dictamen registrado correctamente.';
+        this.closeWindow();
+        this.loadMaintenances();
+        this.changeDetector.markForCheck();
+      },
+      error: (error) => {
+        this.errorMessage = apiErrorMessage(error, 'No se pudo guardar el dictamen.');
+        this.changeDetector.markForCheck();
+      },
     });
   }
 
   // Marca una reparación para su eliminación.
   deleteMaintenance(item: Maintenance): void {
-    if (!this.isAdmin) return;
+    if (!this.isWorkshopAdmin) return;
     this.pendingDeleteMaintenance = item;
   }
 
@@ -348,9 +539,18 @@ export class TallerComponent {
     const maintenanceId = this.pendingDeleteMaintenance.IdReparacion;
     this.pendingDeleteMaintenance = null;
     this.isSaving = true;
-    this.tallerService.deleteMaintenance(maintenanceId).pipe(finalize(() => this.isSaving = false)).subscribe({
-      next: () => { this.message = 'Reparación eliminada.'; this.loadMaintenances(); },
-      error: (error) => this.errorMessage = error.error?.Message ?? error.error?.message ?? 'No se pudo eliminar la reparación.',
+    this.tallerService.deleteMaintenance(maintenanceId).pipe(
+      finalize(() => { this.isSaving = false; this.changeDetector.markForCheck(); })
+    ).subscribe({
+      next: () => {
+        this.message = 'Reparación eliminada.';
+        this.loadMaintenances();
+        this.changeDetector.markForCheck();
+      },
+      error: (error) => {
+        this.errorMessage = apiErrorMessage(error, 'No se pudo eliminar la reparación.');
+        this.changeDetector.markForCheck();
+      },
     });
   }
 
@@ -367,6 +567,11 @@ export class TallerComponent {
 
   closeWindow(): void {
     // Cierra cualquier ventana modal y libera la selección actual.
+    if (this.isReceptionOnly) {
+      this.activeWindow = 'reception';
+      this.selectedMaintenance = null;
+      return;
+    }
     this.activeWindow = null;
     this.selectedMaintenance = null;
   }
@@ -391,8 +596,4 @@ export class TallerComponent {
     return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
   }
 
-  // Convierte una cadena de fecha y hora a un formato compatible con input[type="datetime-local"].
-  private toDateTimeLocal(value: string): string {
-    return value ? value.slice(0, 16) : '';
-  }
 }

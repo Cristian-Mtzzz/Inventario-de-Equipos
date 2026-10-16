@@ -7,19 +7,11 @@
 }
 
 .admin-shell {
+    --shell-gutter: clamp(1rem, 2vw, 2rem);
     width: 100%;
     max-width: none;
     margin: 0;
-    padding: 2rem clamp(1rem, 2vw, 2rem);
-}
-
-.admin-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: start;
-    gap: 1rem;
-    padding-bottom: 2rem;
-    border-bottom: 1px solid #d8e4e0;
+    padding: 0 var(--shell-gutter) 2.5rem;
 }
 
 .eyebrow {
@@ -39,62 +31,6 @@ h2 {
 
 h1 {
     color: #18383b;
-    font-size: clamp(2rem, 4vw, 3rem);
-}
-
-.admin-header p:last-child {
-    margin: .65rem 0 0;
-    color: #718080;
-}
-
-.admin-header-actions {
-    display: flex;
-    align-items: center;
-    gap: .75rem;
-}
-
-.logout-button {
-    padding: .65rem .85rem;
-    border: 1px solid #e4b9b4;
-    border-radius: 5px;
-    color: #9b3f38;
-    background: #fff;
-    cursor: pointer;
-    font-weight: 700;
-}
-
-.logout-button:hover {
-    background: #fcece9;
-}
-
-.admin-tabs {
-    display: flex;
-    gap: .7rem;
-    border-bottom: 1px solid #d8e4e0;
-}
-
-.admin-tabs button {
-    margin-bottom: -.1rem;
-    padding: .7rem 1rem;
-    border: 1px solid transparent;
-    border-radius: 5px 5px 0 0;
-    color: #718080;
-    background: transparent;
-    cursor: pointer;
-    font-weight: 700;
-    transition: background .2s, color .2s;
-}
-
-.admin-tabs button:hover {
-    color: #276968;
-    background: #e8f2ee;
-}
-
-.admin-tabs button.active {
-    border-color: #b9d1ca;
-    border-bottom-color: #f4f8f6;
-    color: #276968;
-    background: #f4f8f6;
 }
 
 .feedback {
@@ -391,19 +327,6 @@ table .danger {
 }
 
 @media (max-width: 760px) {
-    .admin-header {
-        flex-direction: column;
-    }
-
-    .admin-tabs {
-        gap: 1rem;
-        overflow-x: auto;
-    }
-
-    .admin-tabs button {
-        white-space: nowrap;
-    }
-
     .admin-form,
     .admin-form.compact {
         grid-template-columns: 1fr;
@@ -445,6 +368,12 @@ table .danger {
     box-shadow: 0 24px 60px rgba(12, 38, 39, .25);
 }
 
+.user-edit-modal {
+    width: min(960px, 95vw);
+    max-height: 95vh;
+    overflow: visible;
+}
+
 .modal-heading {
     display: flex;
     align-items: start;
@@ -472,6 +401,11 @@ table .danger {
     gap: .75rem;
 }
 
+.user-edit-modal .modal-form {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.85rem 1rem;
+}
+
 .user-field {
     display: flex;
     flex-direction: column;
@@ -482,6 +416,46 @@ table .danger {
     color: #294649;
     font-size: .76rem;
     font-weight: 700;
+}
+
+.user-module-access {
+    grid-column: 1 / -1;
+    margin-top: 0.25rem;
+    padding: 0.6rem 0.85rem;
+    border: 1px solid #d7e2df;
+    border-radius: 6px;
+    background: #fbfdfc;
+}
+
+.user-module-access legend {
+    color: #294649;
+    font-size: .76rem;
+    font-weight: 700;
+    padding: 0 0.3rem;
+}
+
+.user-module-option {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin: 0.3rem 0.85rem 0.3rem 0;
+    cursor: pointer;
+    font-size: 0.84rem;
+    font-weight: 500;
+}
+
+.user-module-option input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    cursor: pointer;
+}
+
+.user-superadmin-option {
+    border-top: 1px solid #e4eeea;
+    padding-top: 0.45rem;
+    margin-top: 0.2rem;
+    display: block;
 }
 
 .modal-actions {
@@ -576,28 +550,3 @@ table .danger {
 .modal-danger:hover {
     background: #9b3f38 !important;
 }
-
-@media (max-width: 760px) {
-    .admin-header {
-        flex-direction: column;
-    }
-
-    .admin-tabs {
-        gap: 1rem;
-        overflow-x: auto;
-    }
-
-    .admin-tabs button {
-        white-space: nowrap;
-    }
-
-    .admin-form,
-    .admin-form.compact {
-        grid-template-columns: 1fr;
-    }
-
-    .admin-form h2 {
-        grid-column: auto;
-    }
-}
-

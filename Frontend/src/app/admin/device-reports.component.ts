@@ -8,9 +8,11 @@ import { Area, Building, Device, DevicePageQuery, DeviceType, RegionalOption } f
 // El endpoint admite hasta 500 filas por página; se usa para reducir las consultas de exportación.
 const REPORT_PAGE_SIZE = 500;
 const REPORT_COLUMNS = [
-  'ID', 'Código de inventario', 'Número de serie', 'Marca', 'Modelo', 'Tipo', 'Estado',
+  'ID', 'Número de ingreso / combo', 'Código de inventario', 'Número de serie', 'Marca', 'Modelo', 'Tipo', 'Estado',
   'Número de pago asignado', 'Nombre asignado', 'Regional', 'Edificio', 'Área',
 ];
+// Valor del filtro de tipo que exporta solo las piezas de combos de escritorio.
+const COMBO_TYPE = 'COMBOS';
 type ReportType = 'all' | 'type' | 'brand' | 'state' | 'regional' | 'building' | 'area';
 
 /**
@@ -35,7 +37,8 @@ export class DeviceReportsComponent {
   reportType: ReportType = 'all';
   searchTerm = '';
   brand = '';
-  typeId: number | null = null;
+  typeId: number | typeof COMBO_TYPE | null = null;
+  readonly comboType = COMBO_TYPE;
   state = '';
   regionalId: number | null = null;
   buildingId: number | null = null;
@@ -231,11 +234,12 @@ export class DeviceReportsComponent {
       SearchTerm: this.searchTerm.trim(),
       Brand: usesBrand ? this.brand.trim() : '',
       Model: '',
-      TypeId: usesType ? this.typeId : null,
+      TypeId: usesType && this.typeId !== COMBO_TYPE ? this.typeId : null,
       RegionalId: usesRegion ? this.regionalId : null,
       BuildingId: usesBuilding ? this.buildingId : null,
       AreaId: this.reportType === 'area' ? this.areaId : null,
       State: usesState ? this.state : '',
+      ComboOnly: usesType && this.typeId === COMBO_TYPE,
     };
   }
 
@@ -275,14 +279,17 @@ export class DeviceReportsComponent {
       if (payment && name && !namesByPayment.has(payment)) namesByPayment.set(payment, name);
     });
 
-    sheet.mergeCells('A1:L1');
+    const lastColumn = sheet.getColumn(REPORT_COLUMNS.length).letter;
+    sheet.mergeCells(`A1:${lastColumn}1`);
     sheet.getCell('A1').value = 'DETALLE DE DISPOSITIVOS';
     sheet.getCell('A1').font = { name: 'Aptos Display', size: 16, bold: true, color: { argb: 'FFFFFFFF' } };
     sheet.getCell('A1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF173F43' } };
     sheet.getCell('A1').alignment = { vertical: 'middle' };
     sheet.getRow(1).height = 31;
-    sheet.mergeCells('A2:L2');
-    sheet.getCell('A2').value = `${devices.length} dispositivos · Generado ${new Date().toLocaleString('es-HN')}`;
+    // La segunda fila deja constancia de los criterios con los que se generó el archivo.
+    sheet.mergeCells(`A2:${lastColumn}2`);
+    const filters = this.appliedFilters().map(([label, value]) => `${label}: ${value}`).join(' · ');
+    sheet.getCell('A2').value = `${devices.length} dispositivos · ${filters} · Generado ${new Date().toLocaleString('es-HN')}`;
     sheet.getCell('A2').font = { name: 'Aptos', size: 10, color: { argb: 'FF617573' }, italic: true };
 
     sheet.addTable({
@@ -300,11 +307,12 @@ export class DeviceReportsComponent {
           || (device.Estado.trim().toUpperCase() === 'ASIGNADO' ? 'Sin nombre registrado' : '');
         return [
           device.IdEquipo,
+          device.NumeroIngreso || device.NCombo || '',
           device.CodigoInventario,
           device.NoSerie,
           device.Marca,
           device.Modelo,
-          device.NombreTipo || device.IdTipo || '',
+          [device.NombreTipo || device.IdTipo || '', device.Componente].filter(Boolean).join(' · '),
           device.Estado,
           device.NumeroPagoAsignado?.trim() ?? '',
           assignedName,
@@ -315,7 +323,7 @@ export class DeviceReportsComponent {
       }),
     });
 
-    [12, 22, 24, 18, 20, 22, 16, 22, 34, 25, 30, 34].forEach((width, index) => {
+    [12, 24, 22, 24, 18, 20, 22, 16, 22, 34, 25, 30, 34].forEach((width, index) => {
       sheet.getColumn(index + 1).width = width;
     });
     sheet.views = [{ state: 'frozen', ySplit: 4 }];
@@ -329,7 +337,9 @@ export class DeviceReportsComponent {
     const filters: Array<[string, string]> = [['Tipo de reporte', this.reportTypeLabel()]];
     if (this.searchTerm.trim()) filters.push(['Búsqueda', this.searchTerm.trim()]);
     switch (this.reportType) {
-      case 'type': filters.push(['Tipo de dispositivo', selectedType ?? 'Todos']); break;
+      case 'type':
+        filters.push(['Tipo de dispositivo', this.typeId === COMBO_TYPE ? 'Computadoras escritorio (combos)' : selectedType ?? 'Todos']);
+        break;
       case 'brand': filters.push(['Marca', this.brand.trim()]); break;
       case 'state': filters.push(['Estado', selectedState]); break;
       case 'regional': filters.push(['Regional', this.selectedRegionalName]); break;
@@ -353,21 +363,5 @@ export class DeviceReportsComponent {
       building: 'Por edificio',
       area: 'Por área',
     }[this.reportType];
-  }
-
-  private styleSectionHeading(row: ExcelJS.Row): void {
-    row.height = 24;
-    row.eachCell((cell) => {
-      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF276968' } };
-    });
-  }
-
-  private styleTableHeader(row: ExcelJS.Row): void {
-    row.eachCell((cell) => {
-      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4F8A83' } };
-      cell.alignment = { vertical: 'middle' };
-    });
   }
 }

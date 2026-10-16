@@ -1,7 +1,4 @@
-using System.Data;
 using System.Data.Common;
-using System.Globalization;
-using Microsoft.EntityFrameworkCore;
 using SistemaInventario.Api.Data;
 using SistemaInventario.Api.Models;
 
@@ -9,130 +6,171 @@ namespace SistemaInventario.Api.Services;
 
 // Capa de persistencia del taller. Coordina recepción, reparaciones, historial y
 // transacciones que deben guardarse completas o revertirse juntas.
-public sealed class TallerService(InventoryDbContext dbContext) : ITallerService
+public sealed class TallerService(InventoryDbContext dbContext) : OracleRepository(dbContext), ITallerService
 {
-    public async Task<IReadOnlyList<WorkshopDeviceDto>> GetDevices(CancellationToken cancellationToken) =>
-        await ReadList("""
+    public Task<IReadOnlyList<WorkshopDeviceDto>> GetDevices(CancellationToken cancellationToken) =>
+        ReadList("""
             SELECT ID_EQUIPO, CODIGO_INVENTARIO, NO_SERIE, MARCA, MODELO
             FROM DISPOSITIVOS
             ORDER BY CODIGO_INVENTARIO
             """, reader => new WorkshopDeviceDto(
-            reader.GetInt32(reader.GetOrdinal("ID_EQUIPO")),
+            ReadInt(reader, "ID_EQUIPO"),
             ReadString(reader, "CODIGO_INVENTARIO"),
             ReadString(reader, "NO_SERIE"),
             ReadString(reader, "MARCA"),
             ReadString(reader, "MODELO")), cancellationToken);
 
-    public async Task<IReadOnlyList<MaintenanceDto>> GetMaintenances(CancellationToken cancellationToken) =>
-        await ReadList("""
+    public Task<IReadOnlyList<MaintenanceDto>> GetMaintenances(CancellationToken cancellationToken) =>
+        ReadList("""
             SELECT r.ID_REPARACION, r.ID_EQUIPO, d.CODIGO_INVENTARIO, d.NO_SERIE,
-                   d.MARCA, d.MODELO, r.ID_TECNICO, r.DICTAMEN,
+                   d.MARCA, d.MODELO, r.ID_TECNICO, td.TIPO_DISPOSITIVO, r.DICTAMEN,
                    r.TIPO_REPARACION, r.DETALLE_REPARACION,
-                   r.FECHA_INGRESO, r.FECHA_SALIDA
+                   r.FECHA_INGRESO, r.FECHA_SALIDA, r.MEMO_NUMERO,
+                   r.RECIBE, r.TECNICO, r.DEPARTAMENTO, r.DESCRIPCION_EQUIPO,
+                   r.EQUIPO_EN_GARANTIA, r.PIEZAS_SUSTITUIDAS,
+                   r.OBSERVACIONES, r.EQUIPO_FUNCIONAL, r.TECNICO_ENTREGA,
+                   r.CLIENTE_RECIBE, r.FECHA_ENTREGA
             FROM REPARACION r
             INNER JOIN DISPOSITIVOS d ON d.ID_EQUIPO = r.ID_EQUIPO
+            LEFT JOIN TIPOS_DISPOSITIVOS td ON td.ID_TIPO = d.ID_TIPO
             ORDER BY r.FECHA_INGRESO DESC
             """, ReadMaintenance, cancellationToken);
 
-    public async Task RegisterReception(CreateReceptionEntryDto reception, CancellationToken cancellationToken)
+    public Task RegisterReception(CreateReceptionEntryDto reception, CancellationToken cancellationToken)
     {
         // La recepción crea o reutiliza catálogos y registra el equipo dentro de una transacción.
         if (string.IsNullOrWhiteSpace(reception.CodigoInventario)
+            || string.IsNullOrWhiteSpace(reception.NoSerie)
             || string.IsNullOrWhiteSpace(reception.TipoDispositivo)
-            || reception.IdEdificio <= 0
-            || reception.IdArea <= 0)
+            || string.IsNullOrWhiteSpace(reception.DescripcionEquipo)
+            || string.IsNullOrWhiteSpace(reception.EquipoEnGarantia)
+            || string.IsNullOrWhiteSpace(reception.Recibe)
+            || string.IsNullOrWhiteSpace(reception.Tecnico)
+            || reception.IdEdificio <= 0)
         {
-            throw new InvalidOperationException("El equipo, tipo, edificio y departamento de origen son obligatorios.");
+            throw new InvalidOperationException("Completa todos los campos obligatorios del formato de recepción.");
         }
 
-        await dbContext.Database.OpenConnectionAsync(cancellationToken);
-        await using var transaction = await dbContext.Database.GetDbConnection().BeginTransactionAsync(cancellationToken);
-        try
+        return InTransaction(async (connection, transaction) =>
         {
-            var connection = dbContext.Database.GetDbConnection();
             var codigo = reception.CodigoInventario.Trim();
             var tipo = reception.TipoDispositivo.Trim();
-            var areaId = await GetAreaForBuilding(connection, transaction, reception.IdEdificio, reception.IdArea, cancellationToken);
+            var defaultArea = await GetDefaultAreaForBuilding(connection, transaction, reception.IdEdificio, cancellationToken) ?? 1;
+            var areaId = reception.IdArea > 0
+                ? await GetAreaForBuilding(connection, transaction, reception.IdEdificio, reception.IdArea, cancellationToken)
+                : defaultArea;
             var tipoId = await GetOrCreateDeviceType(connection, transaction, tipo, cancellationToken);
             var idEquipo = await GetDeviceIdByCode(connection, transaction, codigo, cancellationToken);
 
             if (idEquipo is null)
             {
+                idEquipo = await NextId(connection, transaction, "DISPOSITIVOS", "ID_EQUIPO", cancellationToken);
                 await Execute(connection, transaction, """
                     INSERT INTO DISPOSITIVOS
                         (ID_EQUIPO, CODIGO_INVENTARIO, NO_SERIE, MARCA, MODELO, ID_TIPO,
-                                ESTADO, NUMERO_PAGO_ASIGNADO, NOMBRE_ASIGNADO, ID_AREA)
-                    SELECT NVL(MAX(ID_EQUIPO), 0) + 1, :codigo, 'PENDIENTE', 'PENDIENTE', 'PENDIENTE',
-                                    :tipo, 'DISPONIBLE', NULL, NULL, :area
-                    FROM DISPOSITIVOS
+                         ESTADO, NUMERO_PAGO_ASIGNADO, NOMBRE_ASIGNADO, ID_AREA)
+                    VALUES
+                        (:idEquipo, :codigo, :noSerie, 'PENDIENTE', 'PENDIENTE',
+                         :tipo, 'DISPONIBLE', NULL, NULL, :area)
                     """, cancellationToken,
-                    ("codigo", codigo), ("tipo", tipoId), ("area", areaId));
-                idEquipo = await GetDeviceIdByCode(connection, transaction, codigo, cancellationToken);
+                    ("idEquipo", idEquipo.Value), ("codigo", codigo), ("noSerie", reception.NoSerie.Trim()),
+                    ("tipo", tipoId), ("area", areaId));
             }
             else
             {
                 await Execute(connection, transaction, """
                     UPDATE DISPOSITIVOS
                     SET ID_TIPO = :tipo,
+                        NO_SERIE = :noSerie,
                         ID_AREA = :area,
                         ESTADO = 'DISPONIBLE'
                     WHERE ID_EQUIPO = :idEquipo
                     """, cancellationToken,
-                    ("tipo", tipoId), ("area", areaId), ("idEquipo", idEquipo.Value));
+                    ("tipo", tipoId), ("noSerie", reception.NoSerie.Trim()), ("area", areaId), ("idEquipo", idEquipo.Value));
             }
 
             var fechaIngreso = reception.FechaIngreso == default ? DateTime.Now : reception.FechaIngreso;
+            var departamento = string.IsNullOrWhiteSpace(reception.Departamento) ? "-" : reception.Departamento.Trim();
+            var idReparacion = await NextId(connection, transaction, "REPARACION", "ID_REPARACION", cancellationToken);
             await Execute(connection, transaction, """
                 INSERT INTO REPARACION
                     (ID_REPARACION, ID_EQUIPO, ID_TECNICO, FECHA_INGRESO,
-                     DICTAMEN, TIPO_REPARACION, DETALLE_REPARACION)
-                SELECT NVL(MAX(ID_REPARACION), 0) + 1, :idEquipo, 0,
-                       :fechaIngreso, :dictamen, :tipoReparacion, 'PENDIENTE'
-                FROM REPARACION
+                     DICTAMEN, TIPO_REPARACION, DETALLE_REPARACION, MEMO_NUMERO,
+                     RECIBE, TECNICO, DEPARTAMENTO,
+                     DESCRIPCION_EQUIPO, EQUIPO_EN_GARANTIA)
+                VALUES
+                    (:idReparacion, :idEquipo, 0,
+                     :fechaIngreso, :dictamen, :tipoReparacion, 'PENDIENTE', :memoNumero,
+                     :recibe, :tecnico, :departamento,
+                     :descripcionEquipo, :equipoEnGarantia)
                 """, cancellationToken,
-                ("idEquipo", idEquipo!.Value), ("fechaIngreso", fechaIngreso),
-                ("dictamen", "INGRESO POR RECEPCIÓN"), ("tipoReparacion", tipo));
-
-            await transaction.CommitAsync(cancellationToken);
-        }
-        catch
-        {
-            await transaction.RollbackAsync(cancellationToken);
-            throw;
-        }
-        finally
-        {
-            await dbContext.Database.CloseConnectionAsync();
-        }
+                ("idReparacion", idReparacion),
+                ("idEquipo", idEquipo.Value), ("fechaIngreso", fechaIngreso),
+                ("dictamen", "PENDIENTE"), ("tipoReparacion", tipo),
+                ("memoNumero", reception.MemoNumero?.Trim()),
+                ("recibe", reception.Recibe.Trim()),
+                ("tecnico", reception.Tecnico.Trim()), ("departamento", departamento),
+                ("descripcionEquipo", reception.DescripcionEquipo.Trim()),
+                ("equipoEnGarantia", reception.EquipoEnGarantia.Trim().ToUpperInvariant()));
+        }, cancellationToken);
     }
 
     public Task CreateMaintenance(int idTecnico, CreateMaintenanceEntryDto maintenance, CancellationToken cancellationToken) =>
         // Abre una reparación y deja el detalle inicial como pendiente.
-        Execute("""
-            INSERT INTO REPARACION
-                (ID_REPARACION, ID_EQUIPO, ID_TECNICO, FECHA_INGRESO,
-                  DICTAMEN, TIPO_REPARACION, DETALLE_REPARACION)
-            SELECT NVL(MAX(ID_REPARACION), 0) + 1, :idEquipo, :idTecnico,
-                 :fechaIngreso, :dictamen, :tipoReparacion, 'PENDIENTE'
-            FROM REPARACION
-            """, cancellationToken,
-                 ("idEquipo", maintenance.IdEquipo), ("idTecnico", idTecnico),
-                 ("fechaIngreso", maintenance.FechaIngreso), ("dictamen", maintenance.Dictamen),
-                 ("tipoReparacion", maintenance.TipoReparacion));
+        InTransaction(async (connection, transaction) =>
+        {
+            var idReparacion = await NextId(connection, transaction, "REPARACION", "ID_REPARACION", cancellationToken);
+            await Execute(connection, transaction, """
+                INSERT INTO REPARACION
+                    (ID_REPARACION, ID_EQUIPO, ID_TECNICO, FECHA_INGRESO,
+                     DICTAMEN, TIPO_REPARACION, DETALLE_REPARACION)
+                VALUES
+                    (:idReparacion, :idEquipo, :idTecnico,
+                     :fechaIngreso, :dictamen, :tipoReparacion, 'PENDIENTE')
+                """, cancellationToken,
+                ("idReparacion", idReparacion),
+                ("idEquipo", maintenance.IdEquipo), ("idTecnico", idTecnico),
+                ("fechaIngreso", maintenance.FechaIngreso),
+                ("dictamen", string.IsNullOrWhiteSpace(maintenance.Dictamen) ? "PENDIENTE" : maintenance.Dictamen.Trim()),
+                ("tipoReparacion", maintenance.TipoReparacion));
+        }, cancellationToken);
 
-    public Task UpdateMaintenance(int idMantenimiento, CreateMaintenanceExitDto maintenance, CancellationToken cancellationToken) =>
-        // Completa la salida y conserva la descripción del trabajo realizado.
-        Execute("""
+    public async Task<bool> UpdateMaintenanceAssessment(
+        int idMantenimiento,
+        UpdateMaintenanceAssessmentDto assessment,
+        CancellationToken cancellationToken) =>
+        await Execute("""
             UPDATE REPARACION
-            SET DETALLE_REPARACION = :detalleReparacion,
-                FECHA_SALIDA = :fechaSalida
+            SET DICTAMEN = :dictamen,
+                PIEZAS_SUSTITUIDAS = :piezasSustituidas,
+                OBSERVACIONES = :observaciones
             WHERE ID_REPARACION = :idReparacion
             """, cancellationToken,
-            ("detalleReparacion", maintenance.DetalleReparacion),
-            ("fechaSalida", maintenance.FechaSalida), ("idReparacion", idMantenimiento));
+            ("dictamen", assessment.Dictamen?.Trim()),
+            ("piezasSustituidas", assessment.PiezasSustituidas?.Trim()),
+            ("observaciones", assessment.Observaciones?.Trim()),
+            ("idReparacion", idMantenimiento)) > 0;
 
-    public Task EditMaintenance(int idMantenimiento, UpdateMaintenanceDto maintenance, CancellationToken cancellationToken) =>
-        Execute("""
+    public async Task<bool> RegisterMaintenanceExit(
+        int idMantenimiento,
+        UpdateMaintenanceExitDto exit,
+        CancellationToken cancellationToken) =>
+        await Execute("""
+            UPDATE REPARACION
+            SET EQUIPO_FUNCIONAL = :equipoFuncional,
+                TECNICO_ENTREGA = :tecnicoEntrega,
+                CLIENTE_RECIBE = :clienteRecibe,
+                FECHA_ENTREGA = :fechaEntrega,
+                FECHA_SALIDA = :fechaEntrega
+            WHERE ID_REPARACION = :idReparacion
+            """, cancellationToken,
+            ("equipoFuncional", exit.EquipoFuncional.Trim().ToUpperInvariant()),
+            ("tecnicoEntrega", exit.TecnicoEntrega.Trim()),
+            ("clienteRecibe", exit.ClienteRecibe.Trim()),
+            ("fechaEntrega", exit.FechaEntrega), ("idReparacion", idMantenimiento)) > 0;
+
+    public async Task<bool> EditMaintenance(int idMantenimiento, UpdateMaintenanceDto maintenance, CancellationToken cancellationToken) =>
+        await Execute("""
             UPDATE REPARACION
             SET ID_EQUIPO = :idEquipo,
                 DICTAMEN = :dictamen,
@@ -145,99 +183,13 @@ public sealed class TallerService(InventoryDbContext dbContext) : ITallerService
             ("idEquipo", maintenance.IdEquipo), ("dictamen", maintenance.Dictamen),
             ("tipoReparacion", maintenance.TipoReparacion), ("fechaIngreso", maintenance.FechaIngreso),
             ("detalleReparacion", maintenance.DetalleReparacion ?? "PENDIENTE"),
-            ("fechaSalida", maintenance.FechaSalida), ("idReparacion", idMantenimiento));
+            ("fechaSalida", maintenance.FechaSalida), ("idReparacion", idMantenimiento)) > 0;
 
-    public Task DeleteMaintenance(int idMantenimiento, CancellationToken cancellationToken) =>
-        Execute("""
+    public async Task<bool> DeleteMaintenance(int idMantenimiento, CancellationToken cancellationToken) =>
+        await Execute("""
             DELETE FROM REPARACION
             WHERE ID_REPARACION = :idReparacion
-            """, cancellationToken, ("idReparacion", idMantenimiento));
-
-    private async Task<IReadOnlyList<T>> ReadList<T>(string sql, Func<DbDataReader, T> mapper, CancellationToken cancellationToken)
-    {
-        await dbContext.Database.OpenConnectionAsync(cancellationToken);
-        try
-        {
-            await using var command = CreateCommand(dbContext.Database.GetDbConnection(), null, sql);
-            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-            var result = new List<T>();
-            while (await reader.ReadAsync(cancellationToken)) result.Add(mapper(reader));
-            return result;
-        }
-        finally { await dbContext.Database.CloseConnectionAsync(); }
-    }
-
-    private async Task Execute(string sql, CancellationToken cancellationToken, params (string Name, object? Value)[] parameters)
-    {
-        await dbContext.Database.OpenConnectionAsync(cancellationToken);
-        try
-        {
-            await using var command = CreateCommand(dbContext.Database.GetDbConnection(), null, sql, parameters);
-            await command.ExecuteNonQueryAsync(cancellationToken);
-        }
-        finally { await dbContext.Database.CloseConnectionAsync(); }
-    }
-
-    private static async Task Execute(
-        DbConnection connection,
-        DbTransaction? transaction,
-        string sql,
-        CancellationToken cancellationToken,
-        params (string Name, object? Value)[] parameters)
-    {
-        await using var command = CreateCommand(connection, transaction, sql, parameters);
-        await command.ExecuteNonQueryAsync(cancellationToken);
-    }
-
-    private static DbCommand CreateCommand(DbConnection connection, DbTransaction? transaction, string sql, params (string Name, object? Value)[] parameters)
-    {
-        var command = connection.CreateCommand();
-        command.CommandText = sql;
-        command.Transaction = transaction;
-        foreach (var (name, value) in parameters)
-        {
-            var parameter = command.CreateParameter();
-            parameter.ParameterName = name;
-            parameter.Value = value ?? DBNull.Value;
-
-            switch (value)
-            {
-                case int:
-                    parameter.DbType = DbType.Int32;
-                    break;
-                case long:
-                    parameter.DbType = DbType.Int64;
-                    break;
-                case DateTime:
-                    parameter.DbType = DbType.DateTime;
-                    break;
-                case bool:
-                    parameter.DbType = DbType.Boolean;
-                    break;
-                case decimal:
-                    parameter.DbType = DbType.Decimal;
-                    break;
-                case double:
-                    parameter.DbType = DbType.Double;
-                    break;
-                case string:
-                    parameter.DbType = DbType.String;
-                    parameter.Size = 256;
-                    break;
-                case null:
-                    parameter.DbType = DbType.String;
-                    parameter.Size = 256;
-                    break;
-                default:
-                    parameter.DbType = DbType.String;
-                    parameter.Size = 256;
-                    break;
-            }
-
-            command.Parameters.Add(parameter);
-        }
-        return command;
-    }
+            """, cancellationToken, ("idReparacion", idMantenimiento)) > 0;
 
     private static async Task<int> GetAreaForBuilding(
         DbConnection connection,
@@ -258,7 +210,33 @@ public sealed class TallerService(InventoryDbContext dbContext) : ITallerService
             : throw new InvalidOperationException("El departamento no pertenece al edificio seleccionado.");
     }
 
-    private async Task<int> GetOrCreateDeviceType(DbConnection connection, DbTransaction? transaction, string tipoDispositivo, CancellationToken cancellationToken)
+    private static async Task<int?> GetDefaultAreaForBuilding(
+        DbConnection connection,
+        DbTransaction? transaction,
+        int idEdificio,
+        CancellationToken cancellationToken)
+    {
+        var area = await GetScalar<int?>(connection, transaction, """
+            SELECT DEPARTAMENTO_IHSS_ID
+            FROM DEPARTAMENTO_IHSS
+            WHERE EDIFICIO_ID = :idEdificio
+              AND ROWNUM = 1
+            """, cancellationToken, ("idEdificio", idEdificio));
+
+        if (area is > 0) return area;
+
+        return await GetScalar<int?>(connection, transaction, """
+            SELECT DEPARTAMENTO_IHSS_ID
+            FROM DEPARTAMENTO_IHSS
+            WHERE ROWNUM = 1
+            """, cancellationToken);
+    }
+
+    private static async Task<int> GetOrCreateDeviceType(
+        DbConnection connection,
+        DbTransaction transaction,
+        string tipoDispositivo,
+        CancellationToken cancellationToken)
     {
         var existingId = await GetScalar<int?>(connection, transaction, """
             SELECT ID_TIPO
@@ -268,55 +246,48 @@ public sealed class TallerService(InventoryDbContext dbContext) : ITallerService
 
         if (existingId is > 0) return existingId.Value;
 
+        var idTipo = await NextId(connection, transaction, "TIPOS_DISPOSITIVOS", "ID_TIPO", cancellationToken);
         await Execute(connection, transaction, """
-            INSERT INTO TIPOS_DISPOSITIVOS (ID_TIPO, TIPO_DISPOSITIVO)
-            SELECT NVL(MAX(ID_TIPO), 0) + 1, :tipoDispositivo
-            FROM TIPOS_DISPOSITIVOS
-            """, cancellationToken, ("tipoDispositivo", tipoDispositivo));
-
-        return await GetScalar<int>(connection, transaction, """
-            SELECT ID_TIPO
-            FROM TIPOS_DISPOSITIVOS
-            WHERE UPPER(TRIM(TIPO_DISPOSITIVO)) = UPPER(TRIM(:tipoDispositivo))
-            """, cancellationToken, ("tipoDispositivo", tipoDispositivo));
+            INSERT INTO TIPOS_DISPOSITIVOS (ID_TIPO, TIPO_DISPOSITIVO) VALUES (:idTipo, :tipoDispositivo)
+            """, cancellationToken, ("idTipo", idTipo), ("tipoDispositivo", tipoDispositivo));
+        return idTipo;
     }
 
-    private async Task<int?> GetDeviceIdByCode(DbConnection connection, DbTransaction? transaction, string codigoInventario, CancellationToken cancellationToken)
-    {
-        return await GetScalar<int?>(connection, transaction, """
+    private static Task<int?> GetDeviceIdByCode(
+        DbConnection connection,
+        DbTransaction? transaction,
+        string codigoInventario,
+        CancellationToken cancellationToken) =>
+        GetScalar<int?>(connection, transaction, """
             SELECT ID_EQUIPO
             FROM DISPOSITIVOS
             WHERE UPPER(TRIM(CODIGO_INVENTARIO)) = UPPER(TRIM(:codigoInventario))
             """, cancellationToken, ("codigoInventario", codigoInventario));
-    }
-
-    private static async Task<T> GetScalar<T>(DbConnection connection, DbTransaction? transaction, string sql, CancellationToken cancellationToken, params (string Name, object? Value)[] parameters)
-    {
-        await using var command = CreateCommand(connection, transaction, sql, parameters);
-        var result = await command.ExecuteScalarAsync(cancellationToken);
-        if (result is DBNull or null) return default!;
-
-        var targetType = Nullable.GetUnderlyingType(typeof(T)) ?? typeof(T);
-        return (T)Convert.ChangeType(result, targetType, CultureInfo.InvariantCulture);
-    }
 
     private static MaintenanceDto ReadMaintenance(DbDataReader reader) => new(
-        reader.GetInt32(reader.GetOrdinal("ID_REPARACION")),
-        reader.GetInt32(reader.GetOrdinal("ID_EQUIPO")),
+        ReadInt(reader, "ID_REPARACION"),
+        ReadInt(reader, "ID_EQUIPO"),
         ReadString(reader, "CODIGO_INVENTARIO"),
         ReadString(reader, "NO_SERIE"),
         ReadString(reader, "MARCA"),
         ReadString(reader, "MODELO"),
-        reader.GetInt32(reader.GetOrdinal("ID_TECNICO")),
+        ReadInt(reader, "ID_TECNICO"),
+        ReadNullableString(reader, "TIPO_DISPOSITIVO"),
         ReadNullableString(reader, "DICTAMEN"),
         ReadNullableString(reader, "TIPO_REPARACION"),
         ReadNullableString(reader, "DETALLE_REPARACION"),
         reader.GetDateTime(reader.GetOrdinal("FECHA_INGRESO")),
-        reader.IsDBNull(reader.GetOrdinal("FECHA_SALIDA")) ? null : reader.GetDateTime(reader.GetOrdinal("FECHA_SALIDA")));
-
-    private static string ReadString(DbDataReader reader, string column) =>
-        reader.IsDBNull(reader.GetOrdinal(column)) ? string.Empty : reader.GetString(reader.GetOrdinal(column));
-
-    private static string? ReadNullableString(DbDataReader reader, string column) =>
-        reader.IsDBNull(reader.GetOrdinal(column)) ? null : reader.GetString(reader.GetOrdinal(column));
+        ReadNullableDate(reader, "FECHA_SALIDA"),
+        ReadNullableString(reader, "MEMO_NUMERO"),
+        ReadNullableString(reader, "RECIBE"),
+        ReadNullableString(reader, "TECNICO"),
+        ReadNullableString(reader, "DEPARTAMENTO"),
+        ReadNullableString(reader, "DESCRIPCION_EQUIPO"),
+        ReadNullableString(reader, "EQUIPO_EN_GARANTIA"),
+        ReadNullableString(reader, "PIEZAS_SUSTITUIDAS"),
+        ReadNullableString(reader, "OBSERVACIONES"),
+        ReadNullableString(reader, "EQUIPO_FUNCIONAL"),
+        ReadNullableString(reader, "TECNICO_ENTREGA"),
+        ReadNullableString(reader, "CLIENTE_RECIBE"),
+        ReadNullableDate(reader, "FECHA_ENTREGA"));
 }

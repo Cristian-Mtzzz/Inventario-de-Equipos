@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using SistemaInventario.Api.Data;
+using SistemaInventario.Api.Infrastructure;
 using SistemaInventario.Api.Services;
 using SistemaInventario.Api.Swagger;
 
@@ -16,7 +17,13 @@ const string AngularCorsPolicy = "AngularCorsPolicy";
 
 // Habilita controladores para exponer endpoints, Swagger para probarlos y EF Core
 // para administrar la conexión compartida con Oracle.
-builder.Services.AddControllers();
+// Las respuestas JSON conservan los nombres en PascalCase de los DTO (IdEquipo, Message...),
+// que es el formato que usan los modelos del frontend.
+builder.Services.AddControllers()
+    .AddJsonOptions(options => options.JsonSerializerOptions.PropertyNamingPolicy = null);
+builder.Services.ConfigureHttpJsonOptions(options => options.SerializerOptions.PropertyNamingPolicy = null);
+builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
@@ -45,7 +52,11 @@ var oracleConnection = builder.Configuration.GetConnectionString("OracleConnecti
 builder.Services.AddDbContext<InventoryDbContext>(options =>
     options.UseOracle(oracleConnection));
 builder.Services.AddScoped<IAuthService, AuthService>();
-builder.Services.AddScoped<IAdminService, AdminService>();
+builder.Services.AddScoped<IDeviceService, DeviceService>();
+builder.Services.AddScoped<ICatalogService, CatalogService>();
+builder.Services.AddScoped<IEmployeeService, EmployeeService>();
+builder.Services.AddScoped<IReassignmentService, ReassignmentService>();
+builder.Services.AddScoped<IUserAdminService, UserAdminService>();
 builder.Services.AddScoped<IModulePermissionService, ModulePermissionService>();
 builder.Services.AddScoped<ITallerService, TallerService>();
 builder.Services.AddScoped<IAuthorizationHandler, ModuleAccessAuthorizationHandler>();
@@ -132,6 +143,9 @@ builder.Services.AddCors(options => options.AddPolicy(AngularCorsPolicy, policy 
         .AllowAnyMethod()));
 
 var app = builder.Build();
+
+// Convierte cualquier excepción no controlada en una respuesta { Message } con su código HTTP.
+app.UseExceptionHandler();
 
 // Soporte para subaplicaciones o directorios virtuales en IIS (ej. /ApiInventariosTic).
 if (!string.IsNullOrWhiteSpace(apiBaseUrl)

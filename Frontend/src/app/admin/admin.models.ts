@@ -15,10 +15,15 @@ export interface Device {
   IdArea: number | null;
   NombreArea: string | null;
   AsignadoA: string | null;
+  FechaAsignacion?: string | null;
   IdEdificio: number | null;
   NombreEdificio: string | null;
   IdRegional: number | null;
   NombreRegional: string | null;
+  NCombo?: string | null;
+  Componente?: string | null;
+  // Número del lote de ingreso NNNNN-MM-AAAA (equipos cargados desde Excel).
+  NumeroIngreso?: string | null;
 }
 
 export interface PagedResult<T> {
@@ -39,6 +44,7 @@ export interface DevicePageQuery {
   BuildingId: number | null;
   AreaId: number | null;
   State?: string;
+  ComboOnly?: boolean;
 }
 
 export interface DeviceOption {
@@ -60,6 +66,26 @@ export interface CreateDevice {
   NumeroPagoAsignado: string | null;
   NombreAsignado: string | null;
   IdArea: number | null;
+  // Solo al crear desde la carga de Excel; la edición no lo cambia.
+  NumeroIngreso?: string | null;
+}
+
+export interface DesktopComboComponent {
+  Componente: 'CPU' | 'MONITOR' | 'TECLADO';
+  CodigoInventario: string;
+  NoSerie: string;
+  Marca: string;
+  Modelo: string;
+}
+
+export interface CreateDesktopCombo {
+  NCombo: string;
+  IdTipo: number;
+  Estado: string;
+  NumeroPagoAsignado: string | null;
+  NombreAsignado: string | null;
+  IdArea: number | null;
+  Componentes: DesktopComboComponent[];
 }
 
 // Catálogo de áreas disponibles para ubicar un equipo.
@@ -138,6 +164,8 @@ export interface Reassignment {
   IdEquipo: number;
   CodigoInventario: string;
   NoPagoAnterior: string | null;
+  NombreAnterior?: string | null;
+  NombreAreaAnterior?: string | null;
   NoPagoNuevo: string | null;
   NombreNuevo: string | null;
   NombreEdificio: string | null;
@@ -195,4 +223,3 @@ export interface DeviceType {
 export interface SaveDeviceType {
   TipoDispositivo: string;
 }
-

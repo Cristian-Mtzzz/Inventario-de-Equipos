@@ -1,0 +1,197 @@
+<!-- Sección Usuarios del panel administrativo. Los diálogos quedan fuera del bloque
+  activo porque solo se abren desde esta sección. -->
+@if (active) {
+  @if (message) { <p class="feedback success" role="status">{{ message }}</p> }
+  @if (errorMessage) { <p class="feedback error" role="alert">{{ errorMessage }}</p> }
+  <section class="admin-section">
+    <button type="button" class="add-user-button" (click)="openUserDialog()">Añadir usuario</button>
+    <div class="filter-bar">
+      <input type="search" [(ngModel)]="userSearchTerm" name="userSearch" placeholder="Buscar usuario" />
+      <select [(ngModel)]="selectedUserRole" name="userRoleFilter">
+        <option value="">Todos los roles</option>
+        @for (role of availableUserRoles; track role) { <option [value]="role">{{ role }}</option> }
+      </select>
+      <button type="button" class="secondary" (click)="clearUserFilters()">Limpiar</button>
+    </div>
+    <app-table-page-size [(page)]="userPage" [(pageSize)]="userPageSize" />
+    <div class="table-wrap users-table-wrap">
+      <table class="users-table">
+        <thead>
+          <tr>
+            <th class="table-id-column">ID</th>
+            <th>Usuario</th>
+            <th>Nombre</th>
+            <th>Dominio</th>
+            <th>Autenticación</th>
+            <th>Estado</th>
+            <th>Rol</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          @if (filteredUsers.length === 0) {
+          <tr>
+            <td colspan="8">No se encontraron usuarios con los filtros actuales.</td>
+          </tr>
+          } @else {
+          @for (user of filteredUsers | page: userPage : userPageSize; track user.IdUsuario) { <tr>
+            <td class="table-id-column">{{ user.IdUsuario }}</td>
+            <td>{{ user.Usuario }}</td>
+            <td>{{ user.NombrePersona }}</td>
+            <td>{{ user.DominioP }}</td>
+            <td>{{ user.Dominio === 1 ? 'Active Directory' : 'Local' }}</td>
+            <td>{{ user.Estado }}</td>
+            <td>{{ user.Rol }}</td>
+            <td class="user-row-actions">
+              <button type="button" class="secondary" (click)="editUser(user)">Editar</button>
+              <button type="button" class="danger" (click)="askRemoveUser(user.IdUsuario)">Quitar</button>
+              @if (user.Dominio === 0) {
+              <button type="button" class="reset-password-button" title="Restablecer contraseña"
+                [attr.aria-label]="'Restablecer contraseña de ' + user.Usuario"
+                (click)="askResetUserPassword(user.IdUsuario, user.Usuario)"><span aria-hidden="true">⟳</span></button>
+              }
+            </td>
+          </tr> }
+          }
+        </tbody>
+      </table>
+    </div>
+    <app-table-paginator [total]="filteredUsers.length" [(page)]="userPage" [pageSize]="userPageSize" label="Paginación de usuarios" />
+  </section>
+  }
+
+  <!--ventana emergente para restablecer la contraseña desde el panel de admin-->
+  @if (isPasswordResetDialogOpen) {
+  <div class="modal-backdrop" role="presentation">
+    <section class="delete-modal" role="dialog" aria-modal="true" aria-labelledby="reset-password-title"
+      (click)="$event.stopPropagation()">
+      <div class="modal-heading">
+        <div>
+          <p class="eyebrow">RESTABLECER CONTRASEÑA</p>
+          <h2 id="reset-password-title">¿Restablecer la contraseña?</h2>
+        </div>
+        <button type="button" class="modal-close" aria-label="Cerrar confirmación"
+          (click)="cancelPasswordReset()">×</button>
+      </div>
+      <br />
+
+      <div class="modal-actions">
+        <button type="button" class="secondary" (click)="cancelPasswordReset()">Cancelar</button>
+        <button type="button" class="danger modal-danger" (click)="resetUserPassword()">Restablecer</button>
+      </div>
+    </section>
+  </div>
+  }
+
+
+  <!--ventana emergente para agregar o editar un usuario desde el panel de admin-->
+  @if (isUserDialogOpen) {
+  <div class="modal-backdrop" role="presentation">
+    <section class="edit-modal user-edit-modal" role="dialog" aria-modal="true" aria-labelledby="create-user-title"
+      (click)="$event.stopPropagation()">
+      <div class="modal-heading">
+        <div>
+          <p class="eyebrow">{{ editingUserId === null ? 'NUEVO REGISTRO' : 'EDITAR REGISTRO' }}</p>
+          <h2 id="create-user-title">{{ editingUserId === null ? 'Agregar usuario' : 'Editar usuario' }}</h2>
+        </div>
+        <button type="button" class="modal-close" aria-label="Cerrar ventana" (click)="closeUserDialog()">×</button>
+      </div>
+      <form class="modal-form" autocomplete="off" (ngSubmit)="saveUserDialog()">
+        <div class="user-field">
+          <label for="modalUsuario">Usuario:</label>
+          <input id="modalUsuario" [(ngModel)]="newUser.Usuario" name="modalUsuario" autocomplete="new-username"
+            placeholder="Usuario" required />
+        </div>
+        <div class="user-field">
+          <label for="modalNombrePersona">Nombre de la persona:</label>
+          <input id="modalNombrePersona" [(ngModel)]="newUser.NombrePersona" name="modalNombrePersona"
+            placeholder="Nombre completo" required />
+        </div>
+        <div class="user-field">
+          <label for="modalFechaExpiracion">Fecha de expiración:</label>
+          <input id="modalFechaExpiracion" [(ngModel)]="newUser.FechaExpiracion" name="modalFechaExpiracion"
+            type="date" />
+        </div>
+        <div class="user-field">
+          <label for="modalEstado">Estado:</label>
+          <select id="modalEstado" [(ngModel)]="newUser.Estado" name="modalEstado" required>
+            <option value="ACTIVO">Activo</option>
+            <option value="INACTIVO">Inactivo</option>
+          </select>
+        </div>
+        <div class="user-field">
+          <label for="modalDominioP">Dominio IHSS:</label>
+          <select id="modalDominioP" [(ngModel)]="newUser.DominioP" name="modalDominioP" required>
+            <option value="BA">BA</option>
+            <option value="HE">HE</option>
+            <option value="HRN">HRN</option>
+            <option value="IVM">IVM</option>
+          </select>
+        </div>
+        <div class="user-field">
+          <label for="modalDominio">Tipo de autenticación:</label>
+          <select id="modalDominio" [(ngModel)]="newUser.Dominio" name="modalDominio" required>
+            <option [ngValue]="0">Usuario local</option>
+            <option [ngValue]="1">Active Directory</option>
+          </select>
+        </div>
+        <div class="user-field">
+          <label for="modalRol">Rol:</label>
+          <select id="modalRol" [(ngModel)]="newUser.Rol" (ngModelChange)="selectUserRole($event)" name="modalRol">
+            <option value="Admin">Administrador general</option>
+            <option value="UsuarioComun">Usuario común</option>
+            <option value="RecepcionTaller">Recepción de taller</option>
+            <option value="TecnicoTaller">Técnico de taller</option>
+            <option value="AdminTaller">Administrador de taller</option>
+          </select>
+        </div>
+
+        <fieldset class="user-module-access catalog-wide">
+          <legend>Módulos con acceso</legend>
+          @for (module of moduleOptions; track module.code) {
+          <label class="user-module-option">
+            <input type="checkbox" [checked]="newUser.IsSuperAdmin || newUser.Modules.includes(module.code)"
+              [disabled]="newUser.IsSuperAdmin || isRestrictedWorkshopRole(newUser.Rol)"
+              (change)="setUserModule(module.code, $any($event.target).checked)" />
+            <span>{{ module.label }}</span>
+          </label>
+          }
+          <label class="user-module-option user-superadmin-option">
+            <input type="checkbox" [ngModel]="newUser.IsSuperAdmin" (ngModelChange)="setUserSuperAdmin($event)"
+              name="userSuperAdmin" [disabled]="!canManageSuperAdmins || isRestrictedWorkshopRole(newUser.Rol)" />
+            <span>Administrador total</span>
+          </label>
+        </fieldset>
+
+        <!--Mensaje de error para el formulario de usuario-->
+        @if (errorMessage) { <p class="feedback error modal-feedback" role="alert">{{ errorMessage }}</p> }
+        <div class="modal-actions">
+          <button type="button" class="secondary" (click)="closeUserDialog()">Cancelar</button>
+          <button type="submit">{{ editingUserId === null ? 'Añadir usuario' : 'Guardar cambios' }}</button>
+        </div>
+      </form>
+    </section>
+  </div>
+  }
+
+  <!-- Confirmación para quitar un usuario. -->
+  @if (pendingUserId !== null) {
+  <div class="modal-backdrop" role="presentation">
+    <section class="delete-modal" role="dialog" aria-modal="true" aria-labelledby="delete-user-title"
+      (click)="$event.stopPropagation()">
+      <div class="modal-heading">
+        <div>
+          <p class="eyebrow">CONFIRMAR ACCIÓN</p>
+          <h2 id="delete-user-title">¿Quieres quitar este registro?</h2>
+        </div>
+        <button type="button" class="modal-close" aria-label="Cerrar confirmación"
+          (click)="cancelRemoveUser()">×</button>
+      </div>
+      <p>Esta acción eliminará el usuario del sistema.</p>
+      <div class="modal-actions"><button type="button" class="secondary"
+          (click)="cancelRemoveUser()">Cancelar</button><button type="button" class="danger modal-danger"
+          (click)="confirmRemoveUser()">Confirmar
+          eliminación</button></div>
+    </section>
+  </div>
+  }

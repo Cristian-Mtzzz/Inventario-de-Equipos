@@ -1,19 +1,25 @@
 import { DatePipe } from '@angular/common';
-import { Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { PagePipe, TablePageSizeComponent, TablePaginatorComponent } from '../shared/table-paginator';
 import { Router } from '@angular/router';
 import { finalize, forkJoin } from 'rxjs';
 import { AuthService } from '../auth/auth.service';
 import { AdminService } from '../admin/admin.service';
 import { Area, Building, CreateDevice, CreateReassignment, Device, DeviceOption, DeviceType, EmployeeOption, Reassignment } from '../admin/admin.models';
 import { EmployeeSearchDialogComponent } from '../admin/employee-search-dialog.component';
+import { apiErrorMessage } from '../shared/api-response';
+import { AppHeaderComponent } from '../shared/app-header.component';
 
 // Componente de inventario que permite consultar, filtrar, paginar y gestionar dispositivos y reasignaciones.
 @Component({
   selector: 'app-inventory',
-  imports: [DatePipe, FormsModule, EmployeeSearchDialogComponent],
+  imports: [DatePipe, FormsModule, EmployeeSearchDialogComponent, AppHeaderComponent, PagePipe, TablePageSizeComponent, TablePaginatorComponent],
   templateUrl: './inventory.component.html',
   styleUrl: './inventory.component.css',
+  // Angular 22 usa OnPush por defecto; este panel actualiza la vista al llegar cada respuesta HTTP
+  // sin avisar con markForCheck, por eso conserva la detección automática.
+  changeDetection: ChangeDetectionStrategy.Eager,
 })
 export class InventoryComponent {
   // Vista para usuarios comunes. Permite consultar inventario, paginar resultados,
@@ -25,6 +31,9 @@ export class InventoryComponent {
   totalDeviceCount = 0;
   isLoadingDevices = false;
   reassignments: Reassignment[] = [];
+  // Página actual y tamaño de página de la tabla (paginación en el navegador).
+  reassignmentPage = 1;
+  reassignmentPageSize = 10;
   areas: Area[] = [];
   employeesForDeviceArea: EmployeeOption[] = [];
   selectedEmployeeIndex: number | null = null;
@@ -70,6 +79,7 @@ export class InventoryComponent {
   reassignmentEmployees: EmployeeOption[] = [];
   selectedReassignmentEmployeeIndex: number | null = null;
   isLoadingReassignmentEmployees = false;
+  isSubmittingReassignment = false;
   private reassignmentEmployeeRequestId = 0;
   selectedInventoryCode = '';
   private deviceOptionSearchTimer: ReturnType<typeof setTimeout> | null = null;
@@ -77,6 +87,9 @@ export class InventoryComponent {
   editingCodigoInventario = '';
   editingNoSerie = '';
   isEditDialogOpen = false;
+  deviceBatchCount = 1;
+  deviceBatchCurrent = 1;
+  batchSuccessMessage = '';
   pendingDeleteDeviceId: number | null = null;
   isDeleteDialogOpen = false;
 
@@ -294,6 +307,30 @@ export class InventoryComponent {
     this.newDevice.NombreAsignado = employee?.NombreCompleto ?? null;
   }
 
+  onInventoryCodeInput(target: { CodigoInventario: string }): void {
+    target.CodigoInventario = (target.CodigoInventario || '').replace(/\D/g, '').slice(0, 7);
+  }
+
+  onPaymentNumberInput(target: { NumeroPagoAsignado: string | null }): void {
+    if (target.NumeroPagoAsignado) {
+      target.NumeroPagoAsignado = target.NumeroPagoAsignado.replace(/\D/g, '').slice(0, 5);
+      const match = this.employeesForDeviceArea.find(e => e.NoPago?.trim() === target.NumeroPagoAsignado?.trim());
+      if (match && this.newDevice) {
+        this.newDevice.NombreAsignado = match.NombreCompleto;
+      }
+    }
+  }
+
+  onDeviceEmployeeNameChange(): void {
+    const name = this.newDevice.NombreAsignado?.trim().toUpperCase();
+    if (name) {
+      const match = this.employeesForDeviceArea.find(e => e.NombreCompleto.trim().toUpperCase() === name);
+      if (match && match.NoPago) {
+        this.newDevice.NumeroPagoAsignado = match.NoPago;
+      }
+    }
+  }
+
   private clearDeviceEmployeeSelection(): void {
     this.employeeOptionsRequestId++;
     this.employeesForDeviceArea = [];
@@ -322,8 +359,7 @@ export class InventoryComponent {
     // Carga el historial de reasignaciones que se cargan en la pestaña de reasignaciones
     this.adminService.getReassignments().subscribe({
       next: (items) => this.reassignments = items,
-      error: (error) => this.errorMessage = error.error?.Message ?? error.error?.message ?? error.error?.detail
-        ?? error.message ?? 'No se pudieron cargar las reasignaciones.',
+      error: (error) => this.errorMessage = apiErrorMessage(error, 'No se pudieron cargar las reasignaciones.'),
     });
   }
 
@@ -346,17 +382,63 @@ export class InventoryComponent {
   // metodo que agrega un nuevo dispositivo al inventario 
   addDevice(): void {
     this.clearMessages();
-    if (this.newDevice.Estado === 'ASIGNADO' && this.selectedEmployeeIndex === null) {
-      this.errorMessage = 'Selecciona un empleado del departamento indicado.';
+    this.batchSuccessMessage = '';
+    if (this.newDevice.Estado === 'ASIGNADO' && !this.newDevice.NombreAsignado?.trim() && !this.newDevice.NumeroPagoAsignado?.trim() && this.selectedEmployeeIndex === null) {
+      this.errorMessage = 'Indica el empleado asignado o selecciónalo de la lista.';
       return;
     }
     this.adminService.createDevice(this.newDevice).subscribe({
       next: () => {
-        this.message = 'Dispositivo agregado correctamente.';
-        this.newDevice = { CodigoInventario: '', NoSerie: '', Marca: '', Modelo: '', IdTipo: null, Estado: 'DISPONIBLE', NumeroPagoAsignado: null, NombreAsignado: null, IdArea: null };
         this.loadDevices();
+        if (this.deviceBatchCount > 1 && this.deviceBatchCurrent < this.deviceBatchCount) {
+          const prevTipo = this.newDevice.IdTipo;
+          const prevMarca = this.newDevice.Marca;
+          const prevModelo = this.newDevice.Modelo;
+          const prevEstado = this.newDevice.Estado;
+          const prevArea = this.newDevice.IdArea;
+          const prevRegional = this.selectedRegionId;
+          const prevEdificio = this.selectedBuildingId;
+          const prevPago = this.newDevice.NumeroPagoAsignado;
+          const prevNombre = this.newDevice.NombreAsignado;
+
+          let nextCodigo = '';
+          const numCode = parseInt(this.newDevice.CodigoInventario, 10);
+          if (!isNaN(numCode)) {
+            nextCodigo = (numCode + 1).toString().padStart(this.newDevice.CodigoInventario.length, '0').slice(0, 7);
+          }
+
+          this.deviceBatchCurrent++;
+          this.batchSuccessMessage = `Dispositivo ${this.deviceBatchCurrent - 1} guardado. Ingrese el dispositivo ${this.deviceBatchCurrent} de ${this.deviceBatchCount}.`;
+
+          this.newDevice = {
+            CodigoInventario: nextCodigo,
+            NoSerie: '',
+            Marca: prevMarca,
+            Modelo: prevModelo,
+            IdTipo: prevTipo,
+            Estado: prevEstado,
+            NumeroPagoAsignado: prevPago,
+            NombreAsignado: prevNombre,
+            IdArea: prevArea,
+          };
+          this.selectedRegionId = prevRegional;
+          this.selectedBuildingId = prevEdificio;
+        } else {
+          const totalAdded = this.deviceBatchCount;
+          this.deviceBatchCount = 1;
+          this.deviceBatchCurrent = 1;
+          this.batchSuccessMessage = '';
+          this.message = totalAdded > 1
+            ? `Se agregaron los ${totalAdded} dispositivos correctamente.`
+            : 'Dispositivo agregado correctamente.';
+          this.newDevice = { CodigoInventario: '', NoSerie: '', Marca: '', Modelo: '', IdTipo: null, Estado: 'DISPONIBLE', NumeroPagoAsignado: null, NombreAsignado: null, IdArea: null };
+          this.selectedBuildingId = null;
+          this.selectedRegionId = null;
+          this.areas = [];
+          this.clearDeviceEmployeeSelection();
+        }
       },
-      error: (error) => this.errorMessage = error.error?.Message ?? 'No se pudo agregar el dispositivo.',
+      error: (error) => this.errorMessage = apiErrorMessage(error, 'No se pudo agregar el dispositivo.'),
     });
   }
 
@@ -370,6 +452,9 @@ export class InventoryComponent {
     this.areas = [];
     if (this.selectedBuildingId !== null) {
       this.adminService.getAreas(this.selectedBuildingId).subscribe((areas) => this.areas = areas);
+    }
+    if (device.IdArea !== null && device.Estado === 'ASIGNADO') {
+      this.adminService.getEmployeeOptions(device.IdArea).subscribe((emps) => this.employeesForDeviceArea = emps);
     }
     // Copia los datos del dispositivo seleccionado al formulario de editar
     this.newDevice = {
@@ -395,7 +480,7 @@ export class InventoryComponent {
         this.cancelEdit();
         this.loadDevices();
       },
-      error: (error) => this.errorMessage = error.error?.Message ?? 'No se pudo actualizar el dispositivo.',
+      error: (error) => this.errorMessage = apiErrorMessage(error, 'No se pudo actualizar el dispositivo.'),
     });
   }
 
@@ -424,7 +509,7 @@ export class InventoryComponent {
     this.isDeleteDialogOpen = false;
     this.adminService.deleteDevice(idEquipo).subscribe({
       next: () => { this.message = 'Dispositivo eliminado.'; this.loadDevices(); },
-      error: (error) => this.errorMessage = error.error?.Message ?? error.error?.message ?? 'No se pudo quitar el dispositivo.',
+      error: (error) => this.errorMessage = apiErrorMessage(error, 'No se pudo quitar el dispositivo.'),
     });
   }
 
@@ -497,6 +582,26 @@ export class InventoryComponent {
     this.newReassignment.NombreNuevo = employee?.NombreCompleto ?? '';
   }
 
+  onReassignmentPaymentChange(): void {
+    if (this.newReassignment.NoPagoNuevo) {
+      this.newReassignment.NoPagoNuevo = this.newReassignment.NoPagoNuevo.replace(/\D/g, '').slice(0, 5);
+      const match = this.reassignmentEmployees.find(e => e.NoPago?.trim() === this.newReassignment.NoPagoNuevo?.trim());
+      if (match) {
+        this.newReassignment.NombreNuevo = match.NombreCompleto;
+      }
+    }
+  }
+
+  onReassignmentEmployeeNameChange(): void {
+    const name = this.newReassignment.NombreNuevo?.trim().toUpperCase();
+    if (name) {
+      const match = this.reassignmentEmployees.find(e => e.NombreCompleto.trim().toUpperCase() === name);
+      if (match && match.NoPago) {
+        this.newReassignment.NoPagoNuevo = match.NoPago;
+      }
+    }
+  }
+
   private clearReassignmentEmployee(): void {
     this.reassignmentEmployeeRequestId++;
     this.reassignmentEmployees = [];
@@ -513,8 +618,8 @@ export class InventoryComponent {
       this.errorMessage = 'Selecciona el equipo, edificio y departamento de la reasignación.';
       return;
     }
-    if (this.selectedReassignmentEmployeeIndex === null) {
-      this.errorMessage = 'Selecciona un empleado del departamento indicado.';
+    if (!this.newReassignment.NombreNuevo?.trim() && !this.newReassignment.NoPagoNuevo?.trim() && this.selectedReassignmentEmployeeIndex === null) {
+      this.errorMessage = 'Indica el empleado asignado o selecciónalo de la lista.';
       return;
     }
     if (!this.newReassignment.Motivo.trim()) {
@@ -524,7 +629,12 @@ export class InventoryComponent {
 
     // Asigna el edificio seleccionado a la nueva reasignación antes de enviarla al backend.
     this.newReassignment.IdEdificio = this.reassignmentBuildingId;
-    this.adminService.createReassignment(this.newReassignment).subscribe({
+    this.isSubmittingReassignment = true;
+    this.adminService.createReassignment(this.newReassignment).pipe(
+      finalize(() => {
+        this.isSubmittingReassignment = false;
+      }),
+    ).subscribe({
       next: () => {
         this.message = 'Reasignación registrada correctamente.';
         this.newReassignment = { IdEquipo: 0, NoPagoNuevo: null, NombreNuevo: '', Motivo: '', IdEdificio: 0, IdArea: 0 };
@@ -539,9 +649,23 @@ export class InventoryComponent {
         this.loadDevices();
         this.loadReassignments();
       },
-      error: (error) => this.errorMessage = error.error?.Message ?? error.error?.message ?? error.error?.detail ?? error.error?.title ?? error.message
-        ?? 'No se pudo registrar la reasignación.',
+      error: (error) => this.errorMessage = apiErrorMessage(error, 'No se pudo registrar la reasignación.'),
     });
+  }
+
+  selectDeviceForReassignmentFromItem(item: Reassignment): void {
+    const code = item.CodigoInventario || this.getInventoryCode(item.IdEquipo);
+    this.selectedInventoryCode = code;
+    this.newReassignment.IdEquipo = item.IdEquipo;
+    this.deviceOptionSearch = code;
+    this.deviceOptions = [{
+      IdEquipo: item.IdEquipo,
+      CodigoInventario: code,
+      NoSerie: '',
+      Marca: '',
+      Modelo: '',
+    }];
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   // aqui se obtiene el código de inventario de un dispositivo dado su ID, o devuelve el ID como cadena si no se encuentra.

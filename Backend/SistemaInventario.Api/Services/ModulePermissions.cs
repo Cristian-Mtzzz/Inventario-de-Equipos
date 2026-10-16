@@ -53,7 +53,19 @@ public interface IModulePermissionService
 
 public sealed class ModulePermissionService(InventoryDbContext dbContext) : IModulePermissionService
 {
+    // El servicio es Scoped: la caché vive solo durante una solicitud HTTP. Evita repetir
+    // la consulta cuando un endpoint evalúa varias políticas, sin retrasar cambios de permisos.
+    private readonly Dictionary<int, IReadOnlyList<string>> modulesByUser = [];
+
     public async Task<IReadOnlyList<string>> GetModules(int userId, CancellationToken cancellationToken)
+    {
+        if (modulesByUser.TryGetValue(userId, out var cachedModules)) return cachedModules;
+        var modules = await LoadModules(userId, cancellationToken);
+        modulesByUser[userId] = modules;
+        return modules;
+    }
+
+    private async Task<IReadOnlyList<string>> LoadModules(int userId, CancellationToken cancellationToken)
     {
         await dbContext.Database.OpenConnectionAsync(cancellationToken);
         try

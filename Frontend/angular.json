@@ -32,7 +32,7 @@
           },
           "configurations": {
             "production": {
-              "baseHref": "/desInventariosTic/",
+              "baseHref": "/InventarioEquipo/",
               "budgets": [
                 {
                   "type": "initial",

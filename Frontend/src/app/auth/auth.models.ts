@@ -1,5 +1,11 @@
 // Roles reconocidos por el frontend y por las políticas del backend.
-export type UserRole = 'Admin' | 'UsuarioComun' | 'Taller';
+export type UserRole =
+  | 'Admin'
+  | 'UsuarioComun'
+  | 'Taller'
+  | 'RecepcionTaller'
+  | 'TecnicoTaller'
+  | 'AdminTaller';
 
 // Datos que el formulario envía al endpoint de autenticación.
 export interface LoginRequest {

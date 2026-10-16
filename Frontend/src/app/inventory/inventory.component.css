@@ -7,19 +7,11 @@
 }
 
 .inventory-shell {
+    --shell-gutter: clamp(1rem, 2vw, 2rem);
     width: 100%;
     max-width: none;
     margin: 0;
-    padding: 2rem clamp(1rem, 2vw, 2rem);
-}
-
-.inventory-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: start;
-    gap: 1rem;
-    padding-bottom: 2rem;
-    border-bottom: 1px solid #d8e4e0;
+    padding: 0 var(--shell-gutter) 2.5rem;
 }
 
 .eyebrow {
@@ -38,49 +30,6 @@ h2 {
 
 h1 {
     color: #18383b;
-    font-size: clamp(2rem, 4vw, 3rem);
-}
-
-.inventory-header p:last-child {
-    margin: .65rem 0 0;
-    color: #718080;
-}
-
-.logout-button {
-    padding: .65rem .85rem;
-    border: 1px solid #e4b9b4;
-    border-radius: 5px;
-    color: #9b3f38;
-    background: #fff;
-    cursor: pointer;
-    font-weight: 700;
-}
-
-.logout-button:hover {
-    background: #fcece9;
-}
-
-.inventory-tabs {
-    display: flex;
-    gap: .7rem;
-    border-bottom: 1px solid #d8e4e0;
-}
-
-.inventory-tabs button {
-    padding: .75rem 1rem;
-    border: 1px solid transparent;
-    border-radius: 5px 5px 0 0;
-    color: #718080;
-    background: transparent;
-    cursor: pointer;
-    font-weight: 700;
-}
-
-.inventory-tabs button.active {
-    border-color: #b9d1ca;
-    border-bottom-color: #f4f8f6;
-    color: #276968;
-    background: #f4f8f6;
 }
 
 .feedback {

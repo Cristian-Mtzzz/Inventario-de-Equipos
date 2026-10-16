@@ -1,0 +1,4 @@
+/* La sección se integra en el flujo del panel admin; anula el :host de admin.component.css. */
+:host {
+    display: contents;
+}

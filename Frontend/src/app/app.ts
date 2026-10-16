@@ -10,10 +10,9 @@ import { AuthService } from './auth/auth.service';
   styleUrl: './app.css',
   templateUrl: './app.html',
 })
-// Componente raíz: aloja el outlet y el aviso de bienvenida tras iniciar sesión.
+// Componente raíz: aloja el outlet y vigila la actividad y los permisos de la sesión.
 export class App {
   private readonly authService = inject(AuthService);
-  protected readonly welcomeName = this.authService.welcomeName;
 
   constructor() {
     fromEvent<StorageEvent>(window, 'storage').pipe(

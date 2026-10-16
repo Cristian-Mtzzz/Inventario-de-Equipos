@@ -1,9 +1,10 @@
 import { Routes } from '@angular/router';
 import { AuthComponent } from './auth/auth.component';
 import { authenticatedGuard, authGuard, loginGuard } from './auth/auth.guard';
+import { ADMIN_PANEL_MODULES, AppModules } from './auth/app-modules';
 
 // Define la navegación principal; las rutas protegidas declaran módulos de acceso.
-const administrativeModules = ['DISPOSITIVOS', 'REASIGNACIONES', 'TALLER', 'USUARIOS', 'MANTENIMIENTO'];
+const administrativeModules = ADMIN_PANEL_MODULES;
 
 export const routes: Routes = [
 	{ path: '', pathMatch: 'full', redirectTo: 'login' },
@@ -28,14 +29,26 @@ export const routes: Routes = [
 	{
 		path: 'inventario',
 		canActivate: [authGuard],
-		data: { modules: ['DISPOSITIVOS', 'INVENTARIO'] },
+		data: { modules: [AppModules.Devices, AppModules.Inventory] },
 		loadComponent: () => import('./inventory/inventory.component').then((module) => module.InventoryComponent),
 	},
 	{
 		path: 'taller',
 		canActivate: [authGuard],
-		data: { role: 'Taller', modules: administrativeModules },
-		loadComponent: () => import('./admin/admin.component').then((module) => module.AdminComponent),
+		data: { role: ['Taller', 'AdminTaller'], modules: [AppModules.Workshop] },
+		loadComponent: () => import('./taller/taller.component').then((module) => module.TallerComponent),
+	},
+	{
+		path: 'taller/recepcion',
+		canActivate: [authGuard],
+		data: { role: 'RecepcionTaller', modules: [AppModules.Workshop] },
+		loadComponent: () => import('./taller/taller.component').then((module) => module.TallerComponent),
+	},
+	{
+		path: 'taller/tecnico',
+		canActivate: [authGuard],
+		data: { role: 'TecnicoTaller', modules: [AppModules.Workshop] },
+		loadComponent: () => import('./taller/taller.component').then((module) => module.TallerComponent),
 	},
 	{
 		path: 'sin-acceso',

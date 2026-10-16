@@ -15,11 +15,17 @@ public sealed record DeviceDto(
     int? IdArea,
     string? NombreArea,
     string? AsignadoA,
+
+    DateTime? FechaAsignacion,
     string? NombreAsignado,
     int? IdEdificio,
     string? NombreEdificio,
     int? IdRegional,
-    string? NombreRegional);
+    string? NombreRegional,
+    string? NCombo,
+    string? Componente,
+    // Número del lote de ingreso con formato NNNNN-MM-AAAA (por ejemplo 00001-01-2026).
+    string? NumeroIngreso);
 
 public sealed record PagedResult<T>(IReadOnlyList<T> Items, int TotalCount, int Page, int PageSize);
 
@@ -89,6 +95,7 @@ public sealed record EmployeeAssignedDeviceDto(
     string? NombreRegional);
 
 // Datos permitidos para crear o editar un equipo; no incluye campos calculados.
+// NumeroIngreso solo se usa al crear (carga desde Excel); la edición no lo modifica.
 public sealed record CreateDeviceDto(
     string CodigoInventario,
     string NoSerie,
@@ -98,7 +105,24 @@ public sealed record CreateDeviceDto(
     string Estado,
     string? NumeroPagoAsignado,
     string? NombreAsignado,
-    int? IdArea);
+    int? IdArea,
+    string? NumeroIngreso = null);
+
+public sealed record DesktopComboComponentDto(
+    string Componente,
+    string CodigoInventario,
+    string NoSerie,
+    string Marca,
+    string Modelo);
+
+public sealed record CreateDesktopComboDto(
+    string NCombo,
+    int IdTipo,
+    string Estado,
+    string? NumeroPagoAsignado,
+    string? NombreAsignado,
+    int? IdArea,
+    IReadOnlyList<DesktopComboComponentDto> Componentes);
 
 // Catálogo utilizado por los selectores de tipo de dispositivo.
 public sealed record DeviceTypeDto(int IdTipo, string NombreTipo);
@@ -109,6 +133,8 @@ public sealed record ReassignmentDto(
     int IdEquipo,
     string CodigoInventario,
     string? NoPagoAnterior,
+    string? NombreAnterior,
+    string? NombreAreaAnterior,
     string? NoPagoNuevo,
     string? NombreNuevo,
     string? NombreEdificio,

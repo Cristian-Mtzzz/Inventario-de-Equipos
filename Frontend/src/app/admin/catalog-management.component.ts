@@ -2,6 +2,7 @@ import { ChangeDetectorRef, Component, ElementRef, inject, output, ViewChild } f
 import { FormsModule } from '@angular/forms';
 import { finalize, forkJoin, Observable } from 'rxjs';
 import { SearchableSelectDirective } from '../shared/searchable-select.directive';
+import { ApiError, apiErrorMessage } from '../shared/api-response';
 import { AdminService } from './admin.service';
 import { Building, CatalogDepartment, DeviceType, DirectoryEmployee, RegionalOption } from './admin.models';
 
@@ -609,7 +610,7 @@ export class CatalogManagementComponent {
     this.errorMessage = '';
   }
 
-  private getErrorMessage(error: { error?: { Message?: string; message?: string; detail?: string }; message?: string }, fallback: string): string {
-    return error.error?.Message ?? error.error?.message ?? error.error?.detail ?? error.message ?? fallback;
+  private getErrorMessage(error: ApiError, fallback: string): string {
+    return apiErrorMessage(error, fallback);
   }
 }

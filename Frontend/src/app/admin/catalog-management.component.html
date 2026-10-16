@@ -201,7 +201,7 @@
 </section>
 
 @if (isEmployeeSearchOpen) {
-<div class="modal-backdrop" role="presentation" (click)="closeEmployeeSearch()">
+<div class="modal-backdrop" role="presentation">
   <section class="edit-modal employee-search-modal" role="dialog" aria-modal="true"
     aria-labelledby="employee-search-title" (click)="$event.stopPropagation()">
     <div class="modal-heading">
@@ -243,7 +243,7 @@
 }
 
 @if (isDialogOpen) {
-<div class="modal-backdrop" role="presentation" (click)="closeDialog()">
+<div class="modal-backdrop" role="presentation">
   <section class="edit-modal catalog-modal" role="dialog" aria-modal="true" aria-labelledby="catalog-modal-title"
     (click)="$event.stopPropagation()">
     <div class="modal-heading">
@@ -376,11 +376,17 @@
 }
 
 @if (isDeleteDialogOpen && pendingDelete) {
-<div class="modal-backdrop" role="presentation" (click)="cancelDelete()">
+<div class="modal-backdrop" role="presentation">
   <section class="delete-modal" role="dialog" aria-modal="true" aria-labelledby="catalog-delete-title"
     (click)="$event.stopPropagation()">
-    <p class="eyebrow">CONFIRMAR ACCIÓN</p>
-    <h2 id="catalog-delete-title">¿Quitar este registro?</h2>
+    <div class="modal-heading">
+      <div>
+        <p class="eyebrow">CONFIRMAR ACCIÓN</p>
+        <h2 id="catalog-delete-title">¿Quitar este registro?</h2>
+      </div>
+      <button type="button" class="modal-close" aria-label="Cerrar confirmación"
+        (click)="cancelDelete()">×</button>
+    </div>
     <p>{{ pendingDelete.label }}</p>
     @if (errorMessage) { <p class="feedback error" role="alert">{{ errorMessage }}</p> }
     <div class="modal-actions">

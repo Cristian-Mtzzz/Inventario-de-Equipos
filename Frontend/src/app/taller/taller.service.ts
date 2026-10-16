@@ -2,7 +2,8 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable, map } from 'rxjs';
 import { apiUrl } from '../api-url';
-import { Maintenance, MaintenanceEditRequest, MaintenanceEntryRequest, MaintenanceExitRequest, ReceptionEntryRequest, WorkshopDevice } from './taller.models';
+import { toPascalCase } from '../shared/api-response';
+import { Maintenance, MaintenanceAssessmentRequest, MaintenanceEditRequest, MaintenanceEntryRequest, MaintenanceExitRequest, ReceptionEntryRequest, WorkshopDevice } from './taller.models';
 
 const API_TALLER_URL = apiUrl('taller');
 
@@ -12,37 +13,13 @@ export class TallerService {
   constructor(private readonly httpClient: HttpClient) { }
 
   getDevices(): Observable<WorkshopDevice[]> {
-    return this.httpClient.get<Array<WorkshopDevice & {
-      idEquipo?: number; codigoInventario?: string; noSerie?: string; marca?: string; modelo?: string;
-    }>>(`${API_TALLER_URL}/devices`).pipe(map((devices) => devices.map((device) => ({
-      IdEquipo: device.IdEquipo ?? device.idEquipo ?? 0,
-      CodigoInventario: device.CodigoInventario ?? device.codigoInventario ?? '',
-      NoSerie: device.NoSerie ?? device.noSerie ?? '',
-      Marca: device.Marca ?? device.marca ?? '',
-      Modelo: device.Modelo ?? device.modelo ?? '',
-    }))));
+    return this.httpClient.get<unknown>(`${API_TALLER_URL}/devices`)
+      .pipe(map((body) => toPascalCase<WorkshopDevice[]>(body)));
   }
   // Obtiene la lista de mantenimientos del taller.
   getMaintenances(): Observable<Maintenance[]> {
-    return this.httpClient.get<Array<Maintenance & {
-      idReparacion?: number; idEquipo?: number; codigoInventario?: string; noSerie?: string;
-      marca?: string; modelo?: string; idTecnico?: number; dictamen?: string | null;
-      tipoReparacion?: string | null; detalleReparacion?: string | null;
-      fechaIngreso?: string; fechaSalida?: string | null;
-    }>>(`${API_TALLER_URL}/maintenances`).pipe(map((items) => items.map((item) => ({
-      IdReparacion: item.IdReparacion ?? item.idReparacion ?? 0,
-      IdEquipo: item.IdEquipo ?? item.idEquipo ?? 0,
-      CodigoInventario: item.CodigoInventario ?? item.codigoInventario ?? '',
-      NoSerie: item.NoSerie ?? item.noSerie ?? '',
-      Marca: item.Marca ?? item.marca ?? '',
-      Modelo: item.Modelo ?? item.modelo ?? '',
-      IdTecnico: item.IdTecnico ?? item.idTecnico ?? 0,
-      Dictamen: item.Dictamen ?? item.dictamen ?? null,
-      TipoReparacion: item.TipoReparacion ?? item.tipoReparacion ?? null,
-      DetalleReparacion: item.DetalleReparacion ?? item.detalleReparacion ?? null,
-      FechaIngreso: item.FechaIngreso ?? item.fechaIngreso ?? '',
-      FechaSalida: item.FechaSalida ?? item.fechaSalida ?? null,
-    }))));
+    return this.httpClient.get<unknown>(`${API_TALLER_URL}/maintenances`)
+      .pipe(map((body) => toPascalCase<Maintenance[]>(body)));
   }
   // Registra una recepción de equipo en el taller.
   createReceptionEntry(reception: ReceptionEntryRequest): Observable<void> {
@@ -55,8 +32,11 @@ export class TallerService {
   }
   // Actualiza la información de una reparación existente, incluyendo la fecha de salida y el detalle del trabajo.
   updateMaintenance(idMantenimiento: number, maintenance: MaintenanceExitRequest): Observable<void> {
-    // Cierra una reparación con fecha de salida y detalle del trabajo.
+    // Registra el estado y las firmas de entrega del equipo reparado.
     return this.httpClient.put<void>(`${API_TALLER_URL}/maintenances/${idMantenimiento}`, maintenance);
+  }
+  updateAssessment(idMantenimiento: number, assessment: MaintenanceAssessmentRequest): Observable<void> {
+    return this.httpClient.put<void>(`${API_TALLER_URL}/maintenances/${idMantenimiento}/assessment`, assessment);
   }
   // Edita la información de una reparación existente.
   editMaintenance(idMantenimiento: number, maintenance: MaintenanceEditRequest): Observable<void> {

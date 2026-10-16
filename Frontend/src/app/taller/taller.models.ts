@@ -18,11 +18,24 @@ export interface Maintenance {
   Marca: string;
   Modelo: string;
   IdTecnico: number;
+  TipoDispositivo: string | null;
   Dictamen: string | null;
   TipoReparacion: string | null;
   DetalleReparacion: string | null;
   FechaIngreso: string;
   FechaSalida: string | null;
+  MemoNumero: string | null;
+  Recibe: string | null;
+  Tecnico: string | null;
+  Departamento: string | null;
+  DescripcionEquipo: string | null;
+  EquipoEnGarantia: string | null;
+  PiezasSustituidas: string | null;
+  Observaciones: string | null;
+  EquipoFuncional: string | null;
+  TecnicoEntrega: string | null;
+  ClienteRecibe: string | null;
+  FechaEntrega: string | null;
 }
 
 // Datos para abrir una reparación sobre un equipo existente.
@@ -36,16 +49,31 @@ export interface MaintenanceEntryRequest {
 // Datos de recepción; la fecha llega inicializada por el sistema y no por el usuario.
 export interface ReceptionEntryRequest {
   CodigoInventario: string;
+  NoSerie: string;
   TipoDispositivo: string;
+  DescripcionEquipo: string;
+  EquipoEnGarantia: string;
+  MemoNumero: string;
+  Recibe: string;
+  Tecnico: string;
+  Departamento: string;
   IdEdificio: number;
   IdArea: number;
   FechaIngreso: string;
 }
 
+export interface MaintenanceAssessmentRequest {
+  Dictamen: string;
+  PiezasSustituidas: string;
+  Observaciones: string;
+}
+
 // Información necesaria para cerrar una reparación.
 export interface MaintenanceExitRequest {
-  DetalleReparacion: string;
-  FechaSalida: string;
+  EquipoFuncional: string;
+  TecnicoEntrega: string;
+  ClienteRecibe: string;
+  FechaEntrega: string;
 }
 
 // Modelo completo usado por Admin para corregir una reparación.

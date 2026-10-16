@@ -21,7 +21,10 @@ export const authGuard: CanActivateFn = (route) => {
   const authService = inject(AuthService);
   const router = inject(Router);
   const requiredModules = (route.data['modules'] ?? []) as string[];
-  const requiredRole = route.data['role'] as UserRole | undefined;
+  const requiredRoleData = route.data['role'] as UserRole | UserRole[] | undefined;
+  const requiredRoles = requiredRoleData === undefined
+    ? []
+    : Array.isArray(requiredRoleData) ? requiredRoleData : [requiredRoleData];
 
   if (!authService.isAuthenticated()) {
     authService.logout();
@@ -30,7 +33,7 @@ export const authGuard: CanActivateFn = (route) => {
 
   return authService.refreshModuleAccess().pipe(
     map((access) => {
-      if (requiredRole && !authService.hasRole([requiredRole])) {
+      if (requiredRoles.length > 0 && !authService.hasRole(requiredRoles)) {
         return router.createUrlTree([authService.roleHomeRoute()]);
       }
 
