@@ -299,7 +299,7 @@
       @if (activeView === 'employees') {
       <div class="user-field">
         <label for="catalog-employee-payment">Número de pago</label>
-        <input id="catalog-employee-payment" [(ngModel)]="employeeNoPago" name="employeePayment" />
+        <input appDigitsOnly id="catalog-employee-payment" [(ngModel)]="employeeNoPago" name="employeePayment" maxlength="5" />
       </div>
       <div class="user-field">
         <label for="catalog-employee-name">Nombre completo</label>

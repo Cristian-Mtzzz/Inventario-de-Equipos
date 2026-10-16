@@ -1,6 +1,7 @@
 import { DatePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { DigitsOnlyDirective } from '../shared/digits-only.directive';
 import { PagePipe, TablePageSizeComponent, TablePaginatorComponent } from '../shared/table-paginator';
 import { Router } from '@angular/router';
 import { finalize, forkJoin } from 'rxjs';
@@ -14,7 +15,7 @@ import { AppHeaderComponent } from '../shared/app-header.component';
 // Componente de inventario que permite consultar, filtrar, paginar y gestionar dispositivos y reasignaciones.
 @Component({
   selector: 'app-inventory',
-  imports: [DatePipe, FormsModule, EmployeeSearchDialogComponent, AppHeaderComponent, PagePipe, TablePageSizeComponent, TablePaginatorComponent],
+  imports: [DatePipe, FormsModule, EmployeeSearchDialogComponent, AppHeaderComponent, PagePipe, TablePageSizeComponent, TablePaginatorComponent, DigitsOnlyDirective],
   templateUrl: './inventory.component.html',
   styleUrl: './inventory.component.css',
   // Angular 22 usa OnPush por defecto; este panel actualiza la vista al llegar cada respuesta HTTP
@@ -400,18 +401,11 @@ export class InventoryComponent {
           const prevEdificio = this.selectedBuildingId;
           const prevPago = this.newDevice.NumeroPagoAsignado;
           const prevNombre = this.newDevice.NombreAsignado;
-
-          let nextCodigo = '';
-          const numCode = parseInt(this.newDevice.CodigoInventario, 10);
-          if (!isNaN(numCode)) {
-            nextCodigo = (numCode + 1).toString().padStart(this.newDevice.CodigoInventario.length, '0').slice(0, 7);
-          }
-
           this.deviceBatchCurrent++;
           this.batchSuccessMessage = `Dispositivo ${this.deviceBatchCurrent - 1} guardado. Ingrese el dispositivo ${this.deviceBatchCurrent} de ${this.deviceBatchCount}.`;
 
           this.newDevice = {
-            CodigoInventario: nextCodigo,
+            CodigoInventario: '',
             NoSerie: '',
             Marca: prevMarca,
             Modelo: prevModelo,

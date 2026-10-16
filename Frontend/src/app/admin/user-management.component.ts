@@ -52,11 +52,12 @@ export class UserManagementComponent {
   selectedUserRole = '';
   message = '';
   errorMessage = '';
+  // Taller no se marca a mano: lo asigna el rol (Recepción, Técnico o Administrador de taller).
+  // Usuarios tampoco: solo lo tiene el Administrador total. Al editar, los módulos que el usuario
+  // ya tenga se conservan aunque no aparezcan aquí.
   readonly moduleOptions: { code: string; label: string }[] = [
     { code: AppModules.Devices, label: 'Dispositivos' },
     { code: AppModules.Reassignments, label: 'Reasignaciones' },
-    { code: AppModules.Workshop, label: 'Taller' },
-    { code: AppModules.Users, label: 'Usuarios' },
     { code: AppModules.Maintenance, label: 'Mantenimiento' },
   ];
   newUser: CreateAdminUser = emptyUser();

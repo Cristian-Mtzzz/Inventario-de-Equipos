@@ -41,6 +41,8 @@ public sealed class TallerService(InventoryDbContext dbContext) : OracleReposito
         // La recepción crea o reutiliza catálogos y registra el equipo dentro de una transacción.
         if (string.IsNullOrWhiteSpace(reception.CodigoInventario)
             || string.IsNullOrWhiteSpace(reception.NoSerie)
+            || string.IsNullOrWhiteSpace(reception.Marca)
+            || string.IsNullOrWhiteSpace(reception.Modelo)
             || string.IsNullOrWhiteSpace(reception.TipoDispositivo)
             || string.IsNullOrWhiteSpace(reception.DescripcionEquipo)
             || string.IsNullOrWhiteSpace(reception.EquipoEnGarantia)
@@ -70,10 +72,11 @@ public sealed class TallerService(InventoryDbContext dbContext) : OracleReposito
                         (ID_EQUIPO, CODIGO_INVENTARIO, NO_SERIE, MARCA, MODELO, ID_TIPO,
                          ESTADO, NUMERO_PAGO_ASIGNADO, NOMBRE_ASIGNADO, ID_AREA)
                     VALUES
-                        (:idEquipo, :codigo, :noSerie, 'PENDIENTE', 'PENDIENTE',
+                        (:idEquipo, :codigo, :noSerie, :marca, :modelo,
                          :tipo, 'DISPONIBLE', NULL, NULL, :area)
                     """, cancellationToken,
                     ("idEquipo", idEquipo.Value), ("codigo", codigo), ("noSerie", reception.NoSerie.Trim()),
+                    ("marca", reception.Marca.Trim()), ("modelo", reception.Modelo.Trim()),
                     ("tipo", tipoId), ("area", areaId));
             }
             else
@@ -82,11 +85,15 @@ public sealed class TallerService(InventoryDbContext dbContext) : OracleReposito
                     UPDATE DISPOSITIVOS
                     SET ID_TIPO = :tipo,
                         NO_SERIE = :noSerie,
+                        MARCA = :marca,
+                        MODELO = :modelo,
                         ID_AREA = :area,
                         ESTADO = 'DISPONIBLE'
                     WHERE ID_EQUIPO = :idEquipo
                     """, cancellationToken,
-                    ("tipo", tipoId), ("noSerie", reception.NoSerie.Trim()), ("area", areaId), ("idEquipo", idEquipo.Value));
+                    ("tipo", tipoId), ("noSerie", reception.NoSerie.Trim()),
+                    ("marca", reception.Marca.Trim()), ("modelo", reception.Modelo.Trim()),
+                    ("area", areaId), ("idEquipo", idEquipo.Value));
             }
 
             var fechaIngreso = reception.FechaIngreso == default ? DateTime.Now : reception.FechaIngreso;

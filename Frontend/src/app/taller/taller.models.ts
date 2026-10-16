@@ -50,6 +50,8 @@ export interface MaintenanceEntryRequest {
 export interface ReceptionEntryRequest {
   CodigoInventario: string;
   NoSerie: string;
+  Marca: string;
+  Modelo: string;
   TipoDispositivo: string;
   DescripcionEquipo: string;
   EquipoEnGarantia: string;

@@ -50,8 +50,18 @@
     border-radius: 10px;
 }
 
+/* Con imagen, el espacio toma el ancho del logo horizontal (1065x220) manteniendo su proporción. */
+.brand-logo:not(.brand-logo-placeholder) {
+    width: auto;
+    height: 2.1rem;
+    max-width: min(12rem, 40vw);
+    border-radius: 0;
+}
+
 .brand-logo img {
-    width: 100%;
+    display: block;
+    width: auto;
+    max-width: 100%;
     height: 100%;
     object-fit: contain;
 }

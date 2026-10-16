@@ -165,12 +165,20 @@
         <h3 class="form-section-title">Datos del equipo</h3>
         <div class="form-field">
           <label for="reception-inventory">Número de inventario</label>
-          <input id="reception-inventory" type="text" [(ngModel)]="reception.CodigoInventario" name="receptionInventory"
+          <input appDigitsOnly id="reception-inventory" type="text" [(ngModel)]="reception.CodigoInventario" name="receptionInventory"
             placeholder="Ej. 4102532" maxlength="7" pattern="[0-9]*" required />
         </div>
         <div class="form-field">
           <label for="reception-serial">Número de serie</label>
           <input id="reception-serial" type="text" [(ngModel)]="reception.NoSerie" name="receptionSerial" maxlength="100" required />
+        </div>
+        <div class="form-field">
+          <label for="reception-brand">Marca</label>
+          <input id="reception-brand" type="text" [(ngModel)]="reception.Marca" name="receptionBrand" placeholder="Ej. DELL" maxlength="100" required />
+        </div>
+        <div class="form-field">
+          <label for="reception-model">Modelo</label>
+          <input id="reception-model" type="text" [(ngModel)]="reception.Modelo" name="receptionModel" placeholder="Ej. Pro Slim" maxlength="100" required />
         </div>
         <div class="form-field">
           <label for="reception-type">Tipo de dispositivo</label>

@@ -1,5 +1,6 @@
 import { ChangeDetectorRef, Component, ElementRef, inject, output, ViewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { DigitsOnlyDirective } from '../shared/digits-only.directive';
 import { finalize, forkJoin, Observable } from 'rxjs';
 import { SearchableSelectDirective } from '../shared/searchable-select.directive';
 import { ApiError, apiErrorMessage } from '../shared/api-response';
@@ -12,7 +13,7 @@ type DeleteRequest = { view: CatalogView; key: number | string; label: string };
 
 @Component({
   selector: 'app-catalog-management',
-  imports: [FormsModule, SearchableSelectDirective],
+  imports: [FormsModule, SearchableSelectDirective, DigitsOnlyDirective],
   templateUrl: './catalog-management.component.html',
   styleUrl: './catalog-management.component.css',
 })

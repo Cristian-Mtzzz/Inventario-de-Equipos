@@ -32,6 +32,10 @@ public sealed class TallerController(ITallerService tallerService) : ControllerB
         if (Exceeds(reception.CodigoInventario, 7)) return BadRequest(new { Message = "El número de inventario no puede superar 7 caracteres." });
         if (string.IsNullOrWhiteSpace(reception.NoSerie)) return BadRequest(new { Message = "Ingresa el número de serie." });
         if (Exceeds(reception.NoSerie, 100)) return BadRequest(new { Message = "El número de serie no puede superar 100 caracteres." });
+        if (string.IsNullOrWhiteSpace(reception.Marca)) return BadRequest(new { Message = "Ingresa la marca del equipo." });
+        if (Exceeds(reception.Marca, 100)) return BadRequest(new { Message = "La marca no puede superar 100 caracteres." });
+        if (string.IsNullOrWhiteSpace(reception.Modelo)) return BadRequest(new { Message = "Ingresa el modelo del equipo." });
+        if (Exceeds(reception.Modelo, 100)) return BadRequest(new { Message = "El modelo no puede superar 100 caracteres." });
         if (string.IsNullOrWhiteSpace(reception.TipoDispositivo)) return BadRequest(new { Message = "Indica el tipo de dispositivo." });
         if (Exceeds(reception.MemoNumero, 100)) return BadRequest(new { Message = "El memo no puede superar 100 caracteres." });
         if (string.IsNullOrWhiteSpace(reception.DescripcionEquipo)) return BadRequest(new { Message = "Describe el equipo." });

@@ -52,7 +52,7 @@
                 <p class="feedback success" style="grid-column: 1 / -1; margin-bottom: 0.5rem;" role="status">{{ batchSuccessMessage }}</p>
             }
 
-            <input [(ngModel)]="newDevice.CodigoInventario" (input)="onInventoryCodeInput(newDevice)" name="codigo" placeholder="INVENTARIO" maxlength="7" pattern="[0-9]*" required />
+            <input appDigitsOnly [(ngModel)]="newDevice.CodigoInventario" (input)="onInventoryCodeInput(newDevice)" name="codigo" placeholder="INVENTARIO" maxlength="7" pattern="[0-9]*" required />
             <input [(ngModel)]="newDevice.NoSerie" name="serie" placeholder="SERIE" required />
             <input [(ngModel)]="newDevice.Marca" name="marca" placeholder="Marca" required />
             <input [(ngModel)]="newDevice.Modelo" name="modelo" placeholder="Modelo" required />
@@ -94,7 +94,7 @@
                 }
             </select>
             <input [(ngModel)]="newDevice.NombreAsignado" (input)="onDeviceEmployeeNameChange()" name="nombreAsignado" placeholder="Nombre del empleado" />
-            <input [(ngModel)]="newDevice.NumeroPagoAsignado" (input)="onPaymentNumberInput(newDevice)" name="pago" placeholder="No. PAGO" maxlength="5" pattern="[0-9]*" />
+            <input appDigitsOnly [(ngModel)]="newDevice.NumeroPagoAsignado" (input)="onPaymentNumberInput(newDevice)" name="pago" placeholder="No. PAGO" maxlength="5" pattern="[0-9]*" />
             }
             @if (employeeCatalogError) { <p class="feedback error" role="alert">{{ employeeCatalogError }}</p> }
 
@@ -256,7 +256,7 @@
                 </div>
                 <div>
                     <label for="inventory-reassignment-pago">No. PAGO</label>
-                    <input id="inventory-reassignment-pago" [(ngModel)]="newReassignment.NoPagoNuevo" (input)="onReassignmentPaymentChange()" name="reassignmentNoPagoNuevo" placeholder="No. PAGO" maxlength="5" pattern="[0-9]*" />
+                    <input appDigitsOnly id="inventory-reassignment-pago" [(ngModel)]="newReassignment.NoPagoNuevo" (input)="onReassignmentPaymentChange()" name="reassignmentNoPagoNuevo" placeholder="No. PAGO" maxlength="5" pattern="[0-9]*" />
                 </div>
             </div>
             <input [(ngModel)]="newReassignment.Motivo" name="motivo" placeholder="Motivo" required />
@@ -313,7 +313,7 @@
                     <option [ngValue]="null">Tipo de dispositivo</option>@for (type of deviceTypes; track type.IdTipo) {
                     <option [ngValue]="type.IdTipo">{{ type.NombreTipo }}</option> }
                 </select>
-                <input [(ngModel)]="newDevice.CodigoInventario" (input)="onInventoryCodeInput(newDevice)" name="editCodigo" placeholder="INVENTARIO" maxlength="7" pattern="[0-9]*"
+                <input appDigitsOnly [(ngModel)]="newDevice.CodigoInventario" (input)="onInventoryCodeInput(newDevice)" name="editCodigo" placeholder="INVENTARIO" maxlength="7" pattern="[0-9]*"
                     required />
                 <input [(ngModel)]="newDevice.NoSerie" name="editSerie" placeholder="SERIE" required />
                 <input [(ngModel)]="newDevice.Marca" name="editMarca" placeholder="Marca" required />
@@ -323,7 +323,7 @@
                     <option value="DISPONIBLE">Disponible</option>
                     <option value="ASIGNADO">Asignado</option>
                 </select>
-                <input [(ngModel)]="newDevice.NumeroPagoAsignado" (input)="onPaymentNumberInput(newDevice)" name="editPago" placeholder="No. PAGO" maxlength="5" pattern="[0-9]*"
+                <input appDigitsOnly [(ngModel)]="newDevice.NumeroPagoAsignado" (input)="onPaymentNumberInput(newDevice)" name="editPago" placeholder="No. PAGO" maxlength="5" pattern="[0-9]*"
                     [disabled]="newDevice.Estado === 'DISPONIBLE'" />
                 <input [(ngModel)]="newDevice.NombreAsignado" (input)="onDeviceEmployeeNameChange()" name="editNombreAsignado" placeholder="Nombre asignado"
                     [disabled]="newDevice.Estado === 'DISPONIBLE'" />

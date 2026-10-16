@@ -2,6 +2,7 @@ import { DatePipe } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectorRef, Component, inject, Input } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { DigitsOnlyDirective } from '../shared/digits-only.directive';
 import { PagePipe, TablePageSizeComponent, TablePaginatorComponent } from '../shared/table-paginator';
 import type ExcelJS from 'exceljs';
 import { finalize, firstValueFrom } from 'rxjs';
@@ -17,7 +18,7 @@ import { TallerService } from './taller.service';
 
 @Component({
   selector: 'app-taller',
-  imports: [DatePipe, FormsModule, SearchableSelectDirective, AppHeaderComponent, PagePipe, TablePageSizeComponent, TablePaginatorComponent],
+  imports: [DatePipe, FormsModule, SearchableSelectDirective, AppHeaderComponent, PagePipe, TablePageSizeComponent, TablePaginatorComponent, DigitsOnlyDirective],
   templateUrl: './taller.component.html',
   styleUrl: './taller.component.css',
 })
@@ -53,6 +54,8 @@ export class TallerComponent {
   reception: ReceptionEntryRequest = {
     CodigoInventario: '',
     NoSerie: '',
+    Marca: '',
+    Modelo: '',
     TipoDispositivo: '',
     DescripcionEquipo: '',
     EquipoEnGarantia: '',
@@ -241,7 +244,7 @@ export class TallerComponent {
     this.receptionAreasRequestId++;
     this.isLoadingReceptionAreas = false;
     this.reception = {
-      CodigoInventario: '', NoSerie: '', TipoDispositivo: '',
+      CodigoInventario: '', NoSerie: '', Marca: '', Modelo: '', TipoDispositivo: '',
       DescripcionEquipo: '', EquipoEnGarantia: '', MemoNumero: '',
       Recibe: '', Tecnico: '', Departamento: '',
       IdEdificio: 0, IdArea: 0, FechaIngreso: this.getCurrentDateTime(),
@@ -284,18 +287,17 @@ export class TallerComponent {
     const repairSheet = workbook.addWorksheet('Reparaciones', { properties: { tabColor: { argb: 'FF4F8A83' } } });
     const columns: Array<[string, number, (item: Maintenance) => string | number | Date]> = [
       ['ID', 10, (item) => item.IdReparacion],
-      ['Equipo', 16, (item) => item.CodigoInventario],
+      ['No. Inventario', 16, (item) => item.CodigoInventario],
       ['No. serie', 22, (item) => item.NoSerie],
       ['Marca', 16, (item) => item.Marca],
       ['Modelo', 20, (item) => item.Modelo],
-      ['Tipo de reparación', 22, (item) => item.TipoReparacion ?? ''],
+      ['Tipo Dispositivo', 22, (item) => item.TipoDispositivo ?? ''],
       ['Memo', 16, (item) => item.MemoNumero ?? ''],
       ['Recibe', 24, (item) => item.Recibe ?? ''],
       ['Técnico', 24, (item) => item.Tecnico ?? ''],
       ['Área', 28, (item) => item.Departamento ?? ''],
       ['Descripción del equipo', 36, (item) => item.DescripcionEquipo ?? ''],
       ['Garantía', 12, (item) => item.EquipoEnGarantia ?? ''],
-      ['Tipo de dispositivo', 22, (item) => item.TipoDispositivo ?? ''],
       ['Dictamen', 28, (item) => item.Dictamen ?? ''],
       ['Piezas sustituidas', 32, (item) => item.PiezasSustituidas ?? ''],
       ['Observaciones', 32, (item) => item.Observaciones ?? ''],
@@ -370,6 +372,8 @@ export class TallerComponent {
     this.errorMessage = '';
     if (!this.reception.CodigoInventario.trim()
       || !this.reception.NoSerie.trim()
+      || !this.reception.Marca.trim()
+      || !this.reception.Modelo.trim()
       || !this.reception.TipoDispositivo.trim()
       || !this.reception.DescripcionEquipo.trim()
       || !this.reception.EquipoEnGarantia

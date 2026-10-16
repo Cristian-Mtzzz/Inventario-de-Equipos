@@ -20,11 +20,11 @@
     <button type="button" [class.active]="activeSection === 'workshop'"
       (click)="selectSection('workshop')">Taller</button>
     }
-    @if (canAccessAdminSection('users')) {
-    <button type="button" [class.active]="activeSection === 'users'" (click)="selectSection('users')">Usuarios</button>
-    }
     @if (canAccessAdminSection('catalogs')) {
     <button type="button" [class.active]="activeSection === 'catalogs'" (click)="selectSection('catalogs')">Mantenimiento</button>
+    }
+    @if (canAccessAdminSection('users')) {
+    <button type="button" [class.active]="activeSection === 'users'" (click)="selectSection('users')">Usuarios</button>
     }
   </nav>
 
@@ -280,7 +280,7 @@
         </div>
         <div>
           <label for="admin-reassignment-pago">No. PAGO</label>
-          <input id="admin-reassignment-pago" [(ngModel)]="newReassignment.NoPagoNuevo" (input)="onReassignmentPaymentChange()" name="reassignmentNoPagoNuevo" placeholder="No. PAGO" maxlength="5" pattern="[0-9]*" />
+          <input appDigitsOnly id="admin-reassignment-pago" [(ngModel)]="newReassignment.NoPagoNuevo" (input)="onReassignmentPaymentChange()" name="reassignmentNoPagoNuevo" placeholder="No. PAGO" maxlength="5" pattern="[0-9]*" />
         </div>
       </div>
       <textarea class="reassignment-reason" [(ngModel)]="newReassignment.Motivo" name="motivo"
@@ -349,7 +349,7 @@
             [ngValue]="type.IdTipo"
             [disabled]="editingDeviceNCombo === '' && type.NombreTipo.trim().toLocaleUpperCase() === desktopComputerTypeName">{{ type.NombreTipo }}</option> }
         </select>
-        <input [(ngModel)]="newDevice.CodigoInventario" (input)="onInventoryCodeInput(newDevice)" name="editCodigo" placeholder="INVENTARIO" maxlength="7" pattern="[0-9]*" required />
+        <input appDigitsOnly [(ngModel)]="newDevice.CodigoInventario" (input)="onInventoryCodeInput(newDevice)" name="editCodigo" placeholder="INVENTARIO" maxlength="7" pattern="[0-9]*" required />
         <input [(ngModel)]="newDevice.NoSerie" name="editSerie" placeholder="SERIE" required />
         <input [(ngModel)]="newDevice.Marca" name="editMarca" placeholder="Marca" required />
         <input [(ngModel)]="newDevice.Modelo" name="editModelo" placeholder="Modelo" required />
@@ -476,7 +476,7 @@
           <fieldset class="desktop-combo-component">
             <legend>{{ component.Componente }}</legend>
             <label class="device-create-field">Inventario
-              <input [(ngModel)]="component.CodigoInventario" (input)="onInventoryCodeInput(component)" [name]="'comboCodigo' + index"
+              <input appDigitsOnly [(ngModel)]="component.CodigoInventario" (input)="onInventoryCodeInput(component)" [name]="'comboCodigo' + index"
                 placeholder="Inventario" maxlength="7" pattern="[0-9]*" required />
             </label>
             <label class="device-create-field">Serie
@@ -494,7 +494,7 @@
         } @else {
         <div class="device-create-identification">
           <label class="device-create-field">Inventario
-            <input [(ngModel)]="newDevice.CodigoInventario" (input)="onInventoryCodeInput(newDevice)" name="createCodigo" placeholder="Inventario" maxlength="7" pattern="[0-9]*" required />
+            <input appDigitsOnly [(ngModel)]="newDevice.CodigoInventario" (input)="onInventoryCodeInput(newDevice)" name="createCodigo" placeholder="Inventario" maxlength="7" pattern="[0-9]*" required />
           </label>
           <label class="device-create-field">Serie
             <input [(ngModel)]="newDevice.NoSerie" name="createSerie" placeholder="Serie" required />
@@ -555,7 +555,7 @@
             <input [(ngModel)]="newDevice.NombreAsignado" (input)="onDeviceEmployeeNameChange()" name="createNombreAsignado" placeholder="Nombre del empleado" />
           </label>
           <label class="device-create-field">Número de pago
-            <input [(ngModel)]="newDevice.NumeroPagoAsignado" (input)="onPaymentNumberInput(newDevice)" name="createPago" placeholder="No. de pago" maxlength="5" pattern="[0-9]*" />
+            <input appDigitsOnly [(ngModel)]="newDevice.NumeroPagoAsignado" (input)="onPaymentNumberInput(newDevice)" name="createPago" placeholder="No. de pago" maxlength="5" pattern="[0-9]*" />
           </label>
         </div>
         }

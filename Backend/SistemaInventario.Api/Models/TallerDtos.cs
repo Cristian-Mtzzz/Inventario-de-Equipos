@@ -45,6 +45,8 @@ public sealed record CreateMaintenanceEntryDto(
 public sealed record CreateReceptionEntryDto(
     string CodigoInventario,
     string NoSerie,
+    string Marca,
+    string Modelo,
     string TipoDispositivo,
     string DescripcionEquipo,
     string EquipoEnGarantia,

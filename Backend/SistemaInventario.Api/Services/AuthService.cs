@@ -30,17 +30,21 @@ public sealed class AuthService(
         try
         {
             await using var command = connection.CreateCommand();
+            // Los usuarios locales se buscan tal como se escriben. Los de dominio, como en Active Directory,
+            // sin distinguir mayúsculas ni espacios y aceptando "usuario", "DOMINIO\usuario" o "usuario@dominio".
+            // Los parámetros se enlazan por posición: deben agregarse en el mismo orden en que aparecen.
             command.CommandText = """
                                 SELECT ID_USUARIO, USUARIO, NOMBRE_PERSONA, PASSWORD_HASH, ROL, ESTADO,
                                              DOMINIOP, DOMINIO, CLAVE_SEGURA
                 FROM USUARIOS
-                WHERE USUARIO = :userName
+                WHERE (USUARIO = :userName OR (DOMINIO = 1 AND LOWER(TRIM(USUARIO)) = :domainUserName))
                   AND (DOMINIO = 1 OR PASSWORD_HASH = ORA_HASH(:password, 4294967295)
                       || ORA_HASH(:userNameForHash, 4294967295))
                   AND UPPER(ESTADO) = 'ACTIVO'
                   AND (FECHA_EXPIRACION IS NULL OR FECHA_EXPIRACION >= TRUNC(SYSDATE))
                 """;
             AddParameter(command, "userName", loginRequest.UserName);
+            AddParameter(command, "domainUserName", NormalizeDomainUserName(loginRequest.UserName));
             AddParameter(command, "password", loginRequest.Password);
             AddParameter(command, "userNameForHash", loginRequest.UserName);
 
@@ -53,6 +57,9 @@ public sealed class AuthService(
             {
                 if (!await reader.ReadAsync(cancellationToken))
                 {
+                    logger.LogWarning(
+                        "Login rechazado para {UserName}: no existe, está inactivo o expirado, o la contraseña local no coincide.",
+                        loginRequest.UserName);
                     return null;
                 }
 
@@ -81,7 +88,8 @@ public sealed class AuthService(
                     return null;
                 }
 
-                if (!ValidateCredentials(loginRequest.UserName, loginRequest.Password, domainName))
+                // Se valida con el usuario registrado (no con lo escrito), así "BA\Usuario" o "Usuario " también entran.
+                if (!ValidateCredentials(user.UserName.Trim(), loginRequest.Password, domainName))
                 {
                     return null;
                 }
@@ -118,6 +126,17 @@ public sealed class AuthService(
         }
     }
 
+    // "BA\Juan.Perez", "juan.perez@ihss.hn" y " Juan.Perez " se reducen a "juan.perez".
+    private static string NormalizeDomainUserName(string userName)
+    {
+        var value = userName.Trim();
+        var slash = value.LastIndexOf('\\');
+        if (slash >= 0) value = value[(slash + 1)..];
+        var at = value.IndexOf('@');
+        if (at >= 0) value = value[..at];
+        return value.Trim().ToLowerInvariant();
+    }
+
     private bool ValidateCredentials(string username, string password, string domain)
     {
         if (!OperatingSystem.IsWindows())
@@ -136,7 +155,13 @@ public sealed class AuthService(
         }
         catch (Exception ex) when (ex is COMException or DirectoryServicesCOMException or UnauthorizedAccessException)
         {
-            logger.LogWarning(ex, "Fallo la validacion contra Active Directory para el dominio {Domain}.", domain);
+            // ExtendedErrorMessage trae el motivo de AD: "data 52e" contraseña incorrecta, "data 532" contraseña
+            // vencida, "data 773" debe cambiar la contraseña, "data 775" cuenta bloqueada, "data 525" no existe.
+            logger.LogWarning(ex,
+                "Active Directory rechazó a {UserName} en el dominio {Domain}. Detalle: {Detail}",
+                username,
+                domain,
+                (ex as DirectoryServicesCOMException)?.ExtendedErrorMessage ?? ex.Message);
             return false;
         }
     }

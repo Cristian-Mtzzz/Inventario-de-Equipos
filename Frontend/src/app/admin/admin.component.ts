@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, DestroyRef, ViewChild, inject } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { DigitsOnlyDirective } from '../shared/digits-only.directive';
 import { PagePipe, TablePageSizeComponent, TablePaginatorComponent } from '../shared/table-paginator';
 import { Router } from '@angular/router';
 import type ExcelJS from 'exceljs';
@@ -35,7 +36,7 @@ const SECTION_MODULES: Record<AdminSection, string> = {
 
 @Component({
   selector: 'app-admin',
-  imports: [DatePipe, FormsModule, SearchableSelectDirective, TallerComponent, DeviceReportsComponent, EmployeeSearchDialogComponent, CatalogManagementComponent, UserManagementComponent, AppHeaderComponent, DeviceImportComponent, PagePipe, TablePageSizeComponent, TablePaginatorComponent],
+  imports: [DatePipe, FormsModule, SearchableSelectDirective, TallerComponent, DeviceReportsComponent, EmployeeSearchDialogComponent, CatalogManagementComponent, UserManagementComponent, AppHeaderComponent, DeviceImportComponent, PagePipe, TablePageSizeComponent, TablePaginatorComponent, DigitsOnlyDirective],
   templateUrl: './admin.component.html',
   styleUrl: './admin.component.css',
   // Angular 22 usa OnPush por defecto; varias respuestas HTTP de este panel actualizan la vista
@@ -823,7 +824,7 @@ export class AdminComponent {
       next: () => {
         this.loadData();
         if (isNew && this.deviceBatchCount > 1 && this.deviceBatchCurrent < this.deviceBatchCount) {
-          // Arrastra el tipo y datos comunes, solicitando los datos del siguiente equipo
+          // Conserva tipo, marca, modelo y ubicación; inventario y serie se limpian para el siguiente equipo
           const prevTipo = this.newDevice.IdTipo;
           const prevMarca = this.newDevice.Marca;
           const prevModelo = this.newDevice.Modelo;
@@ -833,18 +834,11 @@ export class AdminComponent {
           const prevEdificio = this.selectedBuildingId;
           const prevPago = this.newDevice.NumeroPagoAsignado;
           const prevNombre = this.newDevice.NombreAsignado;
-
-          let nextCodigo = '';
-          const numCode = parseInt(device.CodigoInventario, 10);
-          if (!isNaN(numCode)) {
-            nextCodigo = (numCode + 1).toString().padStart(device.CodigoInventario.length, '0').slice(0, 7);
-          }
-
           this.deviceBatchCurrent++;
           this.batchSuccessMessage = `Dispositivo ${this.deviceBatchCurrent - 1} guardado. Ingrese el dispositivo ${this.deviceBatchCurrent} de ${this.deviceBatchCount}.`;
 
           this.newDevice = {
-            CodigoInventario: nextCodigo,
+            CodigoInventario: '',
             NoSerie: '',
             Marca: prevMarca,
             Modelo: prevModelo,
