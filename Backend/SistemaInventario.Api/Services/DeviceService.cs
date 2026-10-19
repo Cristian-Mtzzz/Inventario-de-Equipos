@@ -176,15 +176,17 @@ public sealed class DeviceService(InventoryDbContext dbContext) : AssignmentRepo
     {
         var pattern = $"%{searchTerm.Trim().ToUpperInvariant()}%";
         return ReadList("""
-            SELECT ID_EQUIPO, CODIGO_INVENTARIO, NO_SERIE, MARCA, MODELO
+            SELECT ID_EQUIPO, CODIGO_INVENTARIO, NO_SERIE, MARCA, MODELO, NOMBRE_TIPO
             FROM (
-                SELECT ID_EQUIPO, CODIGO_INVENTARIO, NO_SERIE, MARCA, MODELO,
-                       ROW_NUMBER() OVER (ORDER BY CODIGO_INVENTARIO) AS ROW_NUM
-                FROM DISPOSITIVOS
-                WHERE UPPER(CODIGO_INVENTARIO) LIKE :searchCode
-                   OR UPPER(NO_SERIE) LIKE :searchSerial
-                   OR UPPER(MARCA) LIKE :searchBrand
-                   OR UPPER(MODELO) LIKE :searchModel
+                SELECT d.ID_EQUIPO, d.CODIGO_INVENTARIO, d.NO_SERIE, d.MARCA, d.MODELO,
+                       t.TIPO_DISPOSITIVO || CASE WHEN d.COMPONENTE IS NOT NULL THEN ' · ' || d.COMPONENTE END AS NOMBRE_TIPO,
+                       ROW_NUMBER() OVER (ORDER BY d.CODIGO_INVENTARIO) AS ROW_NUM
+                FROM DISPOSITIVOS d
+                LEFT JOIN TIPOS_DISPOSITIVOS t ON t.ID_TIPO = d.ID_TIPO
+                WHERE UPPER(d.CODIGO_INVENTARIO) LIKE :searchCode
+                   OR UPPER(d.NO_SERIE) LIKE :searchSerial
+                   OR UPPER(d.MARCA) LIKE :searchBrand
+                   OR UPPER(d.MODELO) LIKE :searchModel
             )
             WHERE ROW_NUM <= 25
             ORDER BY ROW_NUM
@@ -193,7 +195,8 @@ public sealed class DeviceService(InventoryDbContext dbContext) : AssignmentRepo
                 ReadString(reader, "CODIGO_INVENTARIO"),
                 ReadString(reader, "NO_SERIE"),
                 ReadString(reader, "MARCA"),
-                ReadString(reader, "MODELO")),
+                ReadString(reader, "MODELO"),
+                ReadNullableString(reader, "NOMBRE_TIPO")),
             cancellationToken,
             ("searchCode", pattern), ("searchSerial", pattern),
             ("searchBrand", pattern), ("searchModel", pattern));

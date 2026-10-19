@@ -6,6 +6,6 @@ namespace SistemaInventario.Api.Services;
 public interface IAuthService
 {
     Task<LoginResponseDto?> AuthenticateUser(LoginRequestDto loginRequest, CancellationToken cancellationToken);
-    string RefreshToken(int userId, string userName, string role, bool mustChangePassword);
+    string RefreshToken(int userId, string userName, string fullName, string role, bool mustChangePassword);
     Task<bool> ChangeInitialPassword(int userId, ChangePasswordDto request, CancellationToken cancellationToken);
 }

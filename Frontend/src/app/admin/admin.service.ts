@@ -98,6 +98,14 @@ export class AdminService {
 
   clearEmployeeOptionsCache(): void { this.employeeOptionsCacheByArea.clear(); }
 
+  // Botón Refrescar: descarta todos los catálogos en caché para volver a pedirlos al servidor.
+  clearCatalogCaches(): void {
+    this.clearDeviceTypesCache();
+    this.clearBuildingsCache();
+    this.clearAreasCache();
+    this.clearEmployeeOptionsCache();
+  }
+
   getRegionals(): Observable<RegionalOption[]> {
     return this.get<RegionalOption[]>('regionals');
   }

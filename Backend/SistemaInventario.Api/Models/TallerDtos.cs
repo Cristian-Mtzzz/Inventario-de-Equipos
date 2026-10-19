@@ -76,3 +76,10 @@ public sealed record UpdateMaintenanceDto(
     DateTime FechaIngreso,
     string? DetalleReparacion,
     DateTime? FechaSalida);
+// Usuario activo con rol TecnicoTaller que se puede asignar a una reparación.
+public sealed record WorkshopTechnicianDto(int IdUsuario, string Nombre);
+
+public sealed record AssignTechnicianDto(int IdUsuario);
+
+// Datos que la recepción completa sola: el usuario que recibe y el técnico asignado por defecto.
+public sealed record ReceptionDefaultsDto(string Recibe, string Tecnico);

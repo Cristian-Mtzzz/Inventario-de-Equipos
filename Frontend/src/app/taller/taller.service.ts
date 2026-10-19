@@ -3,7 +3,7 @@ import { Injectable } from '@angular/core';
 import { Observable, map } from 'rxjs';
 import { apiUrl } from '../api-url';
 import { toPascalCase } from '../shared/api-response';
-import { Maintenance, MaintenanceAssessmentRequest, MaintenanceEditRequest, MaintenanceEntryRequest, MaintenanceExitRequest, ReceptionEntryRequest, WorkshopDevice } from './taller.models';
+import { Maintenance, MaintenanceAssessmentRequest, MaintenanceEditRequest, MaintenanceEntryRequest, MaintenanceExitRequest, ReceptionDefaults, ReceptionEntryRequest, WorkshopDevice, WorkshopTechnician } from './taller.models';
 
 const API_TALLER_URL = apiUrl('taller');
 
@@ -41,6 +41,20 @@ export class TallerService {
   // Edita la información de una reparación existente.
   editMaintenance(idMantenimiento: number, maintenance: MaintenanceEditRequest): Observable<void> {
     return this.httpClient.put<void>(`${API_TALLER_URL}/maintenances/${idMantenimiento}/edit`, maintenance);
+  }
+  // Quién recibe (usuario en sesión) y técnico asignado por defecto para el formulario de recepción.
+  getReceptionDefaults(): Observable<ReceptionDefaults> {
+    return this.httpClient.get<unknown>(`${API_TALLER_URL}/reception-defaults`)
+      .pipe(map((body) => toPascalCase<ReceptionDefaults>(body)));
+  }
+  // Técnicos activos (rol TecnicoTaller) que se pueden asignar a una reparación.
+  getTechnicians(): Observable<WorkshopTechnician[]> {
+    return this.httpClient.get<unknown>(`${API_TALLER_URL}/technicians`)
+      .pipe(map((body) => toPascalCase<WorkshopTechnician[]>(body)));
+  }
+  // Asigna el técnico a la reparación (actualiza el campo Técnico).
+  assignTechnician(idMantenimiento: number, idUsuario: number): Observable<void> {
+    return this.httpClient.put<void>(`${API_TALLER_URL}/maintenances/${idMantenimiento}/technician`, { IdUsuario: idUsuario });
   }
   // Elimina una reparación existente del taller.
   deleteMaintenance(idMantenimiento: number): Observable<void> {

@@ -8,7 +8,7 @@ import { Area, Building, Device, DevicePageQuery, DeviceType, RegionalOption } f
 // El endpoint admite hasta 500 filas por página; se usa para reducir las consultas de exportación.
 const REPORT_PAGE_SIZE = 500;
 const REPORT_COLUMNS = [
-  'ID', 'Número de ingreso / combo', 'Código de inventario', 'Número de serie', 'Marca', 'Modelo', 'Tipo', 'Estado',
+  'ID', 'Número de ingreso / combo', 'Inventario', 'Número de serie', 'Marca', 'Modelo', 'Tipo', 'Estado',
   'Número de pago asignado', 'Nombre asignado', 'Regional', 'Edificio', 'Área',
 ];
 // Valor del filtro de tipo que exporta solo las piezas de combos de escritorio.

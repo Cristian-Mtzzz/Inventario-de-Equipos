@@ -4,14 +4,14 @@
   @if (message) { <p class="feedback success" role="status">{{ message }}</p> }
   @if (errorMessage) { <p class="feedback error" role="alert">{{ errorMessage }}</p> }
   <section class="admin-section">
-    <button type="button" class="add-user-button" (click)="openUserDialog()">Añadir usuario</button>
-    <div class="filter-bar">
+    <div class="filter-bar user-filter-bar">
       <input type="search" [(ngModel)]="userSearchTerm" name="userSearch" placeholder="Buscar usuario" />
       <select [(ngModel)]="selectedUserRole" name="userRoleFilter">
         <option value="">Todos los roles</option>
         @for (role of availableUserRoles; track role) { <option [value]="role">{{ role }}</option> }
       </select>
       <button type="button" class="secondary" (click)="clearUserFilters()">Limpiar</button>
+      <button type="button" class="add-user-button" (click)="openUserDialog()">Añadir usuario</button>
     </div>
     <app-table-page-size [(page)]="userPage" [(pageSize)]="userPageSize" />
     <div class="table-wrap users-table-wrap">

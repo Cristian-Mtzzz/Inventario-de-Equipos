@@ -88,11 +88,11 @@
 }
 
 .brand-logo {
-  /* Logo horizontal (1065x220, fondo transparente): ancho automático según su proporción. */
+  /* Logo horizontal (600x192, fondo transparente): ancho automático según su proporción. */
   flex: none;
   width: auto;
   max-width: 45vw;
-  height: 34px;
+  height: 40px;
   object-fit: contain;
 }
 
@@ -280,7 +280,7 @@ footer span {
   }
 
   .brand-logo {
-    height: 24px;
+    height: 30px;
     max-width: 45vw;
   }
 

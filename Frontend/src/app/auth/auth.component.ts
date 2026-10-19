@@ -41,7 +41,7 @@ export class AuthComponent {
     const { userName, password } = this.loginForm.getRawValue();
 
   
-    // Llama al servicio de autenticación con las credenciales proporcionadas.
+    // Llama al servicio de autenticación con los datos del login
     this.authService.login({ UserName: userName, Password: password }).pipe(
       catchError((error: HttpErrorResponse) => {
         this.errorMessage.set(error.status === 401

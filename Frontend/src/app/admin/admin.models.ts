@@ -53,6 +53,7 @@ export interface DeviceOption {
   NoSerie: string;
   Marca: string;
   Modelo: string;
+  NombreTipo?: string | null;
 }
 
 // Datos mínimos que se envían al crear o editar un equipo.
@@ -172,6 +173,11 @@ export interface Reassignment {
   NombreArea: string | null;
   FechaCambio: string;
   Motivo: string;
+  // Datos del equipo reasignado.
+  NombreTipo?: string | null;
+  Marca?: string | null;
+  Modelo?: string | null;
+  NoSerie?: string | null;
 }
 
 // Formulario de reasignación; número y nombre son independientes y opcionales.

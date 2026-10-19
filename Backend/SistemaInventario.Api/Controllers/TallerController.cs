@@ -23,6 +23,14 @@ public sealed class TallerController(ITallerService tallerService) : ControllerB
     public async Task<ActionResult<IReadOnlyList<MaintenanceDto>>> GetMaintenances(CancellationToken cancellationToken) =>
         Ok(await tallerService.GetMaintenances(cancellationToken));
 
+    [HttpGet("reception-defaults")]
+    [Authorize(Roles = AppRoles.WorkshopReception)]
+    // Nombre del usuario que recibe y técnico asignado por defecto; el formulario los muestra bloqueados.
+    public async Task<ActionResult<ReceptionDefaultsDto>> GetReceptionDefaults(CancellationToken cancellationToken) =>
+        CurrentUserId() is { } userId
+            ? Ok(await tallerService.GetReceptionDefaults(userId, cancellationToken))
+            : BadRequest(new { Message = "No se pudo identificar al usuario." });
+
     [HttpPost("reception")]
     [Authorize(Roles = AppRoles.WorkshopReception)]
     // Registra la recepción y valida los datos mínimos antes de tocar Oracle.
@@ -41,21 +49,13 @@ public sealed class TallerController(ITallerService tallerService) : ControllerB
         if (string.IsNullOrWhiteSpace(reception.DescripcionEquipo)) return BadRequest(new { Message = "Describe el equipo." });
         if (Exceeds(reception.DescripcionEquipo, 2000)) return BadRequest(new { Message = "La descripción no puede superar 2000 caracteres." });
         if (reception.EquipoEnGarantia is not ("SI" or "NO")) return BadRequest(new { Message = "Indica si el equipo está en garantía." });
-        if (string.IsNullOrWhiteSpace(reception.Recibe)
-            || string.IsNullOrWhiteSpace(reception.Tecnico))
-        {
-            return BadRequest(new { Message = "Completa los datos de recepción y técnico." });
-        }
-        if (new[] { reception.Recibe, reception.Tecnico }.Any(value => Exceeds(value, 200)))
-        {
-            return BadRequest(new { Message = "Los nombres no pueden superar 200 caracteres." });
-        }
         if (reception.IdEdificio <= 0) return BadRequest(new { Message = "Selecciona el centro o regional de origen." });
         if (reception.FechaIngreso == default) return BadRequest(new { Message = "La fecha de ingreso es obligatoria." });
 
         try
         {
-            await tallerService.RegisterReception(reception, cancellationToken);
+            if (CurrentUserId() is not { } userId) return BadRequest(new { Message = "No se pudo identificar al usuario que recibe." });
+            await tallerService.RegisterReception(reception, userId, cancellationToken);
             return NoContent();
         }
         catch (InvalidOperationException exception)
@@ -71,7 +71,7 @@ public sealed class TallerController(ITallerService tallerService) : ControllerB
     {
         if (maintenance.IdEquipo <= 0) return BadRequest(new { Message = "Selecciona un equipo." });
         if (maintenance.FechaIngreso == default) return BadRequest(new { Message = "Indica la fecha de ingreso." });
-        if (!int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub"), out var idTecnico))
+        if (CurrentUserId() is not { } idTecnico)
         {
             return BadRequest(new { Message = "No se pudo identificar al técnico." });
         }
@@ -128,6 +128,34 @@ public sealed class TallerController(ITallerService tallerService) : ControllerB
         if (idMantenimiento <= 0 || maintenance.IdEquipo <= 0) return BadRequest(new { Message = "Los datos de la reparación no son válidos." });
         if (maintenance.FechaIngreso == default) return BadRequest(new { Message = "Indica la fecha de ingreso." });
         return await tallerService.EditMaintenance(idMantenimiento, maintenance, cancellationToken)
+            ? NoContent()
+            : NotFound(new { Message = MaintenanceNotFound });
+    }
+
+    // ID del usuario autenticado (claim "sub" del JWT).
+    private int? CurrentUserId() =>
+        int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub"), out var userId) ? userId : null;
+
+    [HttpGet("technicians")]
+    [Authorize(Roles = AppRoles.WorkshopManagers)]
+    // Técnicos que se pueden asignar a una reparación (usuarios activos con rol TecnicoTaller).
+    public async Task<ActionResult<IReadOnlyList<WorkshopTechnicianDto>>> GetTechnicians(CancellationToken cancellationToken) =>
+        Ok(await tallerService.GetTechnicians(cancellationToken));
+
+    [HttpPut("maintenances/{idMantenimiento:int}/technician")]
+    [Authorize(Roles = AppRoles.WorkshopManagers)]
+    public async Task<IActionResult> AssignTechnician(
+        int idMantenimiento,
+        AssignTechnicianDto assignment,
+        CancellationToken cancellationToken)
+    {
+        if (idMantenimiento <= 0) return BadRequest(new { Message = "La reparación no es válida." });
+        var technicians = await tallerService.GetTechnicians(cancellationToken);
+        if (!technicians.Any(technician => technician.IdUsuario == assignment.IdUsuario))
+        {
+            return BadRequest(new { Message = "Selecciona un técnico activo." });
+        }
+        return await tallerService.AssignTechnician(idMantenimiento, assignment.IdUsuario, cancellationToken)
             ? NoContent()
             : NotFound(new { Message = MaintenanceNotFound });
     }

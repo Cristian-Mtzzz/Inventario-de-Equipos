@@ -13,7 +13,7 @@ import { SearchableSelectDirective } from '../shared/searchable-select.directive
 import { apiErrorMessage } from '../shared/api-response';
 import { AppHeaderComponent } from '../shared/app-header.component';
 import { Area, Building, DeviceType, RegionalOption } from '../admin/admin.models';
-import { Maintenance, MaintenanceAssessmentRequest, MaintenanceEntryRequest, MaintenanceExitRequest, ReceptionEntryRequest, WorkshopDevice } from './taller.models';
+import { Maintenance, MaintenanceAssessmentRequest, MaintenanceEntryRequest, MaintenanceExitRequest, ReceptionDefaults, ReceptionEntryRequest, WorkshopDevice, WorkshopTechnician } from './taller.models';
 import { TallerService } from './taller.service';
 
 @Component({
@@ -44,7 +44,11 @@ export class TallerComponent {
   selectedReceptionOriginId: number | null = null;
   selectedMaintenance: Maintenance | null = null;
   pendingDeleteMaintenance: Maintenance | null = null;
-  activeWindow: 'reception' | 'entry' | 'exit' | 'assessment' | null = null;
+  activeWindow: 'reception' | 'entry' | 'exit' | 'assessment' | 'assign' | null = null;
+  // Ventana "Asignar": técnicos disponibles y el elegido.
+  technicians: WorkshopTechnician[] = [];
+  selectedTechnicianId: number | null = null;
+  isLoadingTechnicians = false;
   isLoading = false;
   isSaving = false;
   isLoadingReceptionAreas = false;
@@ -70,9 +74,14 @@ export class TallerComponent {
   entry: MaintenanceEntryRequest = { IdEquipo: 0, Dictamen: '', TipoReparacion: '', FechaIngreso: this.getCurrentDateTime() };
   exit: MaintenanceExitRequest = { EquipoFuncional: '', TecnicoEntrega: '', ClienteRecibe: '', FechaEntrega: this.getCurrentDateTime() };
   assessment: MaintenanceAssessmentRequest = { Dictamen: '', PiezasSustituidas: '', Observaciones: '' };
+  // "Recibe" (usuario en sesión) y técnico asignado por defecto: se muestran bloqueados en la recepción.
+  receptionDefaults: ReceptionDefaults | null = null;
+  // En la salida, el técnico que entrega es el asignado a la reparación y no se edita.
+  isExitTechnicianLocked = false;
 
   constructor() {
     if (this.isReceptionOnly) this.activeWindow = 'reception';
+    if (this.canReceive) this.loadReceptionDefaults();
     this.loadData();
   }
 
@@ -240,13 +249,26 @@ export class TallerComponent {
     this.activeWindow = 'reception';
   }
 
+  private loadReceptionDefaults(): void {
+    this.tallerService.getReceptionDefaults().subscribe({
+      next: (defaults) => {
+        this.receptionDefaults = defaults;
+        this.reception.Recibe = defaults.Recibe;
+        this.reception.Tecnico = defaults.Tecnico;
+        this.changeDetector.markForCheck();
+      },
+      // Si no se pueden cargar, el servidor igual completa ambos datos al guardar.
+      error: () => this.changeDetector.markForCheck(),
+    });
+  }
+
   private resetReceptionForm(): void {
     this.receptionAreasRequestId++;
     this.isLoadingReceptionAreas = false;
     this.reception = {
       CodigoInventario: '', NoSerie: '', Marca: '', Modelo: '', TipoDispositivo: '',
       DescripcionEquipo: '', EquipoEnGarantia: '', MemoNumero: '',
-      Recibe: '', Tecnico: '', Departamento: '',
+      Recibe: this.receptionDefaults?.Recibe ?? '', Tecnico: this.receptionDefaults?.Tecnico ?? '', Departamento: '',
       IdEdificio: 0, IdArea: 0, FechaIngreso: this.getCurrentDateTime(),
     };
     this.selectedReceptionRegionalId = null;
@@ -287,7 +309,7 @@ export class TallerComponent {
     const repairSheet = workbook.addWorksheet('Reparaciones', { properties: { tabColor: { argb: 'FF4F8A83' } } });
     const columns: Array<[string, number, (item: Maintenance) => string | number | Date]> = [
       ['ID', 10, (item) => item.IdReparacion],
-      ['No. Inventario', 16, (item) => item.CodigoInventario],
+      ['Inventario', 16, (item) => item.CodigoInventario],
       ['No. serie', 22, (item) => item.NoSerie],
       ['Marca', 16, (item) => item.Marca],
       ['Modelo', 20, (item) => item.Modelo],
@@ -366,6 +388,17 @@ export class TallerComponent {
     return Number.isNaN(date.getTime()) ? value : date;
   }
 
+  // En la tabla, los valores vacíos o "PENDIENTE" se muestran como "-".
+  display(value: string | null | undefined): string {
+    const text = value?.trim() ?? '';
+    return text === '' || text.toUpperCase() === 'PENDIENTE' ? '-' : text;
+  }
+
+  // El técnico ya respondió el dictamen: en lugar del botón se muestra "Trabajo finalizado".
+  hasAssessment(item: Maintenance): boolean {
+    return this.display(item.Dictamen) !== '-';
+  }
+
   saveReception(): void {
     // Valida y registra la recepción con la fecha/hora generada por el sistema.
     this.message = '';
@@ -377,8 +410,6 @@ export class TallerComponent {
       || !this.reception.TipoDispositivo.trim()
       || !this.reception.DescripcionEquipo.trim()
       || !this.reception.EquipoEnGarantia
-      || !this.reception.Recibe.trim()
-      || !this.reception.Tecnico.trim()
       || this.reception.IdEdificio <= 0
       || !this.reception.FechaIngreso) {
       this.errorMessage = 'Completa los campos obligatorios del formato físico de recepción.';
@@ -458,10 +489,11 @@ export class TallerComponent {
     this.selectedMaintenance = item;
     this.exit = {
       EquipoFuncional: item.EquipoFuncional ?? '',
-      TecnicoEntrega: item.TecnicoEntrega ?? '',
+      TecnicoEntrega: item.Tecnico?.trim() || item.TecnicoEntrega || '',
       ClienteRecibe: item.ClienteRecibe ?? '',
       FechaEntrega: this.getCurrentDateTime(),
     };
+    this.isExitTechnicianLocked = !!item.Tecnico?.trim();
     this.activeWindow = 'exit';
   }
 
@@ -525,6 +557,58 @@ export class TallerComponent {
       },
       error: (error) => {
         this.errorMessage = apiErrorMessage(error, 'No se pudo guardar el dictamen.');
+        this.changeDetector.markForCheck();
+      },
+    });
+  }
+
+  // Abre la ventana para asignar técnico; carga la lista cada vez para incluir usuarios recién creados.
+  openAssignWindow(item: Maintenance): void {
+    if (!this.isWorkshopAdmin) return;
+    this.message = '';
+    this.errorMessage = '';
+    this.selectedMaintenance = item;
+    this.selectedTechnicianId = null;
+    this.technicians = [];
+    this.isLoadingTechnicians = true;
+    this.activeWindow = 'assign';
+    this.tallerService.getTechnicians().pipe(
+      finalize(() => { this.isLoadingTechnicians = false; this.changeDetector.markForCheck(); })
+    ).subscribe({
+      next: (technicians) => {
+        this.technicians = technicians;
+        // Preselecciona al técnico actual si coincide con uno de la lista.
+        const current = (item.Tecnico ?? '').trim().toLocaleLowerCase();
+        this.selectedTechnicianId = technicians.find((technician) =>
+          technician.Nombre.trim().toLocaleLowerCase() === current)?.IdUsuario ?? null;
+        this.changeDetector.markForCheck();
+      },
+      error: (error) => {
+        this.errorMessage = apiErrorMessage(error, 'No se pudo cargar la lista de técnicos.');
+        this.changeDetector.markForCheck();
+      },
+    });
+  }
+
+  saveAssignment(): void {
+    if (!this.selectedMaintenance || this.selectedTechnicianId === null) {
+      this.errorMessage = 'Selecciona el técnico que atenderá la reparación.';
+      this.changeDetector.markForCheck();
+      return;
+    }
+    const technician = this.technicians.find((item) => item.IdUsuario === this.selectedTechnicianId);
+    this.isSaving = true;
+    this.tallerService.assignTechnician(this.selectedMaintenance.IdReparacion, this.selectedTechnicianId).pipe(
+      finalize(() => { this.isSaving = false; this.changeDetector.markForCheck(); })
+    ).subscribe({
+      next: () => {
+        this.message = `Reparación asignada a ${technician?.Nombre ?? 'el técnico seleccionado'}.`;
+        this.closeWindow();
+        this.loadMaintenances();
+        this.changeDetector.markForCheck();
+      },
+      error: (error) => {
+        this.errorMessage = apiErrorMessage(error, 'No se pudo asignar el técnico.');
         this.changeDetector.markForCheck();
       },
     });

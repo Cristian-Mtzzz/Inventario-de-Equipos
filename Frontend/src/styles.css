@@ -303,12 +303,13 @@ input {
 }
 
 .admin-shell .filter-bar.user-filter-bar {
-    grid-template-columns: minmax(0, 1fr) minmax(160px, 220px) auto;
+    grid-template-columns: minmax(0, 1fr) minmax(160px, 220px) auto minmax(0, 1fr);
     align-items: center;
 }
 
-.admin-shell .filter-bar.user-filter-bar .secondary {
+.admin-shell .filter-bar.user-filter-bar .add-user-button {
     justify-self: end;
+    margin: 0;
 }
 
 .admin-data-table-wrap {
@@ -1210,7 +1211,8 @@ button:focus-visible {
 }
 
 /* Diálogo de edición de dispositivo: No. de pago tomado del empleado y responsable actual. */
-.admin-shell .readonly-field {
+.admin-shell .readonly-field,
+.workshop-shell .readonly-field {
     color: #31504d;
     background: #f2f7f5;
     cursor: default;
@@ -1456,4 +1458,127 @@ button:focus-visible {
 /* Botón de cierre de los diálogos. */
 :is(.admin-shell, .inventory-shell, .workshop-shell) :is(.report-close, .location-search-close) {
     border-radius: var(--ui-radius);
+}
+
+/* ------------------------------------------------------------------
+   Formularios de dispositivos y reasignaciones más compactos.
+   ------------------------------------------------------------------ */
+.admin-shell .edit-modal,
+.inventory-shell .edit-modal {
+    padding: 1.1rem 1.25rem;
+}
+
+.admin-shell .edit-modal .modal-heading,
+.inventory-shell .edit-modal .modal-heading {
+    margin-bottom: .75rem;
+}
+
+.admin-shell .edit-modal .modal-form,
+.admin-shell .modal-form.device-create-form,
+.inventory-shell .edit-modal .modal-form {
+    gap: .55rem .8rem;
+}
+
+.admin-shell .device-create-identification,
+.admin-shell .device-create-assignment-location,
+.admin-shell .device-create-employee-fields {
+    gap: .55rem .8rem;
+}
+
+.admin-shell .device-create-field {
+    gap: .25rem;
+}
+
+.admin-shell .edit-modal input,
+.admin-shell .edit-modal select,
+.inventory-shell .edit-modal input,
+.inventory-shell .edit-modal select {
+    min-height: 2.3rem;
+    padding: .45rem .65rem;
+}
+
+.admin-shell .desktop-combo-component {
+    gap: .5rem;
+    padding: .75rem;
+}
+
+/* Reasignación: el No. de pago ocupa solo lo necesario para 5 dígitos. */
+:is(.admin-shell, .inventory-shell) .reassignment-location-fields.reassignment-person-fields {
+    grid-template-columns: minmax(0, 1fr) minmax(7rem, 9rem);
+}
+
+:is(.admin-shell, .inventory-shell) .reassignment-person-fields > div {
+    display: grid;
+    gap: .25rem;
+    min-width: 0;
+}
+
+/* Buscador de la tabla de reasignaciones junto al selector "Mostrar N registros". */
+.reassignment-table-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: .6rem 1rem;
+    margin-bottom: .6rem;
+}
+
+.reassignment-table-toolbar app-table-page-size {
+    margin-bottom: 0;
+}
+
+:is(.admin-shell, .inventory-shell) .reassignment-search {
+    width: min(26rem, 100%);
+    min-height: 2.4rem;
+    padding: .45rem .75rem;
+    border: 1px solid #d3dfdb;
+    border-radius: 8px;
+}
+
+/* Tablas con muchas columnas: el ancho de cada una se ajusta a su contenido. */
+:is(.admin-shell, .inventory-shell) :is(.table-wrap) table.reassignment-table,
+:is(.admin-shell, .inventory-shell) :is(.table-wrap) table.device-list-table {
+    min-width: 1150px;
+    table-layout: auto;
+}
+
+:is(.admin-shell, .inventory-shell) :is(.table-wrap) table.reassignment-table :is(th, td) {
+    padding: .55rem .6rem;
+}
+
+:is(.admin-shell, .inventory-shell) table.reassignment-table td:nth-child(-n + 5),
+:is(.admin-shell, .inventory-shell) table.reassignment-table td:nth-child(9) {
+    white-space: nowrap;
+}
+
+:is(.admin-shell, .inventory-shell) table.reassignment-table td:nth-child(10) {
+    min-width: 12rem;
+}
+
+/* Etiquetas del diálogo de edición del panel Inventario, igual que en Agregar dispositivo. */
+.inventory-shell .form-field-label {
+    display: grid;
+    gap: .25rem;
+    min-width: 0;
+    color: #294649;
+    font-size: .76rem;
+    font-weight: 700;
+}
+
+.inventory-shell .form-field-label :is(input, select) {
+    width: 100%;
+    font-size: .9rem;
+    font-weight: 400;
+}
+
+/* Columna Acción de reasignaciones: el botón "Reasignar" se muestra completo en una línea. */
+:is(.admin-shell, .inventory-shell) table.reassignment-table td:last-child {
+    width: 1%;
+    white-space: nowrap;
+}
+
+:is(.admin-shell, .inventory-shell) table.reassignment-table td:last-child button {
+    white-space: nowrap;
+    overflow-wrap: normal;
+    word-break: keep-all;
 }

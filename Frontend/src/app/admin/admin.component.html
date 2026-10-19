@@ -1,7 +1,7 @@
 <!-- Panel protegido para administrar inventario, usuarios, reasignaciones y taller.
   La plantilla muestra una sola sección activa para evitar mezclar formularios. -->
 <main class="admin-shell" [class.admin-red-theme]="hasAdminButtonTheme">
-  <app-header [moduleName]="panelTitle" (refresh)="loadData()" (logout)="logout()" />
+  <app-header [moduleName]="panelTitle" (refresh)="refreshPanel()" (logout)="logout()" />
   <div class="admin-header panel-heading">
     <p class="eyebrow">CONTROL ADMINISTRATIVO</p>
     <h1>{{ panelTitle }}</h1>
@@ -47,10 +47,10 @@
     <!-- Filtros de búsqueda y tabla de dispositivos -->
     <div class="filter-bar device-filter-bar">
       <input type="search" [(ngModel)]="searchTerm" (ngModelChange)="applyFilters(true)" name="adminSearch"
-        placeholder="Buscar inventario, serie, marca, modelo o empleado" />
+        placeholder="Buscar por inventario, serie, marca, modelo o empleado" />
       <select [ngModel]="typeFilterValue" (ngModelChange)="selectTypeFilter($event)" name="adminType"
-        aria-label="Filtrar por tipo de dispositivo">
-        <option [ngValue]="null">Todos los tipos</option>
+        aria-label="Filtrar por equipo">
+        <option [ngValue]="null">Todos los equipos</option>
         <option [ngValue]="comboFilter">Computadoras escritorio (combos)</option>
         @for (type of deviceFilterTypes; track type.IdTipo) { <option [ngValue]="type.IdTipo">{{ type.NombreTipo }}</option> }
       </select>
@@ -99,10 +99,10 @@
             <th>MODELO</th>
             <th>SERIE</th>
             <th>INVENTARIO</th>
-            <th>ÁREA</th>
             <th>ASIGNADO A</th>
             <th>No. PAGO</th>
-            <th>ESTADO</th>
+            <th>ÁREA</th>
+            <th>FECHA ASIGNACIÓN</th>
             <th>ACCIONES</th>
           </tr>
         </thead>
@@ -124,14 +124,17 @@
             <td>{{ device.NoSerie }}</td>
             <td>{{ device.CodigoInventario }}</td>
             @if (componentIndex === 0) {
+            <td [attr.rowspan]="group.Devices.length" class="combo-shared-cell">{{ device.AsignadoA || 'Sin asignar' }}</td>
+            <td [attr.rowspan]="group.Devices.length" class="combo-shared-cell">{{ device.NumeroPagoAsignado || '-' }}</td>
             <td [attr.rowspan]="group.Devices.length" class="combo-shared-cell">
               {{ device.NombreArea ? (device.NombreArea + (device.NombreEdificio ? ' · ' + device.NombreEdificio : '')) : '-' }}
             </td>
-            <td [attr.rowspan]="group.Devices.length" class="combo-shared-cell">{{ device.AsignadoA || 'Sin asignar' }}</td>
-            <td [attr.rowspan]="group.Devices.length" class="combo-shared-cell">{{ device.NumeroPagoAsignado || '-' }}</td>
-            <td [attr.rowspan]="group.Devices.length" class="combo-shared-cell">{{ device.Estado }}</td>
+            <td [attr.rowspan]="group.Devices.length" class="combo-shared-cell">{{ (device.FechaAsignacion | date:'dd/MM/yyyy') || '-' }}</td>
             }
             <td class="combo-actions">
+              @if (device.Estado !== 'ASIGNADO') {
+              <button type="button" class="secondary" (click)="assignDevice(device)">Asignar</button>
+              }
               <button type="button" class="secondary" (click)="editDevice(device)">Editar</button>
               <button type="button" class="danger" (click)="askRemoveDevice(device.IdEquipo)">Quitar</button>
             </td>
@@ -142,18 +145,20 @@
         </tbody>
       </table>
       } @else {
-      <table>
+      <table class="device-list-table">
         <thead>
           <tr>
-            <th>INVENTARIO</th>
-            <th>TIPO</th>
             <th>No. INGRESO / COMBO</th>
+            <th>EQUIPO</th>
+            <th>MARCA</th>
+            <th>MODELO</th>
             <th>SERIE</th>
-            <th>No. PAGO</th>
+            <th>INVENTARIO</th>
             <th>ASIGNADO A</th>
-            <th>FECHA ASIGNACION</th>
+            <th>No. PAGO</th>
             <th>ÁREA</th>
-            <th>Acciones</th>
+            <th>FECHA ASIGNACIÓN</th>
+            <th>ACCIONES</th>
           </tr>
         </thead>
 
@@ -161,23 +166,29 @@
         <tbody>
           @if (!hasDeviceQuery) {
           <tr>
-            <td colspan="9" class="empty">Busca un dispositivo o selecciona un filtro para mostrar resultados.</td>
+            <td colspan="11" class="empty">Busca un dispositivo o selecciona un filtro para mostrar resultados.</td>
           </tr>
           } @else if (filteredDevices.length === 0) {
           <tr>
-            <td colspan="9">No se encontraron equipos con los filtros actuales.</td>
+            <td colspan="11">No se encontraron equipos con los filtros actuales.</td>
           </tr>
           } @else {
-          @for (device of pagedDevices; track device.IdEquipo) { <tr [title]="'ID: ' + device.IdEquipo + ' | ' + (device.Marca || '') + ' ' + (device.Modelo || '') + ' | Estado: ' + (device.Estado || '') + ' | Combo: ' + (device.NCombo || '-') + ' | Edificio: ' + (device.NombreEdificio || '-')">
-            <td>{{ device.CodigoInventario }}</td>
-            <td>{{ (device.NombreTipo || '-') + (device.Componente ? ' · ' + device.Componente : '') }}</td>
+          @for (device of pagedDevices; track device.IdEquipo) { <tr [title]="'ID: ' + device.IdEquipo + ' | Estado: ' + (device.Estado || '') + ' | Edificio: ' + (device.NombreEdificio || '-')">
             <td>{{ device.NumeroIngreso || device.NCombo || '-' }}</td>
+            <td>{{ (device.NombreTipo || '-') + (device.Componente ? ' · ' + device.Componente : '') }}</td>
+            <td>{{ device.Marca || '-' }}</td>
+            <td>{{ device.Modelo || '-' }}</td>
             <td>{{ device.NoSerie }}</td>
-            <td>{{ device.NumeroPagoAsignado || '-' }}</td>
+            <td>{{ device.CodigoInventario }}</td>
             <td>{{ device.AsignadoA || 'Sin asignar' }}</td>
-            <td>{{ (device.FechaAsignacion | date:'dd/MM/yyyy') || '-' }}</td>
+            <td>{{ device.NumeroPagoAsignado || '-' }}</td>
             <td>{{ device.NombreArea ? (device.NombreArea + (device.NombreEdificio ? ' · ' + device.NombreEdificio : '')) : '-' }}</td>
-            <td><button type="button" class="secondary" (click)="editDevice(device)">Editar</button><button
+            <td>{{ (device.FechaAsignacion | date:'dd/MM/yyyy') || '-' }}</td>
+            <td class="combo-actions">
+              @if (device.Estado !== 'ASIGNADO') {
+              <button type="button" class="secondary" (click)="assignDevice(device)">Asignar</button>
+              }
+              <button type="button" class="secondary" (click)="editDevice(device)">Editar</button><button
                 type="button" class="danger" (click)="askRemoveDevice(device.IdEquipo)">Quitar</button></td>
           </tr> }
           }
@@ -223,8 +234,7 @@
         required>
         <option value="">Selecciona un resultado</option>
         @for (device of deviceOptions; track device.IdEquipo) {
-        <option [value]="device.CodigoInventario">{{ device.CodigoInventario }} · {{ device.Marca }} {{ device.Modelo }}
-        </option>
+        <option [value]="device.CodigoInventario">{{ deviceOptionLabel(device) }}</option>
         }
       </select>
       <div class="reassignment-location-fields">
@@ -273,7 +283,7 @@
         </div>
       </div>
       @if (employeeCatalogError) { <p class="feedback error" role="alert">{{ employeeCatalogError }}</p> }
-      <div class="reassignment-location-fields">
+      <div class="reassignment-location-fields reassignment-person-fields">
         <div>
           <label for="admin-reassignment-name">Nombre empleado</label>
           <input id="admin-reassignment-name" [(ngModel)]="newReassignment.NombreNuevo" (input)="onReassignmentEmployeeNameChange()" name="reassignmentNombreNuevo" placeholder="Nombre completo" required />
@@ -287,38 +297,48 @@
         placeholder="Motivo del cambio" rows="3" required></textarea>
       <button type="submit" [disabled]="isSubmittingReassignment">{{ isSubmittingReassignment ? 'Registrando...' : 'Registrar reasignación' }}</button>
     </form>
-    <app-table-page-size [(page)]="reassignmentCurrentPage" [(pageSize)]="reassignmentPageSize" />
+    <div class="reassignment-table-toolbar">
+      <input type="search" class="reassignment-search" [ngModel]="reassignmentSearchTerm"
+        (ngModelChange)="updateReassignmentSearch($event)" name="reassignmentSearch"
+        placeholder="Buscar por inventario o nombre de empleado" aria-label="Buscar reasignaciones" />
+      <app-table-page-size [(page)]="reassignmentCurrentPage" [(pageSize)]="reassignmentPageSize" />
+    </div>
     <div class="table-wrap">
-      <table>
+      <table class="reassignment-table">
         <thead>
           <tr>
+            <th>EQUIPO</th>
+            <th>MARCA</th>
+            <th>MODELO</th>
+            <th>SERIE</th>
             <th>INVENTARIO</th>
-            <th>Anterior</th>
-            <th>Nuevo</th>
-            <th>Área de trabajo</th>
-            <th>Fecha</th>
-            <th>Motivo</th>
-            <th>Acciones</th>
+            <th>RESP. ANTERIOR</th>
+            <th>RESP. ACTUAL</th>
+            <th>ÁREA DE TRABAJO</th>
+            <th>FECHA DE ASIGNACIÓN</th>
+            <th>MOTIVO DE REASIGNACIÓN</th>
+            <th>ACCIÓN</th>
           </tr>
         </thead>
-        <tbody>@for (item of reassignments | page: reassignmentCurrentPage : reassignmentPageSize; track item.IdReasignacion) { <tr>
+        <tbody>@for (item of filteredReassignments | page: reassignmentCurrentPage : reassignmentPageSize; track item.IdReasignacion) { <tr>
+            <td>{{ item.NombreTipo || '-' }}</td>
+            <td>{{ item.Marca || '-' }}</td>
+            <td>{{ item.Modelo || '-' }}</td>
+            <td>{{ item.NoSerie || '-' }}</td>
             <td>{{ item.CodigoInventario || getInventoryCode(item.IdEquipo) }}</td>
-            <td>
-              {{ item.NombreAnterior || item.NoPagoAnterior || 'Sin asignar' }}
-              @if (item.NombreAreaAnterior) {
-                <small style="display: block; opacity: 0.8; font-size: 0.85em;">{{ item.NombreAreaAnterior }}</small>
-              }
-            </td>
+            <td>{{ item.NombreAnterior || item.NoPagoAnterior || 'Sin asignar' }}</td>
             <td>{{ item.NombreNuevo || item.NoPagoNuevo || '-' }}</td>
             <td>{{ item.NombreArea ? (item.NombreArea + (item.NombreEdificio ? ' · ' + item.NombreEdificio : '')) : '-' }}</td>
-            <td>{{ item.FechaCambio | date }}</td>
+            <td>{{ item.FechaCambio | date:'dd/MM/yyyy' }}</td>
             <td>{{ item.Motivo }}</td>
             <td><button type="button" class="secondary"
                 (click)="selectDeviceForReassignmentFromItem(item)">Reasignar</button></td>
+          </tr> } @empty { <tr>
+            <td colspan="11">{{ reassignmentSearchTerm.trim() ? 'No hay reasignaciones que coincidan con la búsqueda.' : 'Todavía no hay reasignaciones registradas.' }}</td>
           </tr> }</tbody>
       </table>
     </div>
-    <app-table-paginator [total]="reassignments.length" [(page)]="reassignmentCurrentPage" [pageSize]="reassignmentPageSize" label="Paginación de reasignaciones" />
+    <app-table-paginator [total]="filteredReassignments.length" [(page)]="reassignmentCurrentPage" [pageSize]="reassignmentPageSize" label="Paginación de reasignaciones" />
   </section>
   }
 
@@ -338,29 +358,45 @@
       (click)="$event.stopPropagation()">
       <div class="modal-heading">
         <div>
-          <p class="eyebrow">CORREGIR REGISTRO</p>
-          <h2 id="edit-device-title">Editar dispositivo</h2>
+          <p class="eyebrow">{{ isAssignMode ? 'ASIGNACIÓN' : 'CORREGIR REGISTRO' }}</p>
+          <h2 id="edit-device-title">{{ isAssignMode ? 'Asignar dispositivo' : 'Editar dispositivo' }}</h2>
         </div>
         <button type="button" class="modal-close" aria-label="Cerrar edición" (click)="cancelEdit()">×</button>
       </div>
-      <form class="modal-form" (ngSubmit)="saveEditedDevice()">
-        <select [(ngModel)]="newDevice.IdTipo" name="editTipo" required [disabled]="editingDeviceNCombo !== ''">
-          <option [ngValue]="null">Tipo de dispositivo</option>@for (type of deviceTypes; track type.IdTipo) { <option
-            [ngValue]="type.IdTipo"
-            [disabled]="editingDeviceNCombo === '' && type.NombreTipo.trim().toLocaleUpperCase() === desktopComputerTypeName">{{ type.NombreTipo }}</option> }
-        </select>
-        <input appDigitsOnly [(ngModel)]="newDevice.CodigoInventario" (input)="onInventoryCodeInput(newDevice)" name="editCodigo" placeholder="INVENTARIO" maxlength="7" pattern="[0-9]*" required />
-        <input [(ngModel)]="newDevice.NoSerie" name="editSerie" placeholder="SERIE" required />
-        <input [(ngModel)]="newDevice.Marca" name="editMarca" placeholder="Marca" required />
-        <input [(ngModel)]="newDevice.Modelo" name="editModelo" placeholder="Modelo" required />
-        <select [(ngModel)]="newDevice.Estado" (ngModelChange)="handleDeviceStateChange($event)" name="editEstado"
-          required>
-          <option value="DISPONIBLE">Disponible</option>
-          <option value="ASIGNADO">Asignado</option>
-        </select>
+      <!-- Datos del equipo en el orden Equipo, Marca, Modelo, Serie, Inventario. En modo Asignar son
+        de solo lectura y solo se completan la ubicación y el empleado. -->
+      <form class="modal-form device-edit-form" (ngSubmit)="saveEditedDevice()">
+        <label class="device-create-field">Equipo
+          <select [(ngModel)]="newDevice.IdTipo" name="editTipo" required [disabled]="editingDeviceNCombo !== '' || isAssignMode">
+            <option [ngValue]="null">Tipo de dispositivo</option>@for (type of deviceTypes; track type.IdTipo) { <option
+              [ngValue]="type.IdTipo"
+              [disabled]="editingDeviceNCombo === '' && type.NombreTipo.trim().toLocaleUpperCase() === desktopComputerTypeName">{{ type.NombreTipo }}</option> }
+          </select>
+        </label>
+        <label class="device-create-field">Marca
+          <input [(ngModel)]="newDevice.Marca" name="editMarca" placeholder="Marca" required [readonly]="isAssignMode" [class.readonly-field]="isAssignMode" />
+        </label>
+        <label class="device-create-field">Modelo
+          <input [(ngModel)]="newDevice.Modelo" name="editModelo" placeholder="Modelo" required [readonly]="isAssignMode" [class.readonly-field]="isAssignMode" />
+        </label>
+        <label class="device-create-field">Serie
+          <input [(ngModel)]="newDevice.NoSerie" name="editSerie" placeholder="Serie" required [readonly]="isAssignMode" [class.readonly-field]="isAssignMode" />
+        </label>
+        <label class="device-create-field">Inventario
+          <input appDigitsOnly [(ngModel)]="newDevice.CodigoInventario" (input)="onInventoryCodeInput(newDevice)" name="editCodigo" placeholder="Inventario" maxlength="7" pattern="[0-9]*" required [readonly]="isAssignMode" [class.readonly-field]="isAssignMode" />
+        </label>
+        @if (!isAssignMode) {
+        <label class="device-create-field">Estado
+          <select [(ngModel)]="newDevice.Estado" (ngModelChange)="handleDeviceStateChange($event)" name="editEstado"
+            required>
+            <option value="DISPONIBLE">Disponible</option>
+            <option value="ASIGNADO">Asignado</option>
+          </select>
+        </label>
+        }
 
-        <!-- Ubicación y responsable: se eligen del catálogo; el No. de pago viene del empleado.
-          Elegir cualquiera de ellos marca el equipo como Asignado. -->
+        <!-- Ubicación y responsable: se eligen del catálogo; el No. de pago se completa con el del empleado
+          y se puede corregir. Elegir cualquiera de ellos marca el equipo como Asignado. -->
         <label class="device-create-field">Regional
           <select [(ngModel)]="selectedRegionId" (ngModelChange)="selectDeviceRegion($event)" name="editRegional">
             <option [ngValue]="null">Seleccionar regional</option>
@@ -394,8 +430,9 @@
           </select>
         </label>
         <label class="device-create-field">No. de pago
-          <input [value]="newDevice.NumeroPagoAsignado || ''" name="editPago" readonly tabindex="-1"
-            class="readonly-field" [placeholder]="selectedEmployeeIndex === null ? 'Se completa al elegir el empleado' : 'El empleado no tiene No. de pago'" />
+          <input appDigitsOnly [(ngModel)]="newDevice.NumeroPagoAsignado" (input)="markDeviceAssigned(newDevice.NumeroPagoAsignado)"
+            name="editPago" maxlength="5" pattern="[0-9]*"
+            [placeholder]="selectedEmployeeIndex === null ? 'Se completa al elegir el empleado' : 'El empleado no tiene No. de pago: escríbelo'" />
         </label>
         @if (selectedEmployeeIndex === null && (newDevice.NombreAsignado || newDevice.NumeroPagoAsignado)) {
         <p class="current-assignment">
@@ -418,7 +455,7 @@
         @if (employeeCatalogError) { <p class="feedback error modal-feedback" role="alert">{{ employeeCatalogError }}</p> }
         @if (errorMessage) { <p class="feedback error modal-feedback" role="alert">{{ errorMessage }}</p> }
         <div class="modal-actions"><button type="button" class="secondary"
-            (click)="cancelEdit()">Cancelar</button><button type="submit">Guardar cambios</button></div>
+            (click)="cancelEdit()">Cancelar</button><button type="submit">{{ isAssignMode ? 'Asignar' : 'Guardar cambios' }}</button></div>
       </form>
     </section>
   </div>
@@ -443,7 +480,7 @@
       <form #deviceCreateForm="ngForm" class="modal-form device-create-form" (ngSubmit)="addDevice()">
         <div class="device-create-top-row">
           <div>
-            <label style="display: block; font-size: 0.82em; font-weight: 600; margin-bottom: 0.25rem;">Tipo de dispositivo *</label>
+            <label style="display: block; font-size: 0.82em; font-weight: 600; margin-bottom: 0.25rem;">Equipo *</label>
             <select [(ngModel)]="newDevice.IdTipo" (ngModelChange)="handleDeviceTypeChange($event)" name="createTipo" required style="width: 100%;">
               <option [ngValue]="null">Selecciona el tipo de dispositivo</option>
               @for (type of deviceTypes; track type.IdTipo) {
@@ -475,35 +512,35 @@
           @for (component of newDesktopCombo.Componentes; track component.Componente; let index = $index) {
           <fieldset class="desktop-combo-component">
             <legend>{{ component.Componente }}</legend>
-            <label class="device-create-field">Inventario
-              <input appDigitsOnly [(ngModel)]="component.CodigoInventario" (input)="onInventoryCodeInput(component)" [name]="'comboCodigo' + index"
-                placeholder="Inventario" maxlength="7" pattern="[0-9]*" required />
-            </label>
-            <label class="device-create-field">Serie
-              <input [(ngModel)]="component.NoSerie" [name]="'comboSerie' + index" placeholder="Serie" required />
-            </label>
             <label class="device-create-field">Marca
               <input [(ngModel)]="component.Marca" [name]="'comboMarca' + index" placeholder="Marca" required />
             </label>
             <label class="device-create-field">Modelo
               <input [(ngModel)]="component.Modelo" [name]="'comboModelo' + index" placeholder="Modelo" required />
             </label>
+            <label class="device-create-field">Serie
+              <input [(ngModel)]="component.NoSerie" [name]="'comboSerie' + index" placeholder="Serie" required />
+            </label>
+            <label class="device-create-field">Inventario
+              <input appDigitsOnly [(ngModel)]="component.CodigoInventario" (input)="onInventoryCodeInput(component)" [name]="'comboCodigo' + index"
+                placeholder="Inventario" maxlength="7" pattern="[0-9]*" required />
+            </label>
           </fieldset>
           }
         </div>
         } @else {
         <div class="device-create-identification">
-          <label class="device-create-field">Inventario
-            <input appDigitsOnly [(ngModel)]="newDevice.CodigoInventario" (input)="onInventoryCodeInput(newDevice)" name="createCodigo" placeholder="Inventario" maxlength="7" pattern="[0-9]*" required />
-          </label>
-          <label class="device-create-field">Serie
-            <input [(ngModel)]="newDevice.NoSerie" name="createSerie" placeholder="Serie" required />
-          </label>
           <label class="device-create-field">Marca
             <input [(ngModel)]="newDevice.Marca" name="createMarca" placeholder="Marca" required />
           </label>
           <label class="device-create-field">Modelo
             <input [(ngModel)]="newDevice.Modelo" name="createModelo" placeholder="Modelo" required />
+          </label>
+          <label class="device-create-field">Serie
+            <input [(ngModel)]="newDevice.NoSerie" name="createSerie" placeholder="Serie" required />
+          </label>
+          <label class="device-create-field">Inventario
+            <input appDigitsOnly [(ngModel)]="newDevice.CodigoInventario" (input)="onInventoryCodeInput(newDevice)" name="createCodigo" placeholder="Inventario" maxlength="7" pattern="[0-9]*" required />
           </label>
         </div>
         }

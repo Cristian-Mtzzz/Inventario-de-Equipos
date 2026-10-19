@@ -67,7 +67,7 @@ public sealed class AuthController(
         }
 
         var mustChangePassword = User.FindFirstValue("must_change_password") == "true";
-        return Ok(new { Token = authService.RefreshToken(userId, userName, role, mustChangePassword) });
+        return Ok(new { Token = authService.RefreshToken(userId, userName, User.FindFirstValue("full_name") ?? userName, role, mustChangePassword) });
     }
 
     [HttpPost("change-initial-password")]

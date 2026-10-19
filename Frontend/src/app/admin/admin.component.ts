@@ -84,6 +84,9 @@ export class AdminComponent {
   editingDeviceNCombo = '';
   // Al editar una pieza de combo: true reasigna las tres piezas; false separa el combo.
   applyEditToCombo = false;
+  // Botón "Asignar" de un equipo disponible: el diálogo de edición deja los datos del equipo
+  // en solo lectura y solo pide la ubicación y el empleado.
+  isAssignMode = false;
   editingCodigoInventario = '';
   editingNoSerie = '';
   isEditDialogOpen = false;
@@ -122,6 +125,7 @@ export class AdminComponent {
   deviceOptionSearch = '';
   @ViewChild(TallerComponent) workshopComponent?: TallerComponent;
   @ViewChild(UserManagementComponent) userManagement?: UserManagementComponent;
+  @ViewChild(CatalogManagementComponent) catalogManagement?: CatalogManagementComponent;
 
   // Estado inicial para la creación de un nuevo dispositivo o reasignación.
   newDevice: CreateDevice = {
@@ -238,11 +242,15 @@ export class AdminComponent {
   }
 
   get filteredReassignments(): Reassignment[] {
-    const search = this.reassignmentSearchTerm.trim().toLocaleLowerCase();
-    const filtered = search
-      ? this.reassignments.filter((item) => [item.CodigoInventario, item.NombreEdificio, item.NombreArea,
-        item.FechaCambio, item.Motivo, item.NoPagoAnterior, item.NoPagoNuevo, item.NombreNuevo]
-        .some((value) => String(value ?? '').toLocaleLowerCase().includes(search)))
+    // Busca por inventario y/o nombre (o No. de pago) del responsable anterior o actual;
+    // con varias palabras, cada una debe aparecer en alguno de esos datos ("4110935 juan").
+    const terms = this.reassignmentSearchTerm.trim().toLocaleLowerCase().split(/s+/).filter(Boolean);
+    const filtered = terms.length > 0
+      ? this.reassignments.filter((item) => {
+        const text = [item.CodigoInventario, item.NombreAnterior, item.NombreNuevo, item.NoPagoAnterior, item.NoPagoNuevo]
+          .map((value) => String(value ?? '').toLocaleLowerCase()).join(' ');
+        return terms.every((term) => text.includes(term));
+      })
       : [...this.reassignments];
     if (!this.reassignmentSortColumn) return filtered;
     return filtered.sort((first, second) => {
@@ -318,6 +326,16 @@ export class AdminComponent {
   onDevicesImported(): void {
     this.loadData();
     this.message = 'Dispositivos importados como disponibles. Asigna el empleado y el área desde la edición de cada equipo.';
+  }
+
+  // Botón Refrescar del encabezado: vuelve a pedir al servidor los catálogos (tipos, edificios, áreas,
+  // empleados) y los datos de la sección abierta, y avisa cuando termina de solicitarlos.
+  refreshPanel(): void {
+    this.adminService.clearCatalogCaches();
+    this.clearMessages();
+    if (this.activeSection === 'catalogs') this.catalogManagement?.loadCatalogs();
+    else this.loadData();
+    this.message = 'Datos actualizados.';
   }
 
   refreshEmployeeOptions(): void {
@@ -606,7 +624,7 @@ export class AdminComponent {
 
   // Elegir ubicación o empleado en los formularios de dispositivo implica que el equipo
   // queda asignado (un equipo disponible no conserva área ni responsable).
-  private markDeviceAssigned(value: unknown): void {
+  markDeviceAssigned(value: unknown): void {
     if (value !== null && value !== undefined && this.newDevice.Estado !== 'ASIGNADO') {
       this.newDevice.Estado = 'ASIGNADO';
     }
@@ -908,6 +926,7 @@ export class AdminComponent {
 
   editDevice(device: Device): void {
     // Copia el equipo seleccionado al formulario para convertirlo en modo edición.
+    this.isAssignMode = false;
     this.editingDeviceId = device.IdEquipo;
     this.editingDeviceNCombo = device.NCombo ?? '';
     this.applyEditToCombo = false;
@@ -938,6 +957,15 @@ export class AdminComponent {
     this.activeSection = 'devices';
     this.isEditDialogOpen = true;
     this.clearMessages();
+  }
+
+  // Asigna un equipo disponible: mismos datos que Editar, pero solo se elige a quién y dónde.
+  // En un combo nuevo se asignan las tres piezas juntas (se puede desmarcar).
+  assignDevice(device: Device): void {
+    this.editDevice(device);
+    this.isAssignMode = true;
+    this.newDevice.Estado = 'ASIGNADO';
+    this.applyEditToCombo = !!device.NCombo;
   }
 
   // Carga los empleados del departamento del equipo y deja seleccionado al responsable
@@ -971,6 +999,7 @@ export class AdminComponent {
 
   cancelEdit(): void {
     // Cancela la edición y restaura el formulario a su estado inicial.
+    this.isAssignMode = false;
     this.clearDeviceEmployeeSelection();
     this.employeeCatalogError = '';
     this.editingDeviceId = null;
@@ -1000,7 +1029,7 @@ export class AdminComponent {
     const applyToCombo = this.editingDeviceNCombo !== '' && this.applyEditToCombo;
     this.adminService.updateDevice(this.editingDeviceId, this.normalizeDevice(this.newDevice), applyToCombo).subscribe({
       next: () => {
-        this.message = 'Dispositivo actualizado correctamente.';
+        this.message = this.isAssignMode ? 'Dispositivo asignado correctamente.' : 'Dispositivo actualizado correctamente.';
         this.cancelEdit();
         this.loadData();
       },
@@ -1144,13 +1173,17 @@ export class AdminComponent {
     };
     const columns: Array<[string, number, (item: Reassignment) => string | number | Date]> = [
       ['ID', 10, (item) => item.IdReasignacion],
-      ['Código inventario', 18, (item) => item.CodigoInventario],
-      ['Anterior', 36, (item) => personName(item.NombreAnterior, item.NoPagoAnterior, 'Sin asignar')],
-      ['Nuevo', 36, (item) => personName(item.NombreNuevo, item.NoPagoNuevo, '-')],
+      ['Equipo', 24, (item) => item.NombreTipo ?? ''],
+      ['Marca', 16, (item) => item.Marca ?? ''],
+      ['Modelo', 20, (item) => item.Modelo ?? ''],
+      ['Serie', 22, (item) => item.NoSerie ?? ''],
+      ['Inventario', 14, (item) => item.CodigoInventario],
+      ['Resp. anterior', 36, (item) => personName(item.NombreAnterior, item.NoPagoAnterior, 'Sin asignar')],
+      ['Resp. actual', 36, (item) => personName(item.NombreNuevo, item.NoPagoNuevo, '-')],
+      ['Área de trabajo', 34, (item) => item.NombreArea ?? ''],
       ['Edificio', 28, (item) => item.NombreEdificio ?? ''],
-      ['Departamento', 34, (item) => item.NombreArea ?? ''],
       ['Fecha de cambio', 18, (item) => changeDate(item.FechaCambio)],
-      ['Motivo', 42, (item) => item.Motivo ?? ''],
+      ['Motivo de reasignación', 42, (item) => item.Motivo ?? ''],
     ];
 
     const lastColumn = sheet.getColumn(columns.length).letter;
@@ -1244,17 +1277,24 @@ export class AdminComponent {
     this.selectedInventoryCode = code;
     this.newReassignment.IdEquipo = item.IdEquipo;
     this.deviceOptionSearch = code;
+    // La cajita "Selecciona un resultado" muestra el equipo con Equipo - Marca - Modelo - Inventario.
     this.deviceOptions = [{
       IdEquipo: item.IdEquipo,
       CodigoInventario: code,
-      NoSerie: '',
-      Marca: '',
-      Modelo: '',
+      NoSerie: item.NoSerie ?? '',
+      Marca: item.Marca ?? '',
+      Modelo: item.Modelo ?? '',
+      NombreTipo: item.NombreTipo,
     }];
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   // Selecciona un dispositivo para reasignación y actualiza el modelo correspondiente.
+  deviceOptionLabel(device: DeviceOption): string {
+    return [device.NombreTipo, device.Marca, device.Modelo, device.CodigoInventario]
+      .map((value) => value?.trim()).filter(Boolean).join(' - ');
+  }
+
   selectDeviceForReassignment(codigoInventario: string): void {
     this.selectedInventoryCode = codigoInventario;
     const device = this.deviceOptions.find((item) => item.CodigoInventario === codigoInventario);

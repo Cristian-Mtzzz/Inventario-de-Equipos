@@ -15,9 +15,12 @@ public sealed class ReassignmentService(InventoryDbContext dbContext) : Assignme
                    a_ant.DEPARTAMENTO_IHSS_DESC AS NOMBRE_AREA_ANTERIOR,
                    TO_CHAR(r.NO_PAGO_NUEVO) AS NO_PAGO_NUEVO,
                    COALESCE(r.NOMBRE_NUEVO, e.NOMBRE_EMPLEADO, TO_CHAR(r.NO_PAGO_NUEVO), 'Sin asignar') AS NOMBRE_NUEVO,
-                   b.EDIFICIO_DESCRIPCION AS NOMBRE_EDIFICIO,
-                   a.DEPARTAMENTO_IHSS_DESC AS NOMBRE_AREA,
-                   r.FECHA_CAMBIO, r.MOTIVO
+                   -- Área de trabajo del responsable actual de ese cambio; si no tiene No. de pago, la del equipo.
+                   COALESCE(b_new.EDIFICIO_DESCRIPCION, b.EDIFICIO_DESCRIPCION) AS NOMBRE_EDIFICIO,
+                   COALESCE(a_new.DEPARTAMENTO_IHSS_DESC, a.DEPARTAMENTO_IHSS_DESC) AS NOMBRE_AREA,
+                   r.FECHA_CAMBIO, r.MOTIVO,
+                   t.TIPO_DISPOSITIVO || CASE WHEN d.COMPONENTE IS NOT NULL THEN ' · ' || d.COMPONENTE END AS NOMBRE_TIPO,
+                   d.MARCA, d.MODELO, d.NO_SERIE
             FROM REASIGNACIONES r
             LEFT JOIN DISPOSITIVOS d ON d.ID_EQUIPO = r.ID_EQUIPO
             LEFT JOIN EMPLEADOS_IHSS e ON TRIM(TO_CHAR(e.NPAGO)) = TRIM(TO_CHAR(r.NO_PAGO_NUEVO))
@@ -25,6 +28,9 @@ public sealed class ReassignmentService(InventoryDbContext dbContext) : Assignme
             LEFT JOIN DEPARTAMENTO_IHSS a_ant ON a_ant.DEPARTAMENTO_IHSS_ID = e_ant.DEPARTAMENTO_IHSS_ID
             LEFT JOIN DEPARTAMENTO_IHSS a ON a.DEPARTAMENTO_IHSS_ID = d.ID_AREA
             LEFT JOIN EDIFICIO b ON b.EDIFICIO_ID = a.EDIFICIO_ID
+            LEFT JOIN DEPARTAMENTO_IHSS a_new ON a_new.DEPARTAMENTO_IHSS_ID = e.DEPARTAMENTO_IHSS_ID
+            LEFT JOIN EDIFICIO b_new ON b_new.EDIFICIO_ID = a_new.EDIFICIO_ID
+            LEFT JOIN TIPOS_DISPOSITIVOS t ON t.ID_TIPO = d.ID_TIPO
             ORDER BY r.FECHA_CAMBIO DESC
             """, reader => new ReassignmentDto(
                 ReadInt(reader, "ID_REASIGNACION"),
@@ -38,7 +44,11 @@ public sealed class ReassignmentService(InventoryDbContext dbContext) : Assignme
                 ReadNullableString(reader, "NOMBRE_EDIFICIO"),
                 ReadNullableString(reader, "NOMBRE_AREA"),
                 reader.GetDateTime(reader.GetOrdinal("FECHA_CAMBIO")),
-                ReadString(reader, "MOTIVO")), cancellationToken);
+                ReadString(reader, "MOTIVO"),
+                ReadNullableString(reader, "NOMBRE_TIPO"),
+                ReadNullableString(reader, "MARCA"),
+                ReadNullableString(reader, "MODELO"),
+                ReadNullableString(reader, "NO_SERIE")), cancellationToken);
 
     public Task CreateReassignment(CreateReassignmentDto reassignment, CancellationToken cancellationToken) =>
         InTransaction(async (connection, transaction) =>

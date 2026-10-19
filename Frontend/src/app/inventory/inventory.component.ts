@@ -35,6 +35,7 @@ export class InventoryComponent {
   // Página actual y tamaño de página de la tabla (paginación en el navegador).
   reassignmentPage = 1;
   reassignmentPageSize = 10;
+  reassignmentSearchTerm = '';
   areas: Area[] = [];
   employeesForDeviceArea: EmployeeOption[] = [];
   selectedEmployeeIndex: number | null = null;
@@ -106,24 +107,24 @@ export class InventoryComponent {
     this.loadDevices();
   }
 
-  // Propiedad que indica si el usuario tiene permisos para eliminar dispositivos.
+  // indica si el usuario tiene permisos para eliminar dispositivos.
   get canRemoveDevices(): boolean {
     return this.authService.hasRole(['Admin']);
   }
 
-  // Propiedad que devuelve los dispositivos filtrados según los criterios de búsqueda y filtros aplicados.
+  // devuelve los dispositivos filtrados según los criterios de búsqueda y filtros aplicados.
   get filteredDevices(): Device[] { return this.devices; }
 
-  // Propiedad que devuelve los dispositivos de la página actual según la paginación.
+  // devuelve los dispositivos de la página actual según la paginación.
   get pagedDevices(): Device[] {
     return this.devices;
   }
 
-  // Propiedad que devuelve el número total de páginas según los dispositivos filtrados y el tamaño de página.
+  // devuelve el número total de páginas según los dispositivos filtrados y el tamaño de página.
   get totalPages(): number {
     return Math.max(1, Math.ceil(this.totalDeviceCount / this.pageSize));
   }
-  // Propiedad que devuelve las opciones de región disponibles según los edificios cargados.
+  // devuelve las opciones de región disponibles según los edificios cargados.
   get regionalOptions(): { IdRegional: number; NombreRegional: string }[] {
     const regions = new Map<number, string>();
     this.buildings.forEach((building) => {
@@ -131,13 +132,13 @@ export class InventoryComponent {
     });
     return [...regions].map(([IdRegional, NombreRegional]) => ({ IdRegional, NombreRegional }));
   }
-  // Propiedad que devuelve los edificios filtrados según la región seleccionada en los filtros.
+  // devuelve los edificios filtrados según la región seleccionada en los filtros.
   get filterBuildings(): Building[] {
     return this.selectedRegionalFilterId === null
       ? this.buildings
       : this.buildings.filter((building) => building.IdRegional === this.selectedRegionalFilterId);
   }
-  // Propiedad que devuelve los edificios filtrados según la región seleccionada en el formulario de nuevo dispositivo.
+  // devuelve los edificios filtrados según la región seleccionada en el formulario de nuevo dispositivo.
   get deviceFormBuildings(): Building[] {
     return this.selectedRegionId === null
       ? this.buildings
@@ -647,6 +648,29 @@ export class InventoryComponent {
     });
   }
 
+  // Busca por inventario y/o nombre (o No. de pago) del responsable anterior o actual;
+  // con varias palabras, cada una debe aparecer en alguno de esos datos.
+  get filteredReassignments(): Reassignment[] {
+    const terms = this.reassignmentSearchTerm.trim().toLocaleLowerCase().split(/s+/).filter(Boolean);
+    if (terms.length === 0) return this.reassignments;
+    return this.reassignments.filter((item) => {
+      const text = [item.CodigoInventario, item.NombreAnterior, item.NombreNuevo, item.NoPagoAnterior, item.NoPagoNuevo]
+        .map((value) => String(value ?? '').toLocaleLowerCase()).join(' ');
+      return terms.every((term) => text.includes(term));
+    });
+  }
+
+  updateReassignmentSearch(value: string): void {
+    this.reassignmentSearchTerm = value;
+    this.reassignmentPage = 1;
+  }
+
+  // Texto de la cajita "Selecciona un resultado": Equipo - Marca - Modelo - Inventario.
+  deviceOptionLabel(device: DeviceOption): string {
+    return [device.NombreTipo, device.Marca, device.Modelo, device.CodigoInventario]
+      .map((value) => value?.trim()).filter(Boolean).join(' - ');
+  }
+
   selectDeviceForReassignmentFromItem(item: Reassignment): void {
     const code = item.CodigoInventario || this.getInventoryCode(item.IdEquipo);
     this.selectedInventoryCode = code;
@@ -655,9 +679,10 @@ export class InventoryComponent {
     this.deviceOptions = [{
       IdEquipo: item.IdEquipo,
       CodigoInventario: code,
-      NoSerie: '',
-      Marca: '',
-      Modelo: '',
+      NoSerie: item.NoSerie ?? '',
+      Marca: item.Marca ?? '',
+      Modelo: item.Modelo ?? '',
+      NombreTipo: item.NombreTipo,
     }];
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }

@@ -222,11 +222,12 @@ public sealed class AuthService(
         command.Parameters.Add(parameter);
     }
 
-    public string RefreshToken(int userId, string userName, string role, bool mustChangePassword) =>
+    public string RefreshToken(int userId, string userName, string fullName, string role, bool mustChangePassword) =>
         GenerateToken(new User
         {
             UserId = userId,
             UserName = userName,
+            FullName = fullName,
             Role = role,
         }, mustChangePassword);
 
@@ -241,6 +242,8 @@ public sealed class AuthService(
             new Claim(JwtRegisteredClaimNames.UniqueName, user.UserName),
             new Claim(ClaimTypes.Name, user.UserName),
             new Claim(ClaimTypes.Role, user.Role),
+            // Nombre de la persona para mostrarlo en el encabezado al recargar la página.
+            new Claim("full_name", string.IsNullOrWhiteSpace(user.FullName) ? user.UserName : user.FullName),
             new Claim("must_change_password", mustChangePassword ? "true" : "false"),
         };
         var credentials = new SigningCredentials(

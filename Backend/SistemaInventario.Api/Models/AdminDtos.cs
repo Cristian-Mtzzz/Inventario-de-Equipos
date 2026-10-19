@@ -29,7 +29,7 @@ public sealed record DeviceDto(
 
 public sealed record PagedResult<T>(IReadOnlyList<T> Items, int TotalCount, int Page, int PageSize);
 
-public sealed record DeviceOptionDto(int IdEquipo, string CodigoInventario, string NoSerie, string Marca, string Modelo);
+public sealed record DeviceOptionDto(int IdEquipo, string CodigoInventario, string NoSerie, string Marca, string Modelo, string? NombreTipo);
 
 public sealed record EmployeeSearchDto(
     string NoPago,
@@ -140,7 +140,11 @@ public sealed record ReassignmentDto(
     string? NombreEdificio,
     string? NombreArea,
     DateTime FechaCambio,
-    string Motivo);
+    string Motivo,
+    string? NombreTipo,
+    string? Marca,
+    string? Modelo,
+    string? NoSerie);
 
 // Datos necesarios para registrar una nueva reasignación.
 public sealed record CreateReassignmentDto(

@@ -232,7 +232,7 @@ export class AuthService {
     return {
       UserId: String(claims['sub'] ?? ''),
       UserName: userName,
-      FullName: userName,
+      FullName: String(claims['full_name'] ?? '').trim() || userName,
       Role: String(role) as UserRole,
       Estado: 'ACTIVO',
       DominioP: '',

@@ -87,3 +87,14 @@ export interface MaintenanceEditRequest {
   DetalleReparacion: string;
   FechaSalida: string | null;
 }
+// Usuario con rol de técnico de taller que se puede asignar a una reparación.
+export interface WorkshopTechnician {
+  IdUsuario: number;
+  Nombre: string;
+}
+
+// Datos que la recepción completa sola (usuario que recibe y técnico por defecto).
+export interface ReceptionDefaults {
+  Recibe: string;
+  Tecnico: string;
+}

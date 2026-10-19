@@ -30,21 +30,20 @@
       <table>
         <thead>
           <tr>
-            <th>No. inventario</th>
             <th>Memo</th>
-            <th>Recibe</th>
-            <th>Técnico</th>
             <th>Área</th>
-            <th>No. serie</th>
-            <th>Descripción del equipo</th>
+            <th>Equipo</th>
+            <th>Marca</th>
+            <th>Inventario</th>
+            <th>Recibió</th>
+            <th>Descripción</th>
             <th>Garantía</th>
-            <th>Tipo de dispositivo</th>
-            <th>Dictamen</th>
             <th>Ingreso</th>
+            <th>Técnico que entrega</th>
+            <th>Dictamen</th>
             <th>Piezas sustituidas</th>
             <th>Observaciones</th>
             <th>Equipo funcional</th>
-            <th>Técnico que entrega</th>
             <th>Cliente que recibe</th>
             <th>Fecha de entrega</th>
             <th>Acciones</th>
@@ -53,31 +52,36 @@
         <tbody>
           @if (isLoading) {
           <tr>
-            <td colspan="18" class="empty">Cargando reparaciones...</td>
+            <td colspan="17" class="empty">Cargando reparaciones...</td>
           </tr>
           } @else {
           @for (item of maintenances | page: maintenancePage : maintenancePageSize; track item.IdReparacion) {
+          <!-- Lo que esté vacío o "PENDIENTE" se muestra como "-". -->
           <tr>
+            <td>{{ display(item.MemoNumero) }}</td>
+            <td>{{ display(item.Departamento) }}</td>
+            <td>{{ display(item.TipoDispositivo) }}</td>
+            <td>{{ display(item.Marca) }}</td>
             <td>{{ item.CodigoInventario }}</td>
-            <td>{{ item.MemoNumero || '-' }}</td>
-            <td>{{ item.Recibe || '-' }}</td>
-            <td>{{ item.Tecnico || '-' }}</td>
-            <td>{{ item.Departamento || '-' }}</td>
-            <td>{{ item.NoSerie }}</td>
-            <td>{{ item.DescripcionEquipo || (item.Marca + ' ' + item.Modelo) }}</td>
-            <td>{{ item.EquipoEnGarantia || '-' }}</td>
-            <td>{{ item.TipoDispositivo || '-' }}</td>
-            <td>{{ item.Dictamen || 'Sin dictamen' }}</td>
+            <td>{{ display(item.Recibe) }}</td>
+            <td>{{ display(item.DescripcionEquipo) }}</td>
+            <td>{{ display(item.EquipoEnGarantia) }}</td>
             <td>{{ item.FechaIngreso | date:'short' }}</td>
-            <td>{{ item.PiezasSustituidas || '-' }}</td>
-            <td>{{ item.Observaciones || '-' }}</td>
-            <td>{{ item.EquipoFuncional || 'Pendiente' }}</td>
-            <td>{{ item.TecnicoEntrega || '-' }}</td>
-            <td>{{ item.ClienteRecibe || '-' }}</td>
-            <td>{{ item.FechaEntrega ? (item.FechaEntrega | date:'short') : 'Pendiente' }}</td>
+            <td>{{ display(item.TecnicoEntrega) }}</td>
+            <td>{{ display(item.Dictamen) }}</td>
+            <td>{{ display(item.PiezasSustituidas) }}</td>
+            <td>{{ display(item.Observaciones) }}</td>
+            <td>{{ display(item.EquipoFuncional) }}</td>
+            <td>{{ display(item.ClienteRecibe) }}</td>
+            <td>{{ item.FechaEntrega ? (item.FechaEntrega | date:'short') : '-' }}</td>
             <td>
-              @if (canWorkOnRepairs) { <button type="button" class="secondary" (click)="openAssessmentWindow(item)"
+              @if (canWorkOnRepairs) {
+              @if (isTechnicianOnly && hasAssessment(item)) { <span class="closed">Trabajo finalizado</span> }
+              @else { <button type="button" class="secondary" (click)="openAssessmentWindow(item)"
                 [disabled]="isSaving">Dictamen</button> }
+              }
+              @if (isWorkshopAdmin && isOpenMaintenance(item)) { <button type="button" class="secondary" (click)="openAssignWindow(item)"
+                [disabled]="isSaving">Asignar</button> }
               @if (isWorkshopAdmin && isOpenMaintenance(item)) { <button type="button" class="secondary" (click)="openExitWindow(item)"
                 [disabled]="isSaving">Registrar salida</button> }
               @if (isAdmin) { <button type="button" class="danger"
@@ -86,7 +90,7 @@
             </td>
           </tr>
           } @empty { <tr>
-            <td colspan="18" class="empty">Todavía no hay reparaciones registradas.</td>
+            <td colspan="17" class="empty">Todavía no hay reparaciones registradas.</td>
           </tr> }
           }
         </tbody>
@@ -154,23 +158,25 @@
             }
           </select>
         </div>
+        <!-- Recibe es el usuario en sesión y el técnico es el asignado por defecto: los completa el
+          sistema y se muestran bloqueados para que queden a la vista en el formato. -->
         <div class="form-field">
           <label for="reception-receiver">Recibe</label>
-          <input id="reception-receiver" type="text" [(ngModel)]="reception.Recibe" name="receptionReceiver" maxlength="200" required />
+          <input id="reception-receiver" type="text" [value]="reception.Recibe || 'Cargando...'" name="receptionReceiver"
+            readonly tabindex="-1" class="readonly-field" />
         </div>
         <div class="form-field">
           <label for="reception-technician">Técnico asignado</label>
-          <input id="reception-technician" type="text" [(ngModel)]="reception.Tecnico" name="receptionTechnician" maxlength="200" required />
+          <input id="reception-technician" type="text" [value]="reception.Tecnico || 'Cargando...'" name="receptionTechnician"
+            readonly tabindex="-1" class="readonly-field" />
         </div>
         <h3 class="form-section-title">Datos del equipo</h3>
         <div class="form-field">
-          <label for="reception-inventory">Número de inventario</label>
-          <input appDigitsOnly id="reception-inventory" type="text" [(ngModel)]="reception.CodigoInventario" name="receptionInventory"
-            placeholder="Ej. 4102532" maxlength="7" pattern="[0-9]*" required />
-        </div>
-        <div class="form-field">
-          <label for="reception-serial">Número de serie</label>
-          <input id="reception-serial" type="text" [(ngModel)]="reception.NoSerie" name="receptionSerial" maxlength="100" required />
+          <label for="reception-type">Equipo</label>
+          <select id="reception-type" [(ngModel)]="reception.TipoDispositivo" name="receptionType" required>
+            <option value="">Selecciona un tipo</option>
+            @for (type of deviceTypes; track type.IdTipo) { <option [value]="type.NombreTipo">{{ type.NombreTipo }}</option> }
+          </select>
         </div>
         <div class="form-field">
           <label for="reception-brand">Marca</label>
@@ -181,11 +187,13 @@
           <input id="reception-model" type="text" [(ngModel)]="reception.Modelo" name="receptionModel" placeholder="Ej. Pro Slim" maxlength="100" required />
         </div>
         <div class="form-field">
-          <label for="reception-type">Tipo de dispositivo</label>
-          <select id="reception-type" [(ngModel)]="reception.TipoDispositivo" name="receptionType" required>
-            <option value="">Selecciona un tipo</option>
-            @for (type of deviceTypes; track type.IdTipo) { <option [value]="type.NombreTipo">{{ type.NombreTipo }}</option> }
-          </select>
+          <label for="reception-serial">Serie</label>
+          <input id="reception-serial" type="text" [(ngModel)]="reception.NoSerie" name="receptionSerial" maxlength="100" required />
+        </div>
+        <div class="form-field">
+          <label for="reception-inventory">Inventario</label>
+          <input appDigitsOnly id="reception-inventory" type="text" [(ngModel)]="reception.CodigoInventario" name="receptionInventory"
+            placeholder="Ej. 4102532" maxlength="7" pattern="[0-9]*" required />
         </div>
         <div class="form-field">
           <label for="reception-warranty">Equipo en garantía</label>
@@ -261,7 +269,9 @@
           <option value="NO">No</option>
         </select>
         <label for="exit-technician">Técnico que entrega</label>
-        <input id="exit-technician" type="text" [(ngModel)]="exit.TecnicoEntrega" name="exitTechnician" maxlength="200" required />
+        <!-- Es el técnico asignado a la reparación; solo se escribe si la reparación no tiene técnico. -->
+        <input id="exit-technician" type="text" [(ngModel)]="exit.TecnicoEntrega" name="exitTechnician" maxlength="200" required
+          [readonly]="isExitTechnicianLocked" [class.readonly-field]="isExitTechnicianLocked" />
         <label for="exit-client">Cliente que recibe</label>
         <input id="exit-client" type="text" [(ngModel)]="exit.ClienteRecibe" name="exitClient" maxlength="200" required />
         <label for="exit-date">Fecha de entrega</label>
@@ -296,6 +306,37 @@
         <textarea id="assessment-observations" [(ngModel)]="assessment.Observaciones" name="assessmentObservations"
           rows="3" maxlength="2000"></textarea>
         <button type="submit" [disabled]="isSaving">{{ isSaving ? 'Guardando...' : 'Guardar dictamen' }}</button>
+      </form>
+    </section>
+  </div>
+  }
+
+  @if (activeWindow === 'assign' && selectedMaintenance) {
+  <div class="modal-backdrop" role="presentation">
+    <section class="workshop-modal" role="dialog" aria-modal="true" aria-labelledby="assign-title"
+      (click)="$event.stopPropagation()">
+      <div class="modal-heading">
+        <div>
+          <p class="eyebrow">ASIGNACIÓN</p>
+          <h2 id="assign-title">Asignar técnico</h2>
+          <p class="modal-subtitle">{{ selectedMaintenance.CodigoInventario }} · {{ selectedMaintenance.Marca }} {{
+            selectedMaintenance.Modelo }}</p>
+        </div><button type="button" class="modal-close" aria-label="Cerrar ventana" (click)="closeWindow()">×</button>
+      </div>
+      <form (ngSubmit)="saveAssignment()">
+        @if (errorMessage) { <p class="feedback error" role="alert">{{ errorMessage }}</p> }
+        <p class="modal-subtitle">Técnico actual: <strong>{{ selectedMaintenance.Tecnico || 'Sin asignar' }}</strong></p>
+        <label for="assign-technician">Técnico</label>
+        <select id="assign-technician" [(ngModel)]="selectedTechnicianId" name="assignTechnician"
+          [disabled]="isLoadingTechnicians || technicians.length === 0" required>
+          <option [ngValue]="null">{{ isLoadingTechnicians ? 'Cargando técnicos...'
+            : technicians.length === 0 ? 'No hay usuarios con rol de técnico' : 'Selecciona un técnico' }}</option>
+          @for (technician of technicians; track technician.IdUsuario) {
+          <option [ngValue]="technician.IdUsuario">{{ technician.Nombre }}</option>
+          }
+        </select>
+        <button type="submit" [disabled]="isSaving || selectedTechnicianId === null">
+          {{ isSaving ? 'Asignando...' : 'Asignar' }}</button>
       </form>
     </section>
   </div>
