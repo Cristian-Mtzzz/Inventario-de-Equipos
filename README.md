@@ -51,14 +51,16 @@ Backend/SistemaInventario.Api/
 └── web.config        Configuración para IIS (desactiva WebDAV)
 
 Frontend/
-├── public/           logo.png, favicon.png y web.config de IIS (URL Rewrite)
-└── src/app/
-    ├── auth/         Login, cambio de contraseña, sesión, guardas e interceptor JWT
-    ├── admin/        Panel administrativo: dispositivos, reasignaciones, catálogos, usuarios, importación y reportes
-    ├── inventory/    Panel de usuario común
-    ├── taller/       Recepción, administración y técnico del taller
-    ├── shared/       Encabezado, paginador, validación de solo dígitos y utilidades
-    └── api-url.ts    Ruta base de la API
+├── public/           logo.png y favicon.png
+└── src/
+    ├── web.config    Configuración de IIS: rutas de Angular con URL Rewrite (se copia al build)
+    └── app/
+        ├── auth/       Login, cambio de contraseña, sesión, guardas e interceptor JWT
+        ├── admin/      Panel administrativo: dispositivos, reasignaciones, catálogos, usuarios, importación y reportes
+        ├── inventory/  Panel de usuario común
+        ├── taller/     Recepción, administración y técnico del taller
+        ├── shared/     Encabezado, paginador, validación de solo dígitos y utilidades
+        └── api-url.ts  Ruta base de la API
 ```
 
 ## Requisitos
@@ -80,7 +82,7 @@ La API se configura en `Backend/SistemaInventario.Api/appsettings.json`. Para de
 | `Jwt:ExpirationMinutes` | Vigencia del token (35 por defecto). |
 | `Hosting:ApiBaseUrl` | URL pública de la API. De su ruta sale el directorio virtual de IIS (`/ApiInventariosTic`). |
 | `Hosting:FrontendBaseUrl` | URL pública del frontend. Se agrega a los orígenes permitidos por CORS. |
-| `Taller:TecnicoRecepcion` | **Login** (columna `USUARIO`) del técnico al que se asignan por defecto los equipos recibidos en el taller, por ejemplo `frank`. No uses el nombre de la persona: el usuario debe existir, estar activo y tener rol `TecnicoTaller`. |
+| `Taller:TecnicoRecepcion` | Técnico al que se asignan por defecto los equipos recibidos en el taller. Acepta el login (`frank.midence`) o el nombre de la persona (`Frank Midence`), sin importar mayúsculas; el usuario debe estar activo, vigente y tener rol `TecnicoTaller`. |
 
 > No subas contraseñas ni claves reales en documentación o capturas.
 
@@ -121,7 +123,7 @@ Para probar rutas protegidas, haz login en `POST /api/auth/login`, copia el `Tok
 
 ## Publicar en IIS
 
-IIS ya debe tener instalados el **ASP.NET Core Module (ANCM)** y **URL Rewrite**, y las aplicaciones `/ApiInventariosTic` e `/InventarioEquipo` deben estar creadas. La publicación no instala ni configura nada de IIS.
+IIS ya debe tener instalados el **ASP.NET Core Module (ANCM)** y **URL Rewrite**, y las aplicaciones `/ApiInventariosTic` e `/InventariosTic` deben estar creadas. La publicación no instala ni configura nada de IIS.
 
 ### API
 
@@ -138,12 +140,12 @@ Copia **todo** el contenido de `bin\Release\net8.0\win-x64\publish` al directori
 Desde `Frontend`, **en PowerShell**:
 
 ```powershell
-ng build --configuration production --base-href /InventarioEquipo/
+ng build --configuration production --base-href /InventariosTic/
 ```
 
-> En Git Bash, la ruta `/InventarioEquipo/` se convierte en `C:/Program Files/Git/InventarioEquipo/` y la aplicación queda en blanco. Usa PowerShell o CMD.
+> En Git Bash, la ruta `/InventariosTic/` se convierte en `C:/Program Files/Git/InventariosTic/` y la aplicación queda en blanco. Usa PowerShell o CMD.
 
-Copia el contenido de `dist\SistemaInventario\browser` (no la carpeta `dist` completa) al directorio de `/InventarioEquipo`. El `web.config` incluido hace que recargar la página o abrir un enlace directo (por ejemplo `/InventarioEquipo/admin`) funcione en lugar de dar 404.
+Copia el contenido de `dist\SistemaInventario\browser` (no la carpeta `dist` completa) al directorio de `/InventariosTic`. El `web.config` incluido hace que recargar la página o abrir un enlace directo (por ejemplo `/InventariosTic/admin`) funcione en lugar de dar 404; requiere el módulo URL Rewrite.
 
 ### Logo e ícono
 
@@ -159,8 +161,8 @@ Copia el contenido de `dist\SistemaInventario\browser` (no la carpeta `dist` com
 | 500.31 | ANCM no está instalado | Instala el Hosting Bundle de .NET 8 en el servidor. |
 | 503 al iniciar sesión | Oracle no responde | Revisa la conexión de red/VPN y la cadena de conexión. |
 | Un usuario de dominio no puede entrar | AD rechazó las credenciales o el dominio no es válido | El log de la API trae el detalle de AD (`data 52e` contraseña incorrecta, `775` cuenta bloqueada, `532` contraseña vencida). |
-| La recepción del taller deja el técnico "Sin asignar" | `Taller:TecnicoRecepcion` no coincide con un técnico activo | Usa el login del usuario, no su nombre, y reinicia la API. |
-| La página queda en blanco en el servidor | Build sin `--base-href /InventarioEquipo/`, o hecho desde Git Bash | Vuelve a compilar desde PowerShell con el comando de arriba. |
+| La recepción del taller deja el técnico "Sin asignar" | `Taller:TecnicoRecepcion` no coincide con un técnico activo | Revisa que el login o el nombre coincida con un usuario activo con rol `TecnicoTaller` y reinicia la API. |
+| La página queda en blanco en el servidor | Build sin `--base-href /InventariosTic/`, o hecho desde Git Bash | Vuelve a compilar desde PowerShell con el comando de arriba. |
 
 ## Validación
 

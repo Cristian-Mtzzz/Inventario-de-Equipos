@@ -57,7 +57,7 @@ h1 {
 
 .admin-section {
     display: grid;
-    gap: 2rem;
+    gap: .9rem;
     margin-top: 2rem;
 }
 
@@ -105,8 +105,8 @@ h1 {
     display: grid;
     grid-template-columns: minmax(200px, 1.6fr) repeat(3, minmax(140px, 1fr)) auto;
     gap: .75rem;
-    margin: 0 0 1rem;
-    padding: 0 0 1rem;
+    margin: 0;
+    padding: 0;
 }
 
 .filter-bar input,

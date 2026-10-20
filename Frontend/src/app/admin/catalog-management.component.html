@@ -14,10 +14,7 @@
     <button type="button" [class.active]="activePanel === 'deviceTypes'" (click)="selectPanel('deviceTypes')">
       Tipos de dispositivos
     </button>
-  </nav>
-
-  @if (activePanel === 'locations') {
-  <div class="catalog-search-toolbar">
+    @if (activePanel === 'locations') {
     <button type="button" class="catalog-search-button" (click)="openEmployeeSearch()">
       <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
         <circle cx="10.8" cy="10.8" r="6.8"></circle>
@@ -25,7 +22,10 @@
       </svg>
       <span>Buscar empleado</span>
     </button>
-  </div>
+    }
+  </nav>
+
+  @if (activePanel === 'locations') {
   <div class="catalog-selector-grid">
     <div class="catalog-selector-field">
       <label for="catalog-regional-filter">Regional</label>

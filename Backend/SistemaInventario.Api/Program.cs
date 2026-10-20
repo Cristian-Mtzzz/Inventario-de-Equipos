@@ -45,7 +45,7 @@ builder.Services.AddSwaggerGen(options =>
 });
 // La cadena de conexión completa está configurada directamente en appsettings.json.
 var oracleConnection = builder.Configuration.GetConnectionString("OracleConnection")
-    ?? "User Id=TRANSACIONES_SOPORTE;Data Source=exd01-scan.corp.ihss.hn:1521/hihss;Password=ts26ihss*";
+    ?? "User Id=TRANSACIONES_SOPORTE;Data Source=exd01-scan.corp.ihss.hn:1521/BDIHSS;Password=ts26ihss*";
 
 // Registra servicios que concentran reglas y SQL de cada módulo, manteniendo los
 // controladores enfocados en HTTP y validaciones básicas.

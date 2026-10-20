@@ -58,7 +58,7 @@
           @for (item of maintenances | page: maintenancePage : maintenancePageSize; track item.IdReparacion) {
           <!-- Lo que esté vacío o "PENDIENTE" se muestra como "-". -->
           <tr>
-            <td>{{ display(item.MemoNumero) }}</td>
+            <td class="memo-cell">{{ display(item.MemoNumero) }}</td>
             <td>{{ display(item.Departamento) }}</td>
             <td>{{ display(item.TipoDispositivo) }}</td>
             <td>{{ display(item.Marca) }}</td>

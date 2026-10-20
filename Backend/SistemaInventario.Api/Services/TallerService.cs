@@ -215,15 +215,18 @@ public sealed class TallerService(InventoryDbContext dbContext, IConfiguration c
             ReadString(reader, "NOMBRE")), cancellationToken);
 
     // Guarda en la reparación el nombre del técnico (columna TECNICO, la que muestran la tabla y el reporte)
-    // y su ID de usuario. El controlador ya validó que el usuario es un técnico activo.
+    // y su ID de usuario. Como quien entrega el equipo en la salida es el mismo técnico asignado, también
+    // actualiza TECNICO_ENTREGA. El controlador ya validó que el usuario es un técnico activo.
     public async Task<bool> AssignTechnician(int idMantenimiento, int idUsuario, CancellationToken cancellationToken) =>
         await Execute("""
             UPDATE REPARACION
             SET TECNICO = (SELECT SUBSTR(NVL(TRIM(u.NOMBRE_PERSONA), u.USUARIO), 1, 200)
                            FROM USUARIOS u WHERE u.ID_USUARIO = :idUsuario),
+                TECNICO_ENTREGA = (SELECT SUBSTR(NVL(TRIM(u.NOMBRE_PERSONA), u.USUARIO), 1, 200)
+                                   FROM USUARIOS u WHERE u.ID_USUARIO = :idUsuarioEntrega),
                 ID_TECNICO = :idUsuario
             WHERE ID_REPARACION = :idReparacion
-            """, cancellationToken, ("idUsuario", idUsuario), ("idReparacion", idMantenimiento)) > 0;
+            """, cancellationToken, ("idUsuario", idUsuario), ("idUsuarioEntrega", idUsuario), ("idReparacion", idMantenimiento)) > 0;
 
     // Valores que el formulario de recepción muestra bloqueados: quién recibe y el técnico asignado.
     public async Task<ReceptionDefaultsDto> GetReceptionDefaults(int userId, CancellationToken cancellationToken) =>
@@ -240,23 +243,24 @@ public sealed class TallerService(InventoryDbContext dbContext, IConfiguration c
         return names.FirstOrDefault() ?? "-";
     }
 
-    // Técnico que recibe por defecto todos los ingresos: el usuario indicado en Taller:TecnicoRecepcion
-    // (appsettings.json), siempre que siga activo y con rol de técnico.
+    // Técnico que recibe por defecto todos los ingresos, indicado en Taller:TecnicoRecepcion (appsettings.json).
+    // Se acepta el login (columna USUARIO) o el nombre de la persona (NOMBRE_PERSONA), sin distinguir
+    // mayúsculas ni espacios, siempre que el usuario siga activo, vigente y con rol TecnicoTaller.
     private async Task<WorkshopTechnicianDto?> GetReceptionTechnician(CancellationToken cancellationToken)
     {
-        var userName = configuration["Taller:TecnicoRecepcion"];
-        if (string.IsNullOrWhiteSpace(userName)) return null;
+        var technicianName = configuration["Taller:TecnicoRecepcion"];
+        if (string.IsNullOrWhiteSpace(technicianName)) return null;
 
         var technicians = await ReadList("""
             SELECT ID_USUARIO, SUBSTR(NVL(TRIM(NOMBRE_PERSONA), USUARIO), 1, 200) NOMBRE
             FROM USUARIOS
-            WHERE LOWER(TRIM(USUARIO)) = LOWER(TRIM(:usuario))
+            WHERE (LOWER(TRIM(USUARIO)) = LOWER(TRIM(:tecnico)) OR LOWER(TRIM(NOMBRE_PERSONA)) = LOWER(TRIM(:tecnicoNombre)))
               AND ROL = 'TecnicoTaller'
               AND UPPER(ESTADO) = 'ACTIVO'
               AND (FECHA_EXPIRACION IS NULL OR FECHA_EXPIRACION >= TRUNC(SYSDATE))
             """, reader => new WorkshopTechnicianDto(
             ReadInt(reader, "ID_USUARIO"),
-            ReadString(reader, "NOMBRE")), cancellationToken, ("usuario", userName));
+            ReadString(reader, "NOMBRE")), cancellationToken, ("tecnico", technicianName), ("tecnicoNombre", technicianName));
         return technicians.FirstOrDefault();
     }
 

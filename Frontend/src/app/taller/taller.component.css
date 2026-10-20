@@ -87,7 +87,7 @@ h1 {
 
 .workshop-section {
     display: grid;
-    gap: 1.5rem;
+    gap: .9rem;
     margin-top: 2rem;
 }
 
@@ -409,4 +409,8 @@ td button:disabled {
 .workshop-modal select:focus {
     border-color: #397b78;
     box-shadow: 0 0 0 3px rgba(57, 123, 120, .12);
+}
+/* El número de memo se muestra completo, sin partirse en varias líneas. */
+.memo-cell {
+    white-space: nowrap;
 }

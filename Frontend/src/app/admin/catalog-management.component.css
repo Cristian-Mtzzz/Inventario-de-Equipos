@@ -14,6 +14,7 @@
 .catalog-tabs {
     display: flex;
     flex-wrap: wrap;
+    align-items: flex-end;
     gap: .35rem;
     border-bottom: 1px solid var(--catalog-line);
 }
@@ -82,6 +83,14 @@
 .catalog-search-button:hover {
     border-color: var(--catalog-teal);
     background: var(--catalog-soft);
+}
+
+/* En la línea de las pestañas, alineado a la derecha. */
+.catalog-tabs .catalog-search-button {
+    min-height: 2.4rem;
+    margin: 0 0 .35rem auto;
+    border: 1px solid #aac9c1;
+    border-radius: 4px;
 }
 
 .catalog-search-button svg {

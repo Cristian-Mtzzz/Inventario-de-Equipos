@@ -37,7 +37,7 @@ export class PagePipe implements PipeTransform {
     :host {
       display: flex;
       justify-content: flex-end;
-      margin-bottom: .6rem;
+      margin-bottom: .3rem;
     }
     .table-page-size {
       display: inline-flex;

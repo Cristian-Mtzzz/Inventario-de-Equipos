@@ -249,6 +249,7 @@ export class TallerComponent {
     this.activeWindow = 'reception';
   }
 
+
   private loadReceptionDefaults(): void {
     this.tallerService.getReceptionDefaults().subscribe({
       next: (defaults) => {
