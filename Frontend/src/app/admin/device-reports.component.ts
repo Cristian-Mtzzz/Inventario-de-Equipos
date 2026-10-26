@@ -1,16 +1,12 @@
 import { ChangeDetectorRef, Component, inject, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import type ExcelJS from 'exceljs';
 import { catchError, finalize, forkJoin, from, map, mergeMap, of, switchMap, toArray } from 'rxjs';
+import { ReportColumn, addReportSheet, cellText, createReportWorkbook, downloadReportWorkbook, excelDate, generatedAt, reportFileName } from '../shared/excel-report';
 import { AdminService } from './admin.service';
 import { Area, Building, Device, DevicePageQuery, DeviceType, RegionalOption } from './admin.models';
 
 // El endpoint admite hasta 500 filas por página; se usa para reducir las consultas de exportación.
 const REPORT_PAGE_SIZE = 500;
-const REPORT_COLUMNS = [
-  'ID', 'Número de ingreso / combo', 'Inventario', 'Número de serie', 'Marca', 'Modelo', 'Tipo', 'Estado',
-  'Número de pago asignado', 'Nombre asignado', 'Regional', 'Edificio', 'Área',
-];
 // Valor del filtro de tipo que exporta solo las piezas de combos de escritorio.
 const COMBO_TYPE = 'COMBOS';
 type ReportType = 'all' | 'type' | 'brand' | 'state' | 'regional' | 'building' | 'area';
@@ -218,7 +214,7 @@ export class DeviceReportsComponent {
   }
 
   private reportFilename(): string {
-    return `reporte-dispositivos-${new Date().toISOString().slice(0, 10)}.xlsx`;
+    return reportFileName('dispositivos');
   }
 
   private buildQuery(page: number): DevicePageQuery {
@@ -243,90 +239,35 @@ export class DeviceReportsComponent {
     };
   }
 
+  // Mismas columnas y celdas que la tabla de dispositivos de la vista web; ExcelJS se carga solo al exportar.
   private async createWorkbook(devices: Device[]): Promise<void> {
-    // Crea el archivo en el navegador; ExcelJS se importa aquí para no cargarlo con el panel.
-    const { default: ExcelJSModule } = await import('exceljs');
-    const workbook = new ExcelJSModule.Workbook();
-    workbook.creator = 'Sistema de Inventario';
-    workbook.created = new Date();
-    workbook.subject = 'Reporte de dispositivos';
-    workbook.title = 'Reporte de dispositivos';
-
-    this.addDevicesSheet(workbook, devices);
-
-    const buffer = await workbook.xlsx.writeBuffer();
-    const workbookBytes = new Uint8Array(buffer as ArrayBuffer);
-    const file = new Blob([workbookBytes.buffer], {
-      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    });
-    const url = URL.createObjectURL(file);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = this.reportFilename();
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
-  }
-
-  // Deja una sola hoja de detalle para que el archivo abra directamente en los dispositivos.
-  private addDevicesSheet(workbook: ExcelJS.Workbook, devices: Device[]): void {
-    const sheet = workbook.addWorksheet('Dispositivos', { properties: { tabColor: { argb: 'FF4F8A83' } } });
-    const namesByPayment = new Map<string, string>();
-    devices.forEach((device) => {
-      const payment = device.NumeroPagoAsignado?.trim() ?? '';
-      const name = device.AsignadoA?.trim() || device.NombreAsignado?.trim() || '';
-      if (payment && name && !namesByPayment.has(payment)) namesByPayment.set(payment, name);
-    });
-
-    const lastColumn = sheet.getColumn(REPORT_COLUMNS.length).letter;
-    sheet.mergeCells(`A1:${lastColumn}1`);
-    sheet.getCell('A1').value = 'DETALLE DE DISPOSITIVOS';
-    sheet.getCell('A1').font = { name: 'Aptos Display', size: 16, bold: true, color: { argb: 'FFFFFFFF' } };
-    sheet.getCell('A1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF173F43' } };
-    sheet.getCell('A1').alignment = { vertical: 'middle' };
-    sheet.getRow(1).height = 31;
+    const workbook = await createReportWorkbook('Reporte de dispositivos');
+    const columns: ReportColumn<Device>[] = [
+      { header: 'No. ingreso / combo', width: 20, value: (device) => device.NumeroIngreso || device.NCombo || '-' },
+      { header: 'Equipo', width: 26, value: (device) => (device.NombreTipo || '-') + (device.Componente ? ` · ${device.Componente}` : '') },
+      { header: 'Marca', width: 16, value: (device) => cellText(device.Marca) },
+      { header: 'Modelo', width: 20, value: (device) => cellText(device.Modelo) },
+      { header: 'Serie', width: 22, value: (device) => device.NoSerie },
+      { header: 'Inventario', width: 14, value: (device) => device.CodigoInventario },
+      { header: 'Asignado a', width: 34, value: (device) => device.AsignadoA || 'Sin asignar' },
+      { header: 'No. pago', width: 12, value: (device) => cellText(device.NumeroPagoAsignado) },
+      {
+        header: 'Área', width: 44,
+        value: (device) => (device.NombreArea ? device.NombreArea + (device.NombreEdificio ? ` · ${device.NombreEdificio}` : '') : '-'),
+      },
+      { header: 'Fecha asignación', width: 18, format: 'date', value: (device) => excelDate(device.FechaAsignacion) },
+    ];
     // La segunda fila deja constancia de los criterios con los que se generó el archivo.
-    sheet.mergeCells(`A2:${lastColumn}2`);
     const filters = this.appliedFilters().map(([label, value]) => `${label}: ${value}`).join(' · ');
-    sheet.getCell('A2').value = `${devices.length} dispositivos · ${filters} · Generado ${new Date().toLocaleString('es-HN')}`;
-    sheet.getCell('A2').font = { name: 'Aptos', size: 10, color: { argb: 'FF617573' }, italic: true };
-
-    sheet.addTable({
-      name: 'ReporteDispositivos',
-      ref: 'A4',
-      headerRow: true,
-      totalsRow: false,
-      style: { theme: 'TableStyleMedium2', showRowStripes: true },
-      columns: REPORT_COLUMNS.map((name) => ({ name })),
-      rows: devices.map((device) => {
-        const payment = device.NumeroPagoAsignado?.trim() ?? '';
-        const assignedName = device.AsignadoA?.trim()
-          || device.NombreAsignado?.trim()
-          || namesByPayment.get(payment)
-          || (device.Estado.trim().toUpperCase() === 'ASIGNADO' ? 'Sin nombre registrado' : '');
-        return [
-          device.IdEquipo,
-          device.NumeroIngreso || device.NCombo || '',
-          device.CodigoInventario,
-          device.NoSerie,
-          device.Marca,
-          device.Modelo,
-          [device.NombreTipo || device.IdTipo || '', device.Componente].filter(Boolean).join(' · '),
-          device.Estado,
-          device.NumeroPagoAsignado?.trim() ?? '',
-          assignedName,
-          device.NombreRegional?.trim() ?? '',
-          device.NombreEdificio?.trim() ?? '',
-          device.NombreArea?.trim() ?? '',
-        ];
-      }),
+    addReportSheet(workbook, {
+      sheetName: 'Dispositivos',
+      title: 'REPORTE DE DISPOSITIVOS',
+      subtitle: `${devices.length} dispositivos · ${filters} · ${generatedAt()}`,
+      tableName: 'ReporteDispositivos',
+      columns,
+      rows: devices,
     });
-
-    [12, 24, 22, 24, 18, 20, 22, 16, 22, 34, 25, 30, 34].forEach((width, index) => {
-      sheet.getColumn(index + 1).width = width;
-    });
-    sheet.views = [{ state: 'frozen', ySplit: 4 }];
+    await downloadReportWorkbook(workbook, this.reportFilename());
   }
 
   private appliedFilters(): Array<[string, string]> {

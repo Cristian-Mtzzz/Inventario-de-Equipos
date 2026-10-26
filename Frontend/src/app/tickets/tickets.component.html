@@ -1,0 +1,305 @@
+<!-- Tickets de soporte. El mismo componente funciona solo (/tickets) o dentro del panel
+  administrativo; el rol decide qué acciones aparecen en la tabla. -->
+<main class="workshop-shell tickets-shell" [class.embedded]="embedded">
+  @if (!embedded) {
+  <app-header moduleName="Tickets" (refresh)="refreshPanel()" (logout)="logout()" />
+  <div class="workshop-header panel-heading">
+    <p class="eyebrow">SOPORTE A CLIENTES</p>
+    <h1>{{ isTechnician ? 'Mis tareas asignadas' : 'Tickets de soporte' }}</h1>
+  </div>
+  <app-module-tabs current="TICKETS" />
+  }
+
+  @if (message) { <p class="feedback success" role="status">{{ message }}</p> }
+  @if (errorMessage) { <p class="feedback error" role="alert">{{ errorMessage }}</p> }
+
+  <section class="workshop-section">
+    <div class="workshop-actions">
+      <div>
+        <p class="eyebrow">OPERACIONES</p>
+        <h2>Seguimiento de solicitudes</h2>
+      </div>
+      <div class="workshop-actions-group">
+        <input type="search" class="tickets-search" [ngModel]="searchTerm" (ngModelChange)="updateSearch($event)"
+          name="ticketSearch" placeholder="Buscar por empleado, técnico o detalle" aria-label="Buscar tickets" />
+        <app-table-page-size [(page)]="ticketPage" [(pageSize)]="ticketPageSize" />
+        @if (isTicketManager) {
+        <button type="button" class="secondary" (click)="openReportWindow()" [disabled]="isExporting">Exportar reporte</button>
+        <button type="button" (click)="openCreateWindow()" [disabled]="isSaving">Crear ticket</button>
+        }
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="tickets-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>FECHA Y HORA</th>
+            <th>REGIÓN</th>
+            <th>EDIFICIO</th>
+            <th>DEPARTAMENTO</th>
+            <th>EMPLEADO</th>
+            <th>TIPO DE SOPORTE</th>
+            <th>DETALLE</th>
+            <th>TÉCNICO</th>
+            <th>ESTADO</th>
+            <th>TIEMPO ACTIVO</th>
+            <th>FINALIZACIÓN</th>
+            <th>TIEMPO</th>
+            <th>VALORACIÓN</th>
+            <th>OBSERVACIONES</th>
+            <th>ACCIONES</th>
+          </tr>
+        </thead>
+        <tbody>
+          @if (isLoading && tickets.length === 0) {
+          <tr><td colspan="16" class="empty">Cargando tickets...</td></tr>
+          } @else if (filteredTickets.length === 0) {
+          <tr><td colspan="16" class="empty">Todavía no hay tickets registrados.</td></tr>
+          } @else {
+          @for (ticket of filteredTickets | page: ticketPage : ticketPageSize; track ticket.IdTicket) {
+          <tr [class.ticket-done]="!isOpen(ticket)">
+            <td>{{ ticket.IdTicket }}</td>
+            <td>{{ ticket.FechaCreacion | date:'dd/MM/yy h:mm a' }}</td>
+            <td>{{ display(ticket.Region) }}</td>
+            <td>{{ display(ticket.Edificio) }}</td>
+            <td>{{ display(ticket.Departamento) }}</td>
+            <td>{{ ticket.Empleado }}</td>
+            <td>{{ supportTypeLabel(ticket.TipoSoporte) }}</td>
+            <td class="ticket-detail-cell">{{ ticket.Detalle }}</td>
+            <td>{{ display(ticket.Tecnico) }}</td>
+            <td>
+              <span class="ticket-state" [class]="'ticket-state ' + alertLevel(ticket)">{{ ticket.Estado }}</span>
+            </td>
+            <td class="ticket-timer" [class]="'ticket-timer ' + alertLevel(ticket)">{{ activeElapsed(ticket) }}</td>
+            <td>{{ ticket.FechaFinalizacion ? (ticket.FechaFinalizacion | date:'dd/MM/yy h:mm a') : '-' }}</td>
+            <td>{{ elapsed(ticket) }}</td>
+            <td>{{ display(ticket.Valoracion) }}</td>
+            <td class="ticket-detail-cell">{{ display(ticket.Observaciones) }}</td>
+            <td class="ticket-row-actions">
+              @if (isOpen(ticket)) {
+                @if (isTicketManager) {
+                <button type="button" class="secondary" (click)="openEditWindow(ticket)">Editar</button>
+                <button type="button" class="secondary" (click)="openReassignWindow(ticket)">Reasignar</button>
+                }
+                <button type="button" class="secondary" (click)="openFinishWindow(ticket)"
+                  [disabled]="isSaving">Finalizar tarea</button>
+              } @else {
+              <span class="ticket-done-label">Completado</span>
+              }
+            </td>
+          </tr>
+          }
+          }
+        </tbody>
+      </table>
+    </div>
+    <app-table-paginator [total]="filteredTickets.length" [(page)]="ticketPage" [pageSize]="ticketPageSize"
+      label="Paginación de tickets" />
+  </section>
+
+  <!-- Alta y edición del ticket. La fecha y hora las pone el sistema al guardar. -->
+  @if (activeWindow === 'create') {
+  <div class="modal-backdrop" role="presentation">
+    <section class="workshop-modal" role="dialog" aria-modal="true" aria-labelledby="ticket-form-title"
+      (click)="$event.stopPropagation()">
+      <div class="modal-heading">
+        <div>
+          <p class="eyebrow">{{ editingTicketId === null ? 'NUEVA SOLICITUD' : 'EDITAR SOLICITUD' }}</p>
+          <h2 id="ticket-form-title">{{ editingTicketId === null ? 'Crear ticket' : 'Editar ticket' }}</h2>
+          <p class="modal-subtitle">La fecha y hora se registran automáticamente.</p>
+        </div>
+        <button type="button" class="modal-close" aria-label="Cerrar ventana" (click)="closeWindow()">×</button>
+      </div>
+      <form (ngSubmit)="saveTicket()">
+        @if (errorMessage) { <p class="feedback error" role="alert">{{ errorMessage }}</p> }
+
+        <h3 class="form-section-title">Datos del usuario</h3>
+        <!-- Primero se busca al empleado; su ubicación completa Regional, Edificio y Departamento. -->
+        <!-- Tras elegir, el botón muestra el nombre del empleado; al pulsarlo se puede cambiar. -->
+        <label>Nombre del empleado</label>
+        <app-employee-lookup [label]="selectedEmployee?.NombreCompleto ?? 'Buscar empleado'" (selected)="selectEmployee($event)" />
+
+        <label for="ticket-regional">Regional</label>
+        <input id="ticket-regional" type="text" class="readonly-field" readonly tabindex="-1"
+          [value]="selectedEmployee ? (selectedEmployee.Regional || 'Sin regional') : ''" />
+
+        <label for="ticket-building">Edificio</label>
+        <input id="ticket-building" type="text" class="readonly-field" readonly tabindex="-1"
+          [value]="selectedEmployee ? (selectedEmployee.Edificio || 'Sin edificio') : ''" />
+
+        <label for="ticket-area">Departamento</label>
+        <input id="ticket-area" type="text" class="readonly-field" readonly tabindex="-1"
+          [value]="selectedEmployee ? (selectedEmployee.Departamento || 'Sin departamento') : ''" />
+        @if (selectedEmployeeNeedsPayment) {
+        <p class="feedback warning" role="status">
+          Este empleado no tiene No. de pago registrado, así que el técnico no podrá confirmar el cierre.
+          Asígnaselo primero en el módulo Empleados.
+        </p>
+        }
+
+        <label for="ticket-support-type">Tipo de soporte</label>
+        <select id="ticket-support-type" [(ngModel)]="form.TipoSoporte" name="ticketSupportType" required>
+          <option value="">Selecciona el tipo de soporte</option>
+          @for (type of supportTypes; track type.value) { <option [value]="type.value">{{ type.label }}</option> }
+        </select>
+
+        <label for="ticket-detail">Detalle de la solicitud</label>
+        <textarea id="ticket-detail" [(ngModel)]="form.Detalle" name="ticketDetail" rows="4" maxlength="2000"
+          placeholder="Describe el servicio o soporte solicitado" required></textarea>
+
+        <h3 class="form-section-title">Asignación</h3>
+        <label for="ticket-technician">Técnico</label>
+        <select id="ticket-technician" [(ngModel)]="form.IdTecnico" name="ticketTechnician" required>
+          <option [ngValue]="0">Selecciona un técnico</option>
+          @for (technician of technicians; track technician.IdUsuario) {
+          <option [ngValue]="technician.IdUsuario">{{ technician.Nombre }}</option>
+          }
+        </select>
+        @if (hasNoTechnicians) {
+        <p class="feedback warning" role="status">
+          No hay técnicos de tickets activos. Crea un usuario con el rol
+          <strong>Técnico de tickets</strong> en el módulo Usuarios.
+        </p>
+        }
+
+        <button type="submit" [disabled]="isSaving">
+          {{ isSaving ? 'Guardando...' : (editingTicketId === null ? 'Crear' : 'Guardar cambios') }}
+        </button>
+      </form>
+    </section>
+  </div>
+  }
+
+  <!-- Cambio de técnico de un ticket abierto. -->
+  @if (activeWindow === 'reassign' && selectedTicket) {
+  <div class="modal-backdrop" role="presentation">
+    <section class="workshop-modal" role="dialog" aria-modal="true" aria-labelledby="ticket-reassign-title"
+      (click)="$event.stopPropagation()">
+      <div class="modal-heading">
+        <div>
+          <p class="eyebrow">REASIGNAR</p>
+          <h2 id="ticket-reassign-title">Cambiar técnico</h2>
+          <p class="modal-subtitle">Ticket #{{ selectedTicket.IdTicket }} · {{ selectedTicket.Empleado }}</p>
+        </div>
+        <button type="button" class="modal-close" aria-label="Cerrar ventana" (click)="closeWindow()">×</button>
+      </div>
+      <form (ngSubmit)="saveReassignment()">
+        @if (errorMessage) { <p class="feedback error" role="alert">{{ errorMessage }}</p> }
+        <label for="reassign-technician">Técnico</label>
+        <select id="reassign-technician" [(ngModel)]="reassignTechnicianId" name="reassignTechnician" required>
+          <option [ngValue]="0">Selecciona un técnico</option>
+          @for (technician of technicians; track technician.IdUsuario) {
+          <option [ngValue]="technician.IdUsuario">{{ technician.Nombre }}</option>
+          }
+        </select>
+        @if (hasNoTechnicians) {
+        <p class="feedback warning" role="status">
+          No hay técnicos de tickets activos. Crea un usuario con el rol
+          <strong>Técnico de tickets</strong> en el módulo Usuarios.
+        </p>
+        }
+        <button type="submit" [disabled]="isSaving">{{ isSaving ? 'Guardando...' : 'Reasignar' }}</button>
+      </form>
+    </section>
+  </div>
+  }
+
+  <!-- Cierre de la tarea. El No. de pago confirma que el servicio se dio. -->
+  @if (activeWindow === 'finish' && selectedTicket) {
+  <div class="modal-backdrop" role="presentation">
+    <section class="workshop-modal" role="dialog" aria-modal="true" aria-labelledby="ticket-finish-title"
+      (click)="$event.stopPropagation()">
+      <div class="modal-heading">
+        <div>
+          <p class="eyebrow">CIERRE DE TAREA</p>
+          <h2 id="ticket-finish-title">Finalizar tarea</h2>
+          <p class="modal-subtitle">Ticket #{{ selectedTicket.IdTicket }} · {{ selectedTicket.Empleado }}</p>
+        </div>
+        <button type="button" class="modal-close" aria-label="Cerrar ventana" (click)="closeWindow()">×</button>
+      </div>
+      <form (ngSubmit)="saveFinish()">
+        @if (errorMessage) { <p class="feedback error" role="alert">{{ errorMessage }}</p> }
+        <label for="finish-observations">Observaciones del soporte</label>
+        <textarea id="finish-observations" [(ngModel)]="finish.Observaciones" name="finishObservations" rows="4"
+          maxlength="2000" placeholder="Qué se hizo y cómo quedó"></textarea>
+
+        <fieldset class="finish-rating">
+          <legend>Valoración de la ayuda</legend>
+          <label class="rating-option" [class.selected]="finish.Valoracion === 'BUENO'">
+            <input type="radio" name="finishRating" value="BUENO" [(ngModel)]="finish.Valoracion" />
+            <span>Bueno</span>
+          </label>
+          <label class="rating-option" [class.selected]="finish.Valoracion === 'MALO'">
+            <input type="radio" name="finishRating" value="MALO" [(ngModel)]="finish.Valoracion" />
+            <span>Malo</span>
+          </label>
+        </fieldset>
+
+        <!-- Al final: el empleado lo escribe para confirmar que el soporte se dio. -->
+        <label for="finish-payment">No. de pago del empleado</label>
+        <input appDigitsOnly id="finish-payment" type="text" inputmode="numeric" maxlength="5"
+          [(ngModel)]="finish.NoPago" name="finishPayment" placeholder="Lo proporciona el empleado atendido" required />
+        <p class="field-hint">Solo el empleado lo conoce; sirve para confirmar que el soporte se dio.</p>
+
+        <button type="submit" [disabled]="isSaving">{{ isSaving ? 'Finalizando...' : 'Finalizar' }}</button>
+      </form>
+    </section>
+  </div>
+  }
+
+  <!-- Exportación a Excel: se eligen los filtros y se descarga el reporte con su resumen. -->
+  @if (activeWindow === 'report') {
+  <div class="modal-backdrop" role="presentation">
+    <section class="workshop-modal" role="dialog" aria-modal="true" aria-labelledby="ticket-report-title"
+      (click)="$event.stopPropagation()">
+      <div class="modal-heading">
+        <div>
+          <p class="eyebrow">REPORTE</p>
+          <h2 id="ticket-report-title">Exportar reporte de tickets</h2>
+          <p class="modal-subtitle">Excel con el detalle de los tickets y una hoja de resumen por tipo de soporte y técnico.</p>
+        </div>
+        <button type="button" class="modal-close" aria-label="Cerrar ventana" (click)="closeWindow()">×</button>
+      </div>
+      <form (ngSubmit)="exportReport()">
+        @if (errorMessage) { <p class="feedback error" role="alert">{{ errorMessage }}</p> }
+        <div class="report-date-range">
+          <div>
+            <label for="report-from">Desde</label>
+            <input id="report-from" type="date" [(ngModel)]="reportFilters.desde" name="reportFrom" />
+          </div>
+          <div>
+            <label for="report-to">Hasta</label>
+            <input id="report-to" type="date" [(ngModel)]="reportFilters.hasta" name="reportTo" />
+          </div>
+        </div>
+
+        <label for="report-state">Estado</label>
+        <select id="report-state" [(ngModel)]="reportFilters.estado" name="reportState">
+          <option value="">Todos</option>
+          <option value="PENDIENTE">Pendientes</option>
+          <option value="FINALIZADO">Finalizados</option>
+        </select>
+
+        <label for="report-type">Tipo de soporte</label>
+        <select id="report-type" [(ngModel)]="reportFilters.tipoSoporte" name="reportType">
+          <option value="">Todos</option>
+          @for (type of supportTypes; track type.value) { <option [value]="type.value">{{ type.label }}</option> }
+        </select>
+
+        <label for="report-technician">Técnico</label>
+        <select id="report-technician" [(ngModel)]="reportFilters.idTecnico" name="reportTechnician">
+          <option [ngValue]="0">Todos</option>
+          @for (technician of technicians; track technician.IdUsuario) {
+          <option [ngValue]="technician.IdUsuario">{{ technician.Nombre }}</option>
+          }
+        </select>
+
+        <p class="field-hint">{{ reportCount }} ticket(s) cumplen los filtros.</p>
+        <button type="submit" [disabled]="isExporting">{{ isExporting ? 'Generando...' : 'Exportar a Excel' }}</button>
+      </form>
+    </section>
+  </div>
+  }
+</main>

@@ -6,8 +6,11 @@ namespace SistemaInventario.Api.Services;
 public interface IEmployeeService
 {
     Task<IReadOnlyList<EmployeeSearchDto>> SearchEmployees(string searchTerm, CancellationToken cancellationToken);
+    Task<IReadOnlyList<EmployeeLookupDto>> LookupEmployees(string searchTerm, CancellationToken cancellationToken);
     Task<IReadOnlyList<EmployeeOptionDto>> GetEmployeeOptions(int idArea, CancellationToken cancellationToken);
     Task<IReadOnlyList<DirectoryEmployeeDto>> GetDirectoryEmployees(CancellationToken cancellationToken);
+    Task<IReadOnlyList<EmployeeRosterDto>> GetEmployeeRoster(CancellationToken cancellationToken);
+    Task<bool> SetEmployeePaymentNumber(string employeeKey, string? noPago, CancellationToken cancellationToken);
     Task<bool> UpdateEmployee(string noPagoActual, UpdateEmployeeDto employee, CancellationToken cancellationToken);
     Task CreateDirectoryEmployee(SaveDirectoryEmployeeDto employee, CancellationToken cancellationToken);
     Task<bool> DeleteDirectoryEmployee(string noPago, CancellationToken cancellationToken);

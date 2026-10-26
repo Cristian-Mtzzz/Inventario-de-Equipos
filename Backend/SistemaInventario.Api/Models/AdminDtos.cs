@@ -43,11 +43,37 @@ public sealed record EmployeeSearchDto(
     string? NombreRegional,
     IReadOnlyList<EmployeeAssignedDeviceDto> AssignedDevices);
 
+// Resultado del buscador de empleados de los formularios: identifica al empleado y trae su ubicación
+// para completar Regional, Edificio y Departamento al seleccionarlo.
+public sealed record EmployeeLookupDto(
+    int IdEmpleado,
+    string EmployeeKey,
+    string NoPago,
+    string NombreCompleto,
+    int? IdArea,
+    string? NombreArea,
+    int? IdEdificio,
+    string? NombreEdificio,
+    int? IdRegional,
+    string? NombreRegional);
+
 public sealed record UpdateEmployeeDto(string NombreCompleto, string? NoPago, int IdArea);
 
 public sealed record EmployeeOptionDto(string NoPago, string NombreCompleto, int? IdArea);
 
 public sealed record DirectoryEmployeeDto(string EmployeeKey, string NoPago, string NombreCompleto, int? IdArea);
+
+/// <summary>Empleado del módulo Empleados, con su ubicación y el No. de pago editable.</summary>
+public sealed record EmployeeRosterDto(
+    string EmployeeKey,
+    string? Region,
+    string? Edificio,
+    string? Departamento,
+    string NombreCompleto,
+    string? NoPago);
+
+/// <summary>No. de pago que se asigna a un empleado desde el módulo Empleados.</summary>
+public sealed record SetEmployeePaymentNumberDto(string? NoPago);
 
 /// <summary>Regional shown and maintained in the administrative catalog.</summary>
 public sealed record RegionalDto(int IdRegional, string NombreRegional);

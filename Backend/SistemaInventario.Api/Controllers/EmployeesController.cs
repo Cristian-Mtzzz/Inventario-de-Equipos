@@ -24,6 +24,14 @@ public sealed class EmployeesController(IEmployeeService employeeService) : Cont
             ? Ok(Array.Empty<EmployeeSearchDto>())
             : Ok(await employeeService.SearchEmployees(searchTerm, cancellationToken));
 
+    [HttpGet("employees/lookup")]
+    [Authorize(Policy = ModulePolicies.EmployeeLookup)]
+    // Buscador de empleados de los formularios: al seleccionar uno se completa su ubicación.
+    public async Task<ActionResult<IReadOnlyList<EmployeeLookupDto>>> LookupEmployees(
+        [FromQuery] string? searchTerm,
+        CancellationToken cancellationToken) =>
+        Ok(await employeeService.LookupEmployees(searchTerm ?? string.Empty, cancellationToken));
+
     [HttpGet("employees/options")]
     [Authorize(Policy = ModulePolicies.AssignmentSupport)]
     public async Task<ActionResult<IReadOnlyList<EmployeeOptionDto>>> GetEmployeeOptions(
@@ -38,6 +46,35 @@ public sealed class EmployeesController(IEmployeeService employeeService) : Cont
     public async Task<ActionResult<IReadOnlyList<DirectoryEmployeeDto>>> GetDirectoryEmployees(
         CancellationToken cancellationToken) =>
         Ok(await employeeService.GetDirectoryEmployees(cancellationToken));
+
+    [HttpGet("employees/roster")]
+    [Authorize(Policy = ModulePolicies.Employees)]
+    // Listado del módulo Empleados: ubicación, nombre y No. de pago.
+    public async Task<ActionResult<IReadOnlyList<EmployeeRosterDto>>> GetEmployeeRoster(
+        CancellationToken cancellationToken) =>
+        Ok(await employeeService.GetEmployeeRoster(cancellationToken));
+
+    [HttpPut("employees/roster/no-pago")]
+    [Authorize(Policy = ModulePolicies.Employees)]
+    // El empleado se identifica por su clave de fila porque todavía puede no tener No. de pago.
+    // Mandar el campo vacío borra el número asignado.
+    public async Task<IActionResult> SetEmployeePaymentNumber(
+        [FromQuery] string employeeKey,
+        SetEmployeePaymentNumberDto payment,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(employeeKey)) return BadRequest(new { Message = "No se identificó al empleado." });
+        var noPago = payment.NoPago?.Trim();
+        if (!string.IsNullOrEmpty(noPago) && !noPago.All(char.IsAsciiDigit))
+        {
+            return BadRequest(new { Message = "El No. de pago solo puede tener números." });
+        }
+        if (noPago?.Length > 5) return BadRequest(new { Message = "El No. de pago no puede superar 5 dígitos." });
+
+        return await employeeService.SetEmployeePaymentNumber(employeeKey, noPago, cancellationToken)
+            ? NoContent()
+            : NotFound(new { Message = EmployeeNotFound });
+    }
 
     [HttpPut("employees/{noPagoActual}")]
     [Authorize(Policy = ModulePolicies.Maintenance)]

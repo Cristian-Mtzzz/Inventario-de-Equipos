@@ -14,14 +14,16 @@ public static class AppModules
     public const string Workshop = "TALLER";
     public const string Users = "USUARIOS";
     public const string Maintenance = "MANTENIMIENTO";
+    public const string Employees = "EMPLEADOS";
+    public const string Tickets = "TICKETS";
     public const string Inventory = "INVENTARIO";
     public const string SuperAdmin = "ADMIN_TOTAL";
 
     public static readonly string[] Assignable =
-    [Devices, Reassignments, Workshop, Users, Maintenance, Inventory];
+    [Devices, Reassignments, Workshop, Users, Maintenance, Employees, Tickets, Inventory];
 
     public static readonly string[] AdminPanel =
-    [Devices, Reassignments, Workshop, Users, Maintenance];
+    [Devices, Reassignments, Workshop, Users, Maintenance, Employees, Tickets];
 }
 
 public static class ModulePolicies
@@ -32,10 +34,13 @@ public static class ModulePolicies
     public const string Workshop = "ModuleWorkshop";
     public const string Users = "ModuleUsers";
     public const string Maintenance = "ModuleMaintenance";
+    public const string Employees = "ModuleEmployees";
+    public const string Tickets = "ModuleTickets";
     public const string Inventory = "ModuleInventory";
     public const string DeviceSupport = "ModuleDeviceSupport";
     public const string AssignmentSupport = "ModuleAssignmentSupport";
     public const string LocationCatalogs = "ModuleLocationCatalogs";
+    public const string EmployeeLookup = "ModuleEmployeeLookup";
     public const string SuperAdmin = "ModuleSuperAdmin";
 }
 
@@ -71,8 +76,20 @@ public sealed class ModulePermissionService(InventoryDbContext dbContext) : IMod
         try
         {
             await using var command = dbContext.Database.GetDbConnection().CreateCommand();
-            command.CommandText = "SELECT MODULO FROM USUARIO_MODULOS WHERE ID_USUARIO = :userId";
+            // A los módulos guardados se suman los que implica el rol, para que un permiso
+            // que depende del rol valga aunque el usuario se haya creado antes de existir
+            // ese módulo y nadie lo haya vuelto a guardar.
+            command.CommandText = """
+                SELECT MODULO FROM USUARIO_MODULOS WHERE ID_USUARIO = :userId
+                UNION
+                SELECT :impliedModule FROM USUARIOS
+                WHERE ID_USUARIO = :userIdRole AND ROL = :impliedRole
+                """;
+            if (command is OracleCommand oracleCommand) oracleCommand.BindByName = true;
             AddUserId(command, userId);
+            AddUserId(command, userId, "userIdRole");
+            AddText(command, "impliedModule", AppModules.Tickets);
+            AddText(command, "impliedRole", AppRoles.TecnicoTaller);
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
             var modules = new List<string>();
             while (await reader.ReadAsync(cancellationToken))
@@ -125,12 +142,21 @@ public sealed class ModulePermissionService(InventoryDbContext dbContext) : IMod
         }
     }
 
-    private static void AddUserId(System.Data.Common.DbCommand command, int userId)
+    private static void AddUserId(System.Data.Common.DbCommand command, int userId, string name = "userId")
     {
         var parameter = command.CreateParameter();
-        parameter.ParameterName = "userId";
+        parameter.ParameterName = name;
         parameter.DbType = DbType.Int32;
         parameter.Value = userId;
+        command.Parameters.Add(parameter);
+    }
+
+    private static void AddText(System.Data.Common.DbCommand command, string name, string value)
+    {
+        var parameter = command.CreateParameter();
+        parameter.ParameterName = name;
+        parameter.DbType = DbType.String;
+        parameter.Value = value;
         command.Parameters.Add(parameter);
     }
 }

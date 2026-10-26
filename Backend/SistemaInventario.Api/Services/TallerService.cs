@@ -20,10 +20,14 @@ public sealed class TallerService(InventoryDbContext dbContext, IConfiguration c
             ReadString(reader, "MARCA"),
             ReadString(reader, "MODELO")), cancellationToken);
 
-    public Task<IReadOnlyList<MaintenanceDto>> GetMaintenances(CancellationToken cancellationToken) =>
-        ReadList("""
-            SELECT r.ID_REPARACION, r.ID_EQUIPO, d.CODIGO_INVENTARIO, d.NO_SERIE,
-                   d.MARCA, d.MODELO, r.ID_TECNICO, td.TIPO_DISPOSITIVO, r.DICTAMEN,
+    // La reparación guarda sus propios datos del equipo (los que se capturaron al
+    // ingresarlo), por eso la tabla del taller no consulta DISPOSITIVOS: un ingreso por
+    // recepción no tiene equipo en inventario y debe verse solo aquí.
+    // Con idTecnico devuelve solo las reparaciones asignadas a ese técnico.
+    public Task<IReadOnlyList<MaintenanceDto>> GetMaintenances(int? idTecnico, CancellationToken cancellationToken) =>
+        ReadList($"""
+            SELECT r.ID_REPARACION, r.ID_EQUIPO, r.CODIGO_INVENTARIO, r.NO_SERIE,
+                   r.MARCA, r.MODELO, r.ID_TECNICO, r.TIPO_DISPOSITIVO, r.DICTAMEN,
                    r.TIPO_REPARACION, r.DETALLE_REPARACION,
                    r.FECHA_INGRESO, r.FECHA_SALIDA, r.MEMO_NUMERO,
                    r.RECIBE, r.TECNICO, r.DEPARTAMENTO, r.DESCRIPCION_EQUIPO,
@@ -31,10 +35,10 @@ public sealed class TallerService(InventoryDbContext dbContext, IConfiguration c
                    r.OBSERVACIONES, r.EQUIPO_FUNCIONAL, r.TECNICO_ENTREGA,
                    r.CLIENTE_RECIBE, r.FECHA_ENTREGA
             FROM REPARACION r
-            INNER JOIN DISPOSITIVOS d ON d.ID_EQUIPO = r.ID_EQUIPO
-            LEFT JOIN TIPOS_DISPOSITIVOS td ON td.ID_TIPO = d.ID_TIPO
+            {(idTecnico is null ? string.Empty : "WHERE r.ID_TECNICO = :idTecnico")}
             ORDER BY r.FECHA_INGRESO DESC
-            """, ReadMaintenance, cancellationToken);
+            """, ReadMaintenance, cancellationToken,
+            idTecnico is null ? [] : [("idTecnico", idTecnico)]);
 
     // "Recibe" es el usuario que registra y el técnico es el configurado en Taller:TecnicoRecepcion;
     // ambos los decide el servidor, no el formulario.
@@ -47,7 +51,6 @@ public sealed class TallerService(InventoryDbContext dbContext, IConfiguration c
             || string.IsNullOrWhiteSpace(reception.Modelo)
             || string.IsNullOrWhiteSpace(reception.TipoDispositivo)
             || string.IsNullOrWhiteSpace(reception.DescripcionEquipo)
-            || string.IsNullOrWhiteSpace(reception.EquipoEnGarantia)
             || reception.IdEdificio <= 0)
         {
             throw new InvalidOperationException("Completa todos los campos obligatorios del formato de recepción.");
@@ -58,108 +61,99 @@ public sealed class TallerService(InventoryDbContext dbContext, IConfiguration c
 
         await InTransaction(async (connection, transaction) =>
         {
-            var codigo = reception.CodigoInventario.Trim();
-            var tipo = reception.TipoDispositivo.Trim();
-            var defaultArea = await GetDefaultAreaForBuilding(connection, transaction, reception.IdEdificio, cancellationToken) ?? 1;
-            var areaId = reception.IdArea > 0
-                ? await GetAreaForBuilding(connection, transaction, reception.IdEdificio, reception.IdArea, cancellationToken)
-                : defaultArea;
-            var tipoId = await GetOrCreateDeviceType(connection, transaction, tipo, cancellationToken);
-            var idEquipo = await GetDeviceIdByCode(connection, transaction, codigo, cancellationToken);
-
-            if (idEquipo is null)
-            {
-                idEquipo = await NextId(connection, transaction, "DISPOSITIVOS", "ID_EQUIPO", cancellationToken);
-                await Execute(connection, transaction, """
-                    INSERT INTO DISPOSITIVOS
-                        (ID_EQUIPO, CODIGO_INVENTARIO, NO_SERIE, MARCA, MODELO, ID_TIPO,
-                         ESTADO, NUMERO_PAGO_ASIGNADO, NOMBRE_ASIGNADO, ID_AREA)
-                    VALUES
-                        (:idEquipo, :codigo, :noSerie, :marca, :modelo,
-                         :tipo, 'DISPONIBLE', NULL, NULL, :area)
-                    """, cancellationToken,
-                    ("idEquipo", idEquipo.Value), ("codigo", codigo), ("noSerie", reception.NoSerie.Trim()),
-                    ("marca", reception.Marca.Trim()), ("modelo", reception.Modelo.Trim()),
-                    ("tipo", tipoId), ("area", areaId));
-            }
-            else
-            {
-                await Execute(connection, transaction, """
-                    UPDATE DISPOSITIVOS
-                    SET ID_TIPO = :tipo,
-                        NO_SERIE = :noSerie,
-                        MARCA = :marca,
-                        MODELO = :modelo,
-                        ID_AREA = :area,
-                        ESTADO = 'DISPONIBLE'
-                    WHERE ID_EQUIPO = :idEquipo
-                    """, cancellationToken,
-                    ("tipo", tipoId), ("noSerie", reception.NoSerie.Trim()),
-                    ("marca", reception.Marca.Trim()), ("modelo", reception.Modelo.Trim()),
-                    ("area", areaId), ("idEquipo", idEquipo.Value));
-            }
+            // La recepción es solo un control de ingreso: no crea ni modifica el equipo en
+            // DISPOSITIVOS (muchas veces ya está ahí), así que los datos capturados se
+            // guardan en la propia reparación y ID_EQUIPO queda vacío.
+            var departamento = reception.IdArea > 0
+                ? await GetDepartmentName(connection, transaction, reception.IdEdificio, reception.IdArea, cancellationToken)
+                : string.IsNullOrWhiteSpace(reception.Departamento) ? "-" : reception.Departamento.Trim();
 
             var fechaIngreso = reception.FechaIngreso == default ? DateTime.Now : reception.FechaIngreso;
-            var departamento = string.IsNullOrWhiteSpace(reception.Departamento) ? "-" : reception.Departamento.Trim();
             var idReparacion = await NextId(connection, transaction, "REPARACION", "ID_REPARACION", cancellationToken);
             await Execute(connection, transaction, """
                 INSERT INTO REPARACION
                     (ID_REPARACION, ID_EQUIPO, ID_TECNICO, FECHA_INGRESO,
                      DICTAMEN, TIPO_REPARACION, DETALLE_REPARACION, MEMO_NUMERO,
                      RECIBE, TECNICO, DEPARTAMENTO,
-                     DESCRIPCION_EQUIPO, EQUIPO_EN_GARANTIA)
+                     DESCRIPCION_EQUIPO, EQUIPO_EN_GARANTIA,
+                     CODIGO_INVENTARIO, NO_SERIE, MARCA, MODELO, TIPO_DISPOSITIVO)
                 VALUES
-                    (:idReparacion, :idEquipo, :idTecnico,
+                    (:idReparacion, NULL, :idTecnico,
                      :fechaIngreso, :dictamen, :tipoReparacion, 'PENDIENTE', :memoNumero,
                      :recibe, :tecnico, :departamento,
-                     :descripcionEquipo, :equipoEnGarantia)
+                     :descripcionEquipo, :equipoEnGarantia,
+                     :codigo, :noSerie, :marca, :modelo, :tipoDispositivo)
                 """, cancellationToken,
                 ("idReparacion", idReparacion),
-                ("idEquipo", idEquipo.Value), ("idTecnico", technician?.IdUsuario ?? 0), ("fechaIngreso", fechaIngreso),
-                ("dictamen", "PENDIENTE"), ("tipoReparacion", tipo),
+                ("idTecnico", technician?.IdUsuario ?? 0), ("fechaIngreso", fechaIngreso),
+                ("dictamen", "PENDIENTE"), ("tipoReparacion", reception.TipoDispositivo.Trim()),
                 ("memoNumero", reception.MemoNumero?.Trim()),
                 ("recibe", receiver),
-                ("tecnico", technician?.Nombre ?? "Sin asignar"), ("departamento", departamento),
+                ("tecnico", ReceptionTechnicianName(technician)), ("departamento", departamento),
                 ("descripcionEquipo", reception.DescripcionEquipo.Trim()),
-                ("equipoEnGarantia", reception.EquipoEnGarantia.Trim().ToUpperInvariant()));
+                ("equipoEnGarantia", string.IsNullOrWhiteSpace(reception.EquipoEnGarantia) ? null : reception.EquipoEnGarantia.Trim().ToUpperInvariant()),
+                ("codigo", reception.CodigoInventario.Trim()), ("noSerie", reception.NoSerie.Trim()),
+                ("marca", reception.Marca.Trim()), ("modelo", reception.Modelo.Trim()),
+                ("tipoDispositivo", reception.TipoDispositivo.Trim()));
         }, cancellationToken);
     }
 
     public Task CreateMaintenance(int idTecnico, CreateMaintenanceEntryDto maintenance, CancellationToken cancellationToken) =>
-        // Abre una reparación y deja el detalle inicial como pendiente.
+        // Abre una reparación y deja el detalle inicial como pendiente. Copia los datos del
+        // equipo elegido para que la tabla del taller los muestre sin consultar DISPOSITIVOS.
         InTransaction(async (connection, transaction) =>
         {
             var idReparacion = await NextId(connection, transaction, "REPARACION", "ID_REPARACION", cancellationToken);
-            await Execute(connection, transaction, """
+            var inserted = await Execute(connection, transaction, """
                 INSERT INTO REPARACION
                     (ID_REPARACION, ID_EQUIPO, ID_TECNICO, FECHA_INGRESO,
-                     DICTAMEN, TIPO_REPARACION, DETALLE_REPARACION)
-                VALUES
-                    (:idReparacion, :idEquipo, :idTecnico,
-                     :fechaIngreso, :dictamen, :tipoReparacion, 'PENDIENTE')
+                     DICTAMEN, TIPO_REPARACION, DETALLE_REPARACION,
+                     CODIGO_INVENTARIO, NO_SERIE, MARCA, MODELO, TIPO_DISPOSITIVO)
+                SELECT :idReparacion, d.ID_EQUIPO, :idTecnico,
+                       :fechaIngreso, :dictamen, :tipoReparacion, 'PENDIENTE',
+                       d.CODIGO_INVENTARIO, d.NO_SERIE, d.MARCA, d.MODELO, t.TIPO_DISPOSITIVO
+                FROM DISPOSITIVOS d
+                LEFT JOIN TIPOS_DISPOSITIVOS t ON t.ID_TIPO = d.ID_TIPO
+                WHERE d.ID_EQUIPO = :idEquipo
                 """, cancellationToken,
                 ("idReparacion", idReparacion),
-                ("idEquipo", maintenance.IdEquipo), ("idTecnico", idTecnico),
+                ("idTecnico", idTecnico),
                 ("fechaIngreso", maintenance.FechaIngreso),
                 ("dictamen", string.IsNullOrWhiteSpace(maintenance.Dictamen) ? "PENDIENTE" : maintenance.Dictamen.Trim()),
-                ("tipoReparacion", maintenance.TipoReparacion));
+                ("tipoReparacion", maintenance.TipoReparacion),
+                ("idEquipo", maintenance.IdEquipo));
+
+            // Sin equipo que copiar no se insertó nada; avisar en lugar de responder como si sí.
+            if (inserted == 0) throw new ArgumentException("El equipo seleccionado no existe.");
         }, cancellationToken);
 
     public async Task<bool> UpdateMaintenanceAssessment(
         int idMantenimiento,
         UpdateMaintenanceAssessmentDto assessment,
-        CancellationToken cancellationToken) =>
-        await Execute("""
-            UPDATE REPARACION
-            SET DICTAMEN = :dictamen,
-                PIEZAS_SUSTITUIDAS = :piezasSustituidas,
-                OBSERVACIONES = :observaciones
-            WHERE ID_REPARACION = :idReparacion
-            """, cancellationToken,
+        int? idTecnico,
+        CancellationToken cancellationToken)
+    {
+        var parameters = new List<(string Name, object? Value)>
+        {
             ("dictamen", assessment.Dictamen?.Trim()),
             ("piezasSustituidas", assessment.PiezasSustituidas?.Trim()),
             ("observaciones", assessment.Observaciones?.Trim()),
-            ("idReparacion", idMantenimiento)) > 0;
+            ("equipoEnGarantia", string.IsNullOrWhiteSpace(assessment.EquipoEnGarantia) ? null : assessment.EquipoEnGarantia.Trim().ToUpperInvariant()),
+            ("idReparacion", idMantenimiento),
+        };
+        // Oracle rechaza parámetros que no aparecen en el SQL: el del técnico solo se agrega si se filtra por él.
+        if (idTecnico is not null) parameters.Add(("idTecnico", idTecnico));
+
+        return await Execute($"""
+            UPDATE REPARACION
+            SET DICTAMEN = :dictamen,
+                PIEZAS_SUSTITUIDAS = :piezasSustituidas,
+                OBSERVACIONES = :observaciones,
+                EQUIPO_EN_GARANTIA = COALESCE(:equipoEnGarantia, EQUIPO_EN_GARANTIA)
+            WHERE ID_REPARACION = :idReparacion
+            {(idTecnico is null ? string.Empty : "AND ID_TECNICO = :idTecnico")}
+            """, cancellationToken, parameters.ToArray()) > 0;
+    }
 
     public async Task<bool> RegisterMaintenanceExit(
         int idMantenimiento,
@@ -168,18 +162,19 @@ public sealed class TallerService(InventoryDbContext dbContext, IConfiguration c
         await Execute("""
             UPDATE REPARACION
             SET EQUIPO_FUNCIONAL = :equipoFuncional,
-                TECNICO_ENTREGA = COALESCE(NULLIF(TRIM(TECNICO), ''), :tecnicoEntrega),
+                TECNICO_ENTREGA = COALESCE(NULLIF(TRIM(TECNICO), ''), TECNICO_ENTREGA),
                 CLIENTE_RECIBE = :clienteRecibe,
                 FECHA_ENTREGA = :fechaEntrega,
                 FECHA_SALIDA = :fechaEntrega
             WHERE ID_REPARACION = :idReparacion
             """, cancellationToken,
             ("equipoFuncional", exit.EquipoFuncional.Trim().ToUpperInvariant()),
-            ("tecnicoEntrega", exit.TecnicoEntrega.Trim()),
             ("clienteRecibe", exit.ClienteRecibe.Trim()),
             ("fechaEntrega", exit.FechaEntrega), ("idReparacion", idMantenimiento)) > 0;
 
     public async Task<bool> EditMaintenance(int idMantenimiento, UpdateMaintenanceDto maintenance, CancellationToken cancellationToken) =>
+        // Si se cambia el equipo también se refrescan sus datos copiados en la reparación,
+        // que son los que muestra la tabla del taller.
         await Execute("""
             UPDATE REPARACION
             SET ID_EQUIPO = :idEquipo,
@@ -187,7 +182,15 @@ public sealed class TallerService(InventoryDbContext dbContext, IConfiguration c
                 TIPO_REPARACION = :tipoReparacion,
                 FECHA_INGRESO = :fechaIngreso,
                 DETALLE_REPARACION = :detalleReparacion,
-                FECHA_SALIDA = :fechaSalida
+                FECHA_SALIDA = :fechaSalida,
+                CODIGO_INVENTARIO = NVL((SELECT d.CODIGO_INVENTARIO FROM DISPOSITIVOS d WHERE d.ID_EQUIPO = :idEquipo), CODIGO_INVENTARIO),
+                NO_SERIE = NVL((SELECT d.NO_SERIE FROM DISPOSITIVOS d WHERE d.ID_EQUIPO = :idEquipo), NO_SERIE),
+                MARCA = NVL((SELECT d.MARCA FROM DISPOSITIVOS d WHERE d.ID_EQUIPO = :idEquipo), MARCA),
+                MODELO = NVL((SELECT d.MODELO FROM DISPOSITIVOS d WHERE d.ID_EQUIPO = :idEquipo), MODELO),
+                TIPO_DISPOSITIVO = NVL((SELECT t.TIPO_DISPOSITIVO
+                                        FROM DISPOSITIVOS d
+                                        LEFT JOIN TIPOS_DISPOSITIVOS t ON t.ID_TIPO = d.ID_TIPO
+                                        WHERE d.ID_EQUIPO = :idEquipo), TIPO_DISPOSITIVO)
             WHERE ID_REPARACION = :idReparacion
             """, cancellationToken,
             ("idEquipo", maintenance.IdEquipo), ("dictamen", maintenance.Dictamen),
@@ -231,7 +234,18 @@ public sealed class TallerService(InventoryDbContext dbContext, IConfiguration c
     // Valores que el formulario de recepción muestra bloqueados: quién recibe y el técnico asignado.
     public async Task<ReceptionDefaultsDto> GetReceptionDefaults(int userId, CancellationToken cancellationToken) =>
         new(await GetUserDisplayName(userId, cancellationToken),
-            (await GetReceptionTechnician(cancellationToken))?.Nombre ?? "Sin asignar");
+            ReceptionTechnicianName(await GetReceptionTechnician(cancellationToken)));
+
+    // Nombre que se guarda como técnico de la recepción. Si el usuario configurado en
+    // Taller:TecnicoRecepcion no está en USUARIOS (o perdió el rol), se usa el nombre de
+    // Taller:NombreTecnicoRecepcion: siempre es el mismo técnico quien recibe, y el
+    // formulario ya no muestra el dato para corregirlo.
+    private string ReceptionTechnicianName(WorkshopTechnicianDto? technician)
+    {
+        if (technician is not null) return technician.Nombre;
+        var configured = configuration["Taller:NombreTecnicoRecepcion"]?.Trim();
+        return string.IsNullOrWhiteSpace(configured) ? "Sin asignar" : configured;
+    }
 
     private async Task<string> GetUserDisplayName(int userId, CancellationToken cancellationToken)
     {
@@ -264,82 +278,30 @@ public sealed class TallerService(InventoryDbContext dbContext, IConfiguration c
         return technicians.FirstOrDefault();
     }
 
-    private static async Task<int> GetAreaForBuilding(
+    // Nombre del departamento de origen que se guarda en la reparación. Valida que el
+    // área pertenezca al edificio elegido para no registrar un origen inexistente.
+    private static async Task<string> GetDepartmentName(
         DbConnection connection,
         DbTransaction? transaction,
         int idEdificio,
         int idArea,
         CancellationToken cancellationToken)
     {
-        var existingId = await GetScalar<int?>(connection, transaction, """
-            SELECT DEPARTAMENTO_IHSS_ID
+        var name = await GetScalar<string?>(connection, transaction, """
+            SELECT DEPARTAMENTO_IHSS_DESC
             FROM DEPARTAMENTO_IHSS
             WHERE DEPARTAMENTO_IHSS_ID = :idArea
               AND EDIFICIO_ID = :idEdificio
             """, cancellationToken, ("idArea", idArea), ("idEdificio", idEdificio));
 
-        return existingId is > 0
-            ? existingId.Value
-            : throw new InvalidOperationException("El departamento no pertenece al edificio seleccionado.");
+        return string.IsNullOrWhiteSpace(name)
+            ? throw new InvalidOperationException("El departamento no pertenece al edificio seleccionado.")
+            : name.Trim();
     }
-
-    private static async Task<int?> GetDefaultAreaForBuilding(
-        DbConnection connection,
-        DbTransaction? transaction,
-        int idEdificio,
-        CancellationToken cancellationToken)
-    {
-        var area = await GetScalar<int?>(connection, transaction, """
-            SELECT DEPARTAMENTO_IHSS_ID
-            FROM DEPARTAMENTO_IHSS
-            WHERE EDIFICIO_ID = :idEdificio
-              AND ROWNUM = 1
-            """, cancellationToken, ("idEdificio", idEdificio));
-
-        if (area is > 0) return area;
-
-        return await GetScalar<int?>(connection, transaction, """
-            SELECT DEPARTAMENTO_IHSS_ID
-            FROM DEPARTAMENTO_IHSS
-            WHERE ROWNUM = 1
-            """, cancellationToken);
-    }
-
-    private static async Task<int> GetOrCreateDeviceType(
-        DbConnection connection,
-        DbTransaction transaction,
-        string tipoDispositivo,
-        CancellationToken cancellationToken)
-    {
-        var existingId = await GetScalar<int?>(connection, transaction, """
-            SELECT ID_TIPO
-            FROM TIPOS_DISPOSITIVOS
-            WHERE UPPER(TRIM(TIPO_DISPOSITIVO)) = UPPER(TRIM(:tipoDispositivo))
-            """, cancellationToken, ("tipoDispositivo", tipoDispositivo));
-
-        if (existingId is > 0) return existingId.Value;
-
-        var idTipo = await NextId(connection, transaction, "TIPOS_DISPOSITIVOS", "ID_TIPO", cancellationToken);
-        await Execute(connection, transaction, """
-            INSERT INTO TIPOS_DISPOSITIVOS (ID_TIPO, TIPO_DISPOSITIVO) VALUES (:idTipo, :tipoDispositivo)
-            """, cancellationToken, ("idTipo", idTipo), ("tipoDispositivo", tipoDispositivo));
-        return idTipo;
-    }
-
-    private static Task<int?> GetDeviceIdByCode(
-        DbConnection connection,
-        DbTransaction? transaction,
-        string codigoInventario,
-        CancellationToken cancellationToken) =>
-        GetScalar<int?>(connection, transaction, """
-            SELECT ID_EQUIPO
-            FROM DISPOSITIVOS
-            WHERE UPPER(TRIM(CODIGO_INVENTARIO)) = UPPER(TRIM(:codigoInventario))
-            """, cancellationToken, ("codigoInventario", codigoInventario));
 
     private static MaintenanceDto ReadMaintenance(DbDataReader reader) => new(
         ReadInt(reader, "ID_REPARACION"),
-        ReadInt(reader, "ID_EQUIPO"),
+        ReadNullableInt(reader, "ID_EQUIPO"),
         ReadString(reader, "CODIGO_INVENTARIO"),
         ReadString(reader, "NO_SERIE"),
         ReadString(reader, "MARCA"),

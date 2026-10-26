@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Oracle.ManagedDataAccess.Client;
@@ -10,8 +11,17 @@ namespace SistemaInventario.Api.Controllers;
 [Authorize]
 [Route("api/admin")]
 // Endpoints de administración de usuarios del sistema y sus módulos de acceso.
-public sealed class UsersController(IUserAdminService userService) : ControllerBase
+// El acceso total (ADMIN_TOTAL) solo lo administra otro SuperAdmin: quien tiene el módulo
+// USUARIOS no puede otorgarlo, ni editar, restablecer la contraseña o quitar a un SuperAdmin.
+public sealed class UsersController(
+    IUserAdminService userService,
+    IModulePermissionService modulePermissions) : ControllerBase
 {
+    private const string SuperAdminOnly =
+        "Solo un usuario con acceso total puede otorgar ese acceso o modificar a otro usuario que lo tenga.";
+    private const string LastSuperAdmin =
+        "No se puede quitar el acceso total al único usuario que lo tiene.";
+
     [HttpGet("users")]
     [Authorize(Policy = ModulePolicies.Users)]
     public async Task<ActionResult<IReadOnlyList<AdminUserDto>>> GetUsers(CancellationToken cancellationToken) =>
@@ -21,10 +31,16 @@ public sealed class UsersController(IUserAdminService userService) : ControllerB
     [Authorize(Policy = ModulePolicies.Users)]
     public async Task<IActionResult> CreateUser(CreateAdminUserDto user, CancellationToken cancellationToken)
     {
-        var validationMessage = ValidateUserFields(user.Usuario, user.NombrePersona, user.Rol, user.DominioP, user.Dominio, user.Estado);
+        var validationMessage = ValidateUserFields(user.Usuario, user.NombrePersona, user.Rol, user.DominioP, user.Dominio, user.Estado)
+            ?? ValidateModules(user.Modules);
         if (validationMessage is not null)
         {
             return BadRequest(new { Message = validationMessage });
+        }
+
+        if (WillBeSuperAdmin(user.Rol, user.IsSuperAdmin) && !await CurrentUserIsSuperAdmin(cancellationToken))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { Message = SuperAdminOnly });
         }
 
         try
@@ -45,10 +61,25 @@ public sealed class UsersController(IUserAdminService userService) : ControllerB
         UpdateAdminUserDto user,
         CancellationToken cancellationToken)
     {
-        var validationMessage = ValidateUserFields(user.Usuario, user.NombrePersona, user.Rol, user.DominioP, user.Dominio, user.Estado);
+        var validationMessage = ValidateUserFields(user.Usuario, user.NombrePersona, user.Rol, user.DominioP, user.Dominio, user.Estado)
+            ?? ValidateModules(user.Modules);
         if (validationMessage is not null)
         {
             return BadRequest(new { Message = validationMessage });
+        }
+
+        var targetIsSuperAdmin = await IsSuperAdmin(idUsuario, cancellationToken);
+        var willBeSuperAdmin = WillBeSuperAdmin(user.Rol, user.IsSuperAdmin);
+        if ((targetIsSuperAdmin || willBeSuperAdmin) && !await CurrentUserIsSuperAdmin(cancellationToken))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { Message = SuperAdminOnly });
+        }
+
+        var losesSuperAdmin = targetIsSuperAdmin
+            && (!willBeSuperAdmin || !user.Estado.Trim().Equals("ACTIVO", StringComparison.OrdinalIgnoreCase));
+        if (losesSuperAdmin && await modulePermissions.GetSuperAdminCount(cancellationToken) <= 1)
+        {
+            return Conflict(new { Message = LastSuperAdmin });
         }
 
         try
@@ -65,16 +96,35 @@ public sealed class UsersController(IUserAdminService userService) : ControllerB
 
     [HttpPost("users/{idUsuario:int}/reset-password")]
     [Authorize(Policy = ModulePolicies.Users)]
-    public async Task<IActionResult> ResetUserPassword(int idUsuario, CancellationToken cancellationToken) =>
-        await userService.ResetUserPassword(idUsuario, cancellationToken)
+    public async Task<IActionResult> ResetUserPassword(int idUsuario, CancellationToken cancellationToken)
+    {
+        if (await IsSuperAdmin(idUsuario, cancellationToken) && !await CurrentUserIsSuperAdmin(cancellationToken))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { Message = SuperAdminOnly });
+        }
+
+        return await userService.ResetUserPassword(idUsuario, cancellationToken)
             ? NoContent()
             : NotFound(new { Message = "No existe el usuario local indicado." });
+    }
 
     [HttpDelete("users/{idUsuario:int}")]
     [Authorize(Policy = ModulePolicies.Users)]
     // Elimina usuarios y traduce conflictos de integridad a una respuesta 409.
     public async Task<IActionResult> DeleteUser(int idUsuario, CancellationToken cancellationToken)
     {
+        if (await IsSuperAdmin(idUsuario, cancellationToken))
+        {
+            if (!await CurrentUserIsSuperAdmin(cancellationToken))
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { Message = SuperAdminOnly });
+            }
+            if (await modulePermissions.GetSuperAdminCount(cancellationToken) <= 1)
+            {
+                return Conflict(new { Message = LastSuperAdmin });
+            }
+        }
+
         try
         {
             return await userService.DeleteUser(idUsuario, cancellationToken)
@@ -86,6 +136,26 @@ public sealed class UsersController(IUserAdminService userService) : ControllerB
             return Conflict(new { Message = "No se puede quitar este usuario porque tiene registros relacionados." });
         }
     }
+
+    // Los roles de taller y de tickets tienen módulos fijos: con ellos el acceso total no se guarda.
+    private static bool WillBeSuperAdmin(string role, bool isSuperAdmin) =>
+        isSuperAdmin
+        && !AppRoles.IsRestrictedWorkshopRole(role.Trim())
+        && !AppRoles.IsTicketRole(role.Trim());
+
+    private async Task<bool> IsSuperAdmin(int userId, CancellationToken cancellationToken) =>
+        (await modulePermissions.GetModules(userId, cancellationToken))
+            .Contains(AppModules.SuperAdmin, StringComparer.OrdinalIgnoreCase);
+
+    private async Task<bool> CurrentUserIsSuperAdmin(CancellationToken cancellationToken) =>
+        int.TryParse(User.FindFirstValue("sub") ?? User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId)
+        && await IsSuperAdmin(userId, cancellationToken);
+
+    // Solo se aceptan los módulos asignables; ADMIN_TOTAL se otorga con IsSuperAdmin, no en la lista.
+    private static string? ValidateModules(IReadOnlyList<string>? modules) =>
+        modules?.Any(module => !AppModules.Assignable.Contains(module, StringComparer.OrdinalIgnoreCase)) == true
+            ? "Uno de los módulos seleccionados no es válido."
+            : null;
 
     private static string? ValidateUserFields(
         string usuario,

@@ -302,14 +302,20 @@ input {
     background: #e8f2ee;
 }
 
+/* Buscador, filtro, "Mostrar N registros" y "Añadir usuario" van en una sola fila;
+   la columna flexible antes del selector lo empuja junto al botón, a la derecha. */
 .admin-shell .filter-bar.user-filter-bar {
-    grid-template-columns: minmax(0, 1fr) minmax(160px, 220px) auto minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) minmax(160px, 220px) auto minmax(0, 1fr) auto;
     align-items: center;
 }
 
 .admin-shell .filter-bar.user-filter-bar .add-user-button {
     justify-self: end;
     margin: 0;
+}
+
+.admin-shell .filter-bar.user-filter-bar app-table-page-size {
+    margin-bottom: 0;
 }
 
 .admin-data-table-wrap {
@@ -1581,4 +1587,33 @@ button:focus-visible {
     white-space: nowrap;
     overflow-wrap: normal;
     word-break: keep-all;
+}
+
+/* Buscador de empleado al inicio del formulario de dispositivos: ocupa toda la fila. */
+.device-employee-lookup {
+    grid-column: 1 / -1;
+    margin-bottom: .25rem;
+}
+
+/* En Reasignaciones va en la tercera columna, junto a la búsqueda del equipo, y solo del ancho del texto. */
+.reassignment-employee-lookup {
+    justify-self: start;
+}
+
+.reassignment-employee-lookup .employee-lookup-trigger {
+    width: auto;
+    min-height: 2.4rem;
+    padding-inline: 1rem;
+}
+
+/* Agregar dispositivo (Asignado): el buscador de empleado ocupa el resto de la fila de Estado. */
+.device-create-lookup {
+    grid-column: 2 / -1;
+    align-self: end;
+}
+
+@media (max-width: 760px) {
+    .device-create-lookup {
+        grid-column: 1 / -1;
+    }
 }

@@ -1,6 +1,8 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
+using SistemaInventario.Api.Infrastructure;
 using Microsoft.Extensions.Logging;
 using Oracle.ManagedDataAccess.Client;
 using SistemaInventario.Api.Models;
@@ -14,21 +16,36 @@ namespace SistemaInventario.Api.Controllers;
 public sealed class AuthController(
     IAuthService authService,
     IModulePermissionService modulePermissions,
+    LoginAttemptLimiter loginAttempts,
     ILogger<AuthController> logger) : ControllerBase
 {
     [HttpPost("login")]
     [AllowAnonymous]
+    [EnableRateLimiting(LoginRateLimit.Policy)]
     // Valida las credenciales contra Oracle; una respuesta nula se convierte en 401.
+    // Tras varios fallos seguidos el usuario queda bloqueado unos minutos (429) y ni
+    // siquiera se consulta Active Directory, para no bloquear también su cuenta de dominio.
     public async Task<ActionResult<LoginResponseDto>> AuthenticateUser(
         LoginRequestDto loginRequest,
         CancellationToken cancellationToken)
     {
+        if (loginAttempts.GetRemainingLockout(loginRequest.UserName) is { } remaining)
+        {
+            logger.LogWarning("Login bloqueado temporalmente para {UserName} por intentos fallidos.", loginRequest.UserName);
+            return LoginRateLimit.TooManyAttempts(remaining);
+        }
+
         try
         {
             var loginResponse = await authService.AuthenticateUser(loginRequest, cancellationToken);
-            return loginResponse is null
-                ? Unauthorized(new { Message = "Credenciales invalidas." })
-                : Ok(loginResponse);
+            if (loginResponse is null)
+            {
+                loginAttempts.RegisterFailure(loginRequest.UserName);
+                return Unauthorized(new { Message = "Credenciales invalidas." });
+            }
+
+            loginAttempts.Reset(loginRequest.UserName);
+            return Ok(loginResponse);
         }
         catch (OracleException exception)
         {
@@ -54,20 +71,16 @@ public sealed class AuthController(
 
     [HttpPost("refresh")]
     [Authorize(Policy = "PasswordChange")]
-    public ActionResult RefreshSession()
+    // El token nuevo se arma con los datos actuales de USUARIOS, no con los del token anterior.
+    public async Task<ActionResult> RefreshSession(CancellationToken cancellationToken)
     {
         var userIdValue = User.FindFirstValue("sub") ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
-        var userName = User.FindFirstValue("unique_name") ?? User.FindFirstValue(ClaimTypes.Name);
-        var role = User.FindFirstValue(ClaimTypes.Role);
-        if (!int.TryParse(userIdValue, out var userId)
-            || string.IsNullOrWhiteSpace(userName)
-            || string.IsNullOrWhiteSpace(role))
-        {
-            return Unauthorized();
-        }
+        if (!int.TryParse(userIdValue, out var userId)) return Unauthorized();
 
-        var mustChangePassword = User.FindFirstValue("must_change_password") == "true";
-        return Ok(new { Token = authService.RefreshToken(userId, userName, User.FindFirstValue("full_name") ?? userName, role, mustChangePassword) });
+        var token = await authService.RefreshToken(userId, cancellationToken);
+        return token is null
+            ? Unauthorized(new { Message = "Tu usuario ya no está activo. Vuelve a iniciar sesión." })
+            : Ok(new { Token = token });
     }
 
     [HttpPost("change-initial-password")]

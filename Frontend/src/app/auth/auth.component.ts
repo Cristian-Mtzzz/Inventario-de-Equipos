@@ -3,6 +3,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { EMPTY, catchError, finalize } from 'rxjs';
+import { apiErrorMessage } from '../shared/api-response';
 import { AuthService } from './auth.service';
 
 // Componente visual y reactivo de inicio de sesión.
@@ -44,9 +45,12 @@ export class AuthComponent {
     // Llama al servicio de autenticación con los datos del login
     this.authService.login({ UserName: userName, Password: password }).pipe(
       catchError((error: HttpErrorResponse) => {
+        // 429: demasiados intentos fallidos; la API indica cuánto esperar.
         this.errorMessage.set(error.status === 401
           ? 'El usuario o la contrasena no son correctos.'
-          : 'No fue posible conectar con el servicio. Intenta nuevamente.');
+          : error.status === 429
+            ? apiErrorMessage(error, 'Demasiados intentos fallidos. Espera unos minutos e intenta de nuevo.')
+            : 'No fue posible conectar con el servicio. Intenta nuevamente.');
         return EMPTY;
       }),
       finalize(() => {

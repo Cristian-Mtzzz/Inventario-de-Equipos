@@ -11,7 +11,7 @@ public sealed record WorkshopDeviceDto(
 
 public sealed record MaintenanceDto(
     int IdReparacion,
-    int IdEquipo,
+    int? IdEquipo,
     string CodigoInventario,
     string NoSerie,
     string Marca,
@@ -49,7 +49,8 @@ public sealed record CreateReceptionEntryDto(
     string Modelo,
     string TipoDispositivo,
     string DescripcionEquipo,
-    string EquipoEnGarantia,
+    // Ya no se pide en la recepción: se indica en el dictamen.
+    string? EquipoEnGarantia,
     string? MemoNumero,
     string Recibe,
     string Tecnico,
@@ -61,11 +62,12 @@ public sealed record CreateReceptionEntryDto(
 public sealed record UpdateMaintenanceAssessmentDto(
     string? Dictamen,
     string? PiezasSustituidas,
-    string? Observaciones);
+    string? Observaciones,
+    // SI o NO, lo indica quien hace el dictamen; si llega vacío se conserva el valor anterior.
+    string? EquipoEnGarantia = null);
 
 public sealed record UpdateMaintenanceExitDto(
     string EquipoFuncional,
-    string TecnicoEntrega,
     string ClienteRecibe,
     DateTime FechaEntrega);
 

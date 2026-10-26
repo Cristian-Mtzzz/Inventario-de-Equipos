@@ -1,0 +1,174 @@
+/* Solo lo propio de Tickets: el resto del aspecto (shell, tarjeta, tabla, modales y
+   botones) viene de taller.component.css y de las reglas globales de styles.css. */
+
+/* Buscador, "Mostrar N registros" y "Crear ticket" en una sola fila a la derecha; solo en
+   pantallas angostas bajan de línea. */
+.workshop-actions-group {
+    flex: 1 1 auto;
+    flex-wrap: nowrap;
+    justify-content: flex-end;
+}
+
+@media (max-width: 900px) {
+    .workshop-actions-group {
+        flex-wrap: wrap;
+    }
+}
+
+/* Buscador de la barra de operaciones, con el mismo trazo que el resto de los filtros. */
+.tickets-search {
+    flex: 0 1 22rem;
+    min-height: 2.4rem;
+    padding: .45rem .75rem;
+    border: 1px solid #d3dfdb;
+    border-radius: 8px;
+    color: #203238;
+    background: #fff;
+    font: inherit;
+}
+
+.tickets-search:hover {
+    border-color: #8fb5ab;
+}
+
+.tickets-search:focus {
+    border-color: #276968;
+    outline: none;
+}
+
+.workshop-actions-group app-table-page-size {
+    margin-bottom: 0;
+}
+
+/* Aviso de que falta un dato para poder cerrar el ticket (empleado sin No. de pago,
+   o ningún técnico disponible). Acompaña a .success y .error del taller. */
+.warning {
+    color: #7a5312;
+    background: #fbf0d8;
+}
+
+.field-hint {
+    margin: .25rem 0 0;
+    color: #718080;
+    font-size: .76rem;
+}
+
+/* El detalle y las observaciones son texto largo: se limitan para no estirar la fila. */
+.ticket-detail-cell {
+    max-width: 18rem;
+    white-space: pre-wrap;
+}
+
+.ticket-done {
+    color: #5c6f6c;
+}
+
+/* Estado del ticket. Mientras está pendiente el color lo decide el tiempo de espera,
+   con los minutos que se configuran en TICKETS_CONFIG. */
+.ticket-state {
+    display: inline-block;
+    padding: .2rem .55rem;
+    border-radius: 999px;
+    color: #4a6360;
+    background: #e6eeeb;
+    font-size: .7rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.ticket-state.ok {
+    color: #1f6b43;
+    background: #dcecd8;
+}
+
+.ticket-state.warn {
+    color: #7a5312;
+    background: #fbf0d8;
+}
+
+.ticket-state.late {
+    color: #8c2f39;
+    background: #f7dfe1;
+}
+
+/* Contador en vivo: tipografía tabular para que no baile al cambiar cada segundo. */
+.ticket-timer {
+    color: #718080;
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.ticket-timer.ok {
+    color: #1f6b43;
+}
+
+.ticket-timer.warn {
+    color: #7a5312;
+}
+
+.ticket-timer.late {
+    color: #8c2f39;
+}
+
+/* Varias acciones por fila: se apilan para que no ensanchen la columna. */
+.ticket-row-actions {
+    display: flex;
+    flex-direction: column;
+    gap: .35rem;
+    min-width: 9rem;
+}
+
+.ticket-done-label {
+    color: #718080;
+    font-size: .75rem;
+}
+
+/* Valoración: dos opciones excluyentes con aspecto de tarjeta. */
+.finish-rating {
+    display: flex;
+    gap: .6rem;
+    margin-top: .6rem;
+    padding: .8rem;
+    border: 1px solid #d7e2df;
+    border-radius: 4px;
+}
+
+.finish-rating legend {
+    padding: 0 .35rem;
+    color: #294649;
+    font-size: .78rem;
+    font-weight: 700;
+}
+
+.rating-option {
+    display: inline-flex;
+    align-items: center;
+    gap: .45rem;
+    padding: .45rem .9rem;
+    border: 1px solid #d7e2df;
+    border-radius: 999px;
+    cursor: pointer;
+}
+
+/* El radio no debe tomar el ancho completo que el modal da a los campos. */
+.rating-option input {
+    width: auto;
+    margin: 0;
+}
+
+.rating-option.selected {
+    border-color: #276968;
+    background: #e8f2ee;
+}
+
+/* Rango de fechas del reporte: Desde y Hasta en la misma fila. */
+.report-date-range {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: .75rem;
+}
+
+.report-date-range label {
+    display: block;
+}

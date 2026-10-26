@@ -7,6 +7,7 @@
     <p class="eyebrow">CONTROL DE TALLER</p>
     <h1>{{ isReceptionOnly ? 'Registro de recepción' : 'Reparaciones' }}</h1>
   </div>
+  <app-module-tabs current="TALLER" />
   }
 
   @if (message) { <p class="feedback success" role="status">{{ message }}</p> }
@@ -20,12 +21,12 @@
         <h2>Seguimiento de reparaciones</h2>
       </div>
       <div class="workshop-actions-group">
+        <app-table-page-size [(page)]="maintenancePage" [(pageSize)]="maintenancePageSize" />
         @if (isWorkshopAdmin) { <button type="button" class="secondary" (click)="exportWorkshopReport()" [disabled]="isSaving">Exportar reporte</button> }
         @if (canReceive) { <button type="button" (click)="openReceptionWindow()" [disabled]="isSaving">Registrar recepción</button> }
       </div>
     </div>
 
-    <app-table-page-size [(page)]="maintenancePage" [(pageSize)]="maintenancePageSize" />
     <div class="table-wrap">
       <table>
         <thead>
@@ -66,16 +67,16 @@
             <td>{{ display(item.Recibe) }}</td>
             <td>{{ display(item.DescripcionEquipo) }}</td>
             <td>{{ display(item.EquipoEnGarantia) }}</td>
-            <td>{{ item.FechaIngreso | date:'short' }}</td>
+            <td>{{ item.FechaIngreso | date:'dd/MM/yy h:mm a' }}</td>
             <td>{{ display(item.TecnicoEntrega) }}</td>
             <td>{{ display(item.Dictamen) }}</td>
             <td>{{ display(item.PiezasSustituidas) }}</td>
             <td>{{ display(item.Observaciones) }}</td>
             <td>{{ display(item.EquipoFuncional) }}</td>
             <td>{{ display(item.ClienteRecibe) }}</td>
-            <td>{{ item.FechaEntrega ? (item.FechaEntrega | date:'short') : '-' }}</td>
+            <td>{{ item.FechaEntrega ? (item.FechaEntrega | date:'dd/MM/yy h:mm a') : '-' }}</td>
             <td>
-              @if (canWorkOnRepairs) {
+              @if (canWorkOnRepairs && (!isTechnicianOnly || isAssignedToMe(item))) {
               @if (isTechnicianOnly && hasAssessment(item)) { <span class="closed">Trabajo finalizado</span> }
               @else { <button type="button" class="secondary" (click)="openAssessmentWindow(item)"
                 [disabled]="isSaving">Dictamen</button> }
@@ -148,7 +149,7 @@
           </select>
         </div>
         <div class="form-field form-field-wide">
-          <label for="reception-area">Área de origen</label>
+          <label for="reception-area">Departamento de origen</label>
           <select id="reception-area" [ngModel]="reception.IdArea"
             (ngModelChange)="selectReceptionArea($event)" name="receptionArea"
             [disabled]="reception.IdEdificio <= 0 || isLoadingReceptionAreas">
@@ -158,18 +159,8 @@
             }
           </select>
         </div>
-        <!-- Recibe es el usuario en sesión y el técnico es el asignado por defecto: los completa el
-          sistema y se muestran bloqueados para que queden a la vista en el formato. -->
-        <div class="form-field">
-          <label for="reception-receiver">Recibe</label>
-          <input id="reception-receiver" type="text" [value]="reception.Recibe || 'Cargando...'" name="receptionReceiver"
-            readonly tabindex="-1" class="readonly-field" />
-        </div>
-        <div class="form-field">
-          <label for="reception-technician">Técnico asignado</label>
-          <input id="reception-technician" type="text" [value]="reception.Tecnico || 'Cargando...'" name="receptionTechnician"
-            readonly tabindex="-1" class="readonly-field" />
-        </div>
+        <!-- Quien recibe (usuario en sesión) y el técnico asignado siempre son los mismos,
+          así que el servidor los guarda solos y el formulario ya no los muestra. -->
         <h3 class="form-section-title">Datos del equipo</h3>
         <div class="form-field">
           <label for="reception-type">Equipo</label>
@@ -194,14 +185,6 @@
           <label for="reception-inventory">Inventario</label>
           <input appDigitsOnly id="reception-inventory" type="text" [(ngModel)]="reception.CodigoInventario" name="receptionInventory"
             placeholder="Ej. 4102532" maxlength="7" pattern="[0-9]*" required />
-        </div>
-        <div class="form-field">
-          <label for="reception-warranty">Equipo en garantía</label>
-          <select id="reception-warranty" [(ngModel)]="reception.EquipoEnGarantia" name="receptionWarranty" required>
-            <option value="">Selecciona una opción</option>
-            <option value="SI">Sí</option>
-            <option value="NO">No</option>
-          </select>
         </div>
         <div class="form-field form-field-wide">
           <label for="reception-description">Descripción del equipo</label>
@@ -268,10 +251,8 @@
           <option value="SI">Sí</option>
           <option value="NO">No</option>
         </select>
-        <label for="exit-technician">Técnico que entrega</label>
-        <!-- Es el técnico asignado a la reparación; solo se escribe si la reparación no tiene técnico. -->
-        <input id="exit-technician" type="text" [(ngModel)]="exit.TecnicoEntrega" name="exitTechnician" maxlength="200" required
-          [readonly]="isExitTechnicianLocked" [class.readonly-field]="isExitTechnicianLocked" />
+        <!-- Quien entrega es siempre el técnico asignado a la reparación, así que el
+          formulario no lo pide: lo escribe el servidor. -->
         <label for="exit-client">Cliente que recibe</label>
         <input id="exit-client" type="text" [(ngModel)]="exit.ClienteRecibe" name="exitClient" maxlength="200" required />
         <label for="exit-date">Fecha de entrega</label>
@@ -296,6 +277,13 @@
       </div>
       <form (ngSubmit)="saveAssessment()">
         @if (errorMessage) { <p class="feedback error" role="alert">{{ errorMessage }}</p> }
+        <!-- Quien hace el dictamen (técnico asignado o admin de taller) indica si el equipo está en garantía. -->
+        <label for="assessment-warranty">Equipo en garantía</label>
+        <select id="assessment-warranty" [(ngModel)]="assessment.EquipoEnGarantia" name="assessmentWarranty" required>
+          <option value="">Selecciona una opción</option>
+          <option value="SI">Sí</option>
+          <option value="NO">No</option>
+        </select>
         <label for="assessment-diagnosis">Diagnóstico</label>
         <textarea id="assessment-diagnosis" [(ngModel)]="assessment.Dictamen" name="assessmentDiagnosis" rows="4"
           maxlength="2000" required></textarea>
@@ -326,6 +314,7 @@
       <form (ngSubmit)="saveAssignment()">
         @if (errorMessage) { <p class="feedback error" role="alert">{{ errorMessage }}</p> }
         <p class="modal-subtitle">Técnico actual: <strong>{{ selectedMaintenance.Tecnico || 'Sin asignar' }}</strong></p>
+        <p class="modal-subtitle">Equipo en garantía: <strong>{{ warrantyLabel(selectedMaintenance.EquipoEnGarantia) }}</strong></p>
         <label for="assign-technician">Técnico</label>
         <select id="assign-technician" [(ngModel)]="selectedTechnicianId" name="assignTechnician"
           [disabled]="isLoadingTechnicians || technicians.length === 0" required>

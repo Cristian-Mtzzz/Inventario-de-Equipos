@@ -2,6 +2,8 @@ import { ChangeDetectionStrategy, ChangeDetectorRef, Component, DestroyRef, View
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { DigitsOnlyDirective } from '../shared/digits-only.directive';
+import { EmployeeLookupComponent, EmployeeLookupResult, findEmployeeIndex } from '../shared/employee-lookup.component';
+import { ReportColumn, addReportSheet, cellText, createReportWorkbook, downloadReportWorkbook, excelDate, generatedAt, reportFileName } from '../shared/excel-report';
 import { PagePipe, TablePageSizeComponent, TablePaginatorComponent } from '../shared/table-paginator';
 import { Router } from '@angular/router';
 import type ExcelJS from 'exceljs';
@@ -18,9 +20,11 @@ import { DeviceImportComponent } from './device-import.component';
 import { EmployeeSearchDialogComponent } from './employee-search-dialog.component';
 import { CatalogManagementComponent } from './catalog-management.component';
 import { UserManagementComponent } from './user-management.component';
+import { EmployeeManagementComponent } from './employee-management.component';
+import { TicketsComponent } from '../tickets/tickets.component';
 import { AppHeaderComponent } from '../shared/app-header.component';
 
-type AdminSection = 'devices' | 'reassignments' | 'users' | 'workshop' | 'catalogs';
+type AdminSection = 'devices' | 'reassignments' | 'users' | 'workshop' | 'catalogs' | 'employees' | 'tickets';
 
 // Opción del filtro de tipo que muestra la vista agrupada de combos de escritorio.
 const COMBO_FILTER = 'COMBOS';
@@ -32,11 +36,13 @@ const SECTION_MODULES: Record<AdminSection, string> = {
   workshop: AppModules.Workshop,
   users: AppModules.Users,
   catalogs: AppModules.Maintenance,
+  employees: AppModules.Employees,
+  tickets: AppModules.Tickets,
 };
 
 @Component({
   selector: 'app-admin',
-  imports: [DatePipe, FormsModule, SearchableSelectDirective, TallerComponent, DeviceReportsComponent, EmployeeSearchDialogComponent, CatalogManagementComponent, UserManagementComponent, AppHeaderComponent, DeviceImportComponent, PagePipe, TablePageSizeComponent, TablePaginatorComponent, DigitsOnlyDirective],
+  imports: [DatePipe, FormsModule, SearchableSelectDirective, TallerComponent, DeviceReportsComponent, EmployeeSearchDialogComponent, CatalogManagementComponent, UserManagementComponent, EmployeeManagementComponent, TicketsComponent, AppHeaderComponent, DeviceImportComponent, PagePipe, TablePageSizeComponent, TablePaginatorComponent, DigitsOnlyDirective, EmployeeLookupComponent],
   templateUrl: './admin.component.html',
   styleUrl: './admin.component.css',
   // Angular 22 usa OnPush por defecto; varias respuestas HTTP de este panel actualizan la vista
@@ -174,7 +180,7 @@ export class AdminComponent {
   }
 
   private firstPermittedAdminSection(): AdminSection {
-    const sections: AdminSection[] = ['devices', 'reassignments', 'workshop', 'users', 'catalogs'];
+    const sections: AdminSection[] = ['devices', 'reassignments', 'workshop', 'users', 'catalogs', 'employees', 'tickets'];
     return sections.find((section) => this.canAccessAdminSection(section)) ?? 'devices';
   }
 
@@ -677,7 +683,19 @@ export class AdminComponent {
     }
   }
 
-  selectDeviceArea(idArea: number | null): void {
+  // Empleado elegido con el buscador: completa Regional, Edificio, Departamento y el empleado
+  // (sirve igual para Agregar y Editar dispositivo).
+  applyDeviceEmployee(employee: EmployeeLookupResult): void {
+    this.selectBuilding(employee.IdEdificio);
+    if (employee.IdRegional !== null) this.selectedRegionId = employee.IdRegional;
+    if (employee.IdArea !== null) this.selectDeviceArea(employee.IdArea, employee);
+    this.markDeviceAssigned(employee.NombreCompleto);
+    this.newDevice.NombreAsignado = employee.NombreCompleto;
+    this.newDevice.NumeroPagoAsignado = employee.NoPago || null;
+  }
+
+  // preselect: empleado del buscador que queda elegido en el combo cuando termina de cargar la lista.
+  selectDeviceArea(idArea: number | null, preselect?: EmployeeLookupResult): void {
     this.markDeviceAssigned(idArea);
     this.newDevice.IdArea = idArea;
     this.clearDeviceEmployeeSelection();
@@ -696,6 +714,8 @@ export class AdminComponent {
       next: (employees) => {
         if (requestId !== this.employeeOptionsRequestId) return;
         this.employeesForDeviceArea = employees;
+        const index = preselect ? findEmployeeIndex(employees, preselect) : -1;
+        if (index >= 0) this.selectDeviceEmployee(index);
         this.changeDetector.markForCheck();
       },
       error: () => {
@@ -735,14 +755,14 @@ export class AdminComponent {
     }
   }
 
+  // "Nombre asignado" se escribe o se elige de la lista del área; si coincide con un empleado del
+  // catálogo queda seleccionado y se completa su No. de pago (si lo tiene).
   onDeviceEmployeeNameChange(): void {
     const name = this.newDevice.NombreAsignado?.trim().toUpperCase();
-    if (name) {
-      const match = this.employeesForDeviceArea.find(e => e.NombreCompleto.trim().toUpperCase() === name);
-      if (match && match.NoPago) {
-        this.newDevice.NumeroPagoAsignado = match.NoPago;
-      }
-    }
+    const index = name ? this.employeesForDeviceArea.findIndex(e => e.NombreCompleto.trim().toUpperCase() === name) : -1;
+    this.selectedEmployeeIndex = index >= 0 ? index : null;
+    const match = index >= 0 ? this.employeesForDeviceArea[index] : undefined;
+    if (match?.NoPago) this.newDevice.NumeroPagoAsignado = match.NoPago;
   }
 
   onReassignmentPaymentChange(): void {
@@ -1154,82 +1174,33 @@ export class AdminComponent {
     });
   }
 
+  // Mismas columnas y celdas que la tabla de reasignaciones de la vista web.
   private async createReassignmentWorkbook(reassignments: Reassignment[]): Promise<void> {
-    const { default: ExcelJSModule } = await import('exceljs');
-    const workbook = new ExcelJSModule.Workbook();
-    workbook.creator = 'Sistema inventario';
-    workbook.created = new Date();
-    workbook.subject = 'Reporte de reasignaciones';
-    workbook.title = 'Reasignaciones';
-
-    // Igual que la tabla de reasignaciones: muestra quién tenía el equipo y quién lo tiene ahora
-    // (el nombre; el No. de pago solo si no hay nombre registrado).
-    const sheet = workbook.addWorksheet('Reasignaciones', { properties: { tabColor: { argb: 'FF4F8A83' } } });
-    const personName = (name: string | null | undefined, payment: string | null | undefined, empty: string) =>
-      name?.replace(/^[\s:]+/, '').trim() || payment?.trim() || empty;
-    const changeDate = (value: string | null | undefined): Date | string => {
-      const date = value ? new Date(value) : null;
-      return date && !Number.isNaN(date.getTime()) ? date : value ?? '';
-    };
-    const columns: Array<[string, number, (item: Reassignment) => string | number | Date]> = [
-      ['ID', 10, (item) => item.IdReasignacion],
-      ['Equipo', 24, (item) => item.NombreTipo ?? ''],
-      ['Marca', 16, (item) => item.Marca ?? ''],
-      ['Modelo', 20, (item) => item.Modelo ?? ''],
-      ['Serie', 22, (item) => item.NoSerie ?? ''],
-      ['Inventario', 14, (item) => item.CodigoInventario],
-      ['Resp. anterior', 36, (item) => personName(item.NombreAnterior, item.NoPagoAnterior, 'Sin asignar')],
-      ['Resp. actual', 36, (item) => personName(item.NombreNuevo, item.NoPagoNuevo, '-')],
-      ['Área de trabajo', 34, (item) => item.NombreArea ?? ''],
-      ['Edificio', 28, (item) => item.NombreEdificio ?? ''],
-      ['Fecha de cambio', 18, (item) => changeDate(item.FechaCambio)],
-      ['Motivo de reasignación', 42, (item) => item.Motivo ?? ''],
+    const workbook = await createReportWorkbook('Reporte de reasignaciones');
+    const columns: ReportColumn<Reassignment>[] = [
+      { header: 'Equipo', width: 24, value: (item) => cellText(item.NombreTipo) },
+      { header: 'Marca', width: 16, value: (item) => cellText(item.Marca) },
+      { header: 'Modelo', width: 20, value: (item) => cellText(item.Modelo) },
+      { header: 'Serie', width: 22, value: (item) => cellText(item.NoSerie) },
+      { header: 'Inventario', width: 14, value: (item) => item.CodigoInventario || this.getInventoryCode(item.IdEquipo) },
+      { header: 'Resp. anterior', width: 34, value: (item) => item.NombreAnterior || item.NoPagoAnterior || 'Sin asignar' },
+      { header: 'Resp. actual', width: 34, value: (item) => item.NombreNuevo || item.NoPagoNuevo || '-' },
+      {
+        header: 'Área de trabajo', width: 44,
+        value: (item) => (item.NombreArea ? item.NombreArea + (item.NombreEdificio ? ` · ${item.NombreEdificio}` : '') : '-'),
+      },
+      { header: 'Fecha de asignación', width: 18, format: 'date', value: (item) => excelDate(item.FechaCambio, '') },
+      { header: 'Motivo de reasignación', width: 44, wrap: true, value: (item) => item.Motivo ?? '' },
     ];
-
-    const lastColumn = sheet.getColumn(columns.length).letter;
-    sheet.mergeCells(`A1:${lastColumn}1`);
-    sheet.getCell('A1').value = 'REPORTE DE REASIGNACIONES';
-    sheet.getCell('A1').font = { name: 'Aptos Display', size: 16, bold: true, color: { argb: 'FFFFFFFF' } };
-    sheet.getCell('A1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF173F43' } };
-    sheet.getCell('A1').alignment = { vertical: 'middle' };
-    sheet.getRow(1).height = 31;
-    sheet.mergeCells(`A2:${lastColumn}2`);
-    sheet.getCell('A2').value = `${reassignments.length} reasignaciones · Generado ${new Date().toLocaleString('es-HN')}`;
-    sheet.getCell('A2').font = { name: 'Aptos', size: 10, color: { argb: 'FF617573' }, italic: true };
-
-    sheet.addTable({
-      name: 'ReporteReasignaciones',
-      ref: 'A4',
-      headerRow: true,
-      totalsRow: false,
-      style: { theme: 'TableStyleMedium2', showRowStripes: true },
-      columns: columns.map(([name]) => ({ name })),
-      // Una tabla de Excel necesita al menos una fila de datos.
-      rows: reassignments.length > 0
-        ? reassignments.map((item) => columns.map(([, , value]) => value(item)))
-        : [columns.map(() => '')],
+    addReportSheet(workbook, {
+      sheetName: 'Reasignaciones',
+      title: 'REPORTE DE REASIGNACIONES',
+      subtitle: `${reassignments.length} reasignaciones · ${generatedAt()}`,
+      tableName: 'ReporteReasignaciones',
+      columns,
+      rows: reassignments,
     });
-    columns.forEach(([header, width], index) => {
-      const column = sheet.getColumn(index + 1);
-      column.width = width;
-      if (header === 'Fecha de cambio') column.numFmt = 'dd/mm/yyyy hh:mm';
-    });
-    sheet.views = [{ state: 'frozen', ySplit: 4 }];
-
-    const buffer = await workbook.xlsx.writeBuffer();
-    const workbookBytes = new Uint8Array(buffer as ArrayBuffer);
-    const file = new Blob([workbookBytes.buffer], {
-      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    });
-
-    const url = URL.createObjectURL(file);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `reporte-reasignaciones-${new Date().toISOString().slice(0, 10)}.xlsx`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    await downloadReportWorkbook(workbook, reportFileName('reasignaciones'));
   }
 
   // Agrega una nueva reasignación.
@@ -1345,7 +1316,17 @@ export class AdminComponent {
     }
   }
 
-  selectReassignmentArea(idArea: number): void {
+  // Empleado elegido con el buscador: completa Regional, Edificio, Departamento y el empleado nuevo.
+  applyReassignmentEmployee(employee: EmployeeLookupResult): void {
+    this.selectReassignmentRegion(employee.IdRegional);
+    if (employee.IdEdificio !== null) this.selectReassignmentBuilding(employee.IdEdificio);
+    if (employee.IdArea !== null) this.selectReassignmentArea(employee.IdArea, employee);
+    this.newReassignment.NombreNuevo = employee.NombreCompleto;
+    this.newReassignment.NoPagoNuevo = employee.NoPago || null;
+  }
+
+  // preselect: empleado del buscador que queda elegido en el combo cuando termina de cargar la lista.
+  selectReassignmentArea(idArea: number, preselect?: EmployeeLookupResult): void {
     this.newReassignment.IdArea = Number(idArea);
     this.clearReassignmentEmployee();
     if (this.newReassignment.IdArea <= 0) return;
@@ -1361,6 +1342,8 @@ export class AdminComponent {
       next: (employees) => {
         if (requestId !== this.reassignmentEmployeeRequestId) return;
         this.reassignmentEmployees = employees;
+        const index = preselect ? findEmployeeIndex(employees, preselect) : -1;
+        if (index >= 0) this.selectReassignmentEmployee(index);
         this.changeDetector.markForCheck();
       },
       error: () => {

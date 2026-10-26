@@ -6,6 +6,7 @@ namespace SistemaInventario.Api.Services;
 public interface IAuthService
 {
     Task<LoginResponseDto?> AuthenticateUser(LoginRequestDto loginRequest, CancellationToken cancellationToken);
-    string RefreshToken(int userId, string userName, string fullName, string role, bool mustChangePassword);
+    // Devuelve null si el usuario ya no está activo o vigente.
+    Task<string?> RefreshToken(int userId, CancellationToken cancellationToken);
     Task<bool> ChangeInitialPassword(int userId, ChangePasswordDto request, CancellationToken cancellationToken);
 }

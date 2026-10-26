@@ -34,7 +34,8 @@ public sealed class ApiExceptionHandler(ILogger<ApiExceptionHandler> logger) : I
         }
         else
         {
-            logger.LogWarning(exception, "Solicitud rechazada en {Method} {Path}: {Message}",
+            // Rechazo esperado (validación o dato duplicado): una línea sin stack trace basta.
+            logger.LogWarning("Solicitud rechazada en {Method} {Path}: {Message}",
                 httpContext.Request.Method, httpContext.Request.Path, message);
         }
 
@@ -54,8 +55,16 @@ public sealed class ApiExceptionHandler(ILogger<ApiExceptionHandler> logger) : I
             (StatusCodes.Status400BadRequest, "Uno de los datos relacionados seleccionados no existe."),
         OracleException { Number: 1400 } =>
             (StatusCodes.Status400BadRequest, "Falta un dato obligatorio."),
+        // La tabla tiene una restricción que no admite ese valor (por ejemplo un rol o un
+        // módulo nuevo que falta agregar a su lista permitida en la base).
+        OracleException { Number: 2290 } oracle =>
+            (StatusCodes.Status400BadRequest,
+                $"La base de datos no admite uno de los valores enviados: {ConstraintName(oracle)}"),
         OracleException { Number: 12899 or 1438 } =>
             (StatusCodes.Status400BadRequest, "Uno de los valores supera la longitud permitida."),
+        // Clave de registro (ROWID) con formato inválido, por ejemplo la de un empleado alterada a mano.
+        OracleException { Number: 1410 } =>
+            (StatusCodes.Status400BadRequest, "El identificador del registro no es válido. Recarga la página e intenta de nuevo."),
         OracleException { Number: 54 or 60 or 30006 } =>
             (StatusCodes.Status409Conflict, "Otro usuario está modificando estos datos. Intenta de nuevo en unos segundos."),
         OracleException oracle when UnavailableOracleErrors.Contains(oracle.Number) =>
@@ -65,4 +74,16 @@ public sealed class ApiExceptionHandler(ILogger<ApiExceptionHandler> logger) : I
             (StatusCodes.Status400BadRequest, argument.Message),
         _ => (StatusCodes.Status500InternalServerError, "Ocurrió un error inesperado. Intenta de nuevo o contacta al administrador."),
     };
+
+    // Nombre de la restricción que rechazó el valor; es el dato que hace falta para
+    // corregirla en la base. Oracle lo escribe en el mensaje como ESQUEMA.NOMBRE.
+    private static string ConstraintName(OracleException exception)
+    {
+        var message = exception.Message;
+        var start = message.IndexOf('(');
+        var end = message.IndexOf(')', start + 1);
+        return start >= 0 && end > start
+            ? message[(start + 1)..end]
+            : "revisa el detalle en el log de la API";
+    }
 }

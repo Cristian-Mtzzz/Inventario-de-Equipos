@@ -59,6 +59,8 @@ export class UserManagementComponent {
     { code: AppModules.Devices, label: 'Dispositivos' },
     { code: AppModules.Reassignments, label: 'Reasignaciones' },
     { code: AppModules.Maintenance, label: 'Mantenimiento' },
+    { code: AppModules.Employees, label: 'Empleados' },
+    { code: AppModules.Tickets, label: 'Tickets' },
   ];
   newUser: CreateAdminUser = emptyUser();
   isUserDialogOpen = false;
@@ -74,6 +76,11 @@ export class UserManagementComponent {
 
   get canManageSuperAdmins(): boolean {
     return this.authService.moduleAccess().IsSuperAdmin;
+  }
+
+  // A un usuario con acceso total solo lo edita, restablece o quita otro con acceso total (la API lo exige).
+  canManageUser(user: AdminUser): boolean {
+    return !user.IsSuperAdmin || this.canManageSuperAdmins;
   }
 
   get filteredUsers(): AdminUser[] {
@@ -125,8 +132,18 @@ export class UserManagementComponent {
     return ['RecepcionTaller', 'TecnicoTaller'].includes(role);
   }
 
+  // Roles de tickets: su módulo lo fija el rol, no las casillas.
+  isTicketRole(role: string): boolean {
+    return role === 'AdminTicket';
+  }
+
+  // Los roles con módulo fijo no permiten marcar módulos a mano.
+  isFixedModuleRole(role: string): boolean {
+    return this.isRestrictedWorkshopRole(role) || this.isTicketRole(role);
+  }
+
   setUserModule(module: string, checked: boolean): void {
-    if (this.newUser.IsSuperAdmin || this.isRestrictedWorkshopRole(this.newUser.Rol)) return;
+    if (this.newUser.IsSuperAdmin || this.isFixedModuleRole(this.newUser.Rol)) return;
     this.newUser.Modules = checked
       ? [...new Set([...this.newUser.Modules, module])]
       : this.newUser.Modules.filter((item) => item !== module);
@@ -137,6 +154,10 @@ export class UserManagementComponent {
     if (this.isRestrictedWorkshopRole(role)) {
       this.newUser.Modules = [AppModules.Workshop];
       this.newUser.IsSuperAdmin = false;
+    } else if (this.isTicketRole(role)) {
+      // Los roles de tickets solo trabajan en ese módulo, igual que los de taller.
+      this.newUser.Modules = [AppModules.Tickets];
+      this.newUser.IsSuperAdmin = false;
     } else if (role === 'AdminTaller') {
       if (!this.newUser.Modules.includes(AppModules.Workshop)) {
         this.newUser.Modules = [...this.newUser.Modules, AppModules.Workshop];
@@ -145,7 +166,7 @@ export class UserManagementComponent {
   }
 
   setUserSuperAdmin(enabled: boolean): void {
-    if (!this.canManageSuperAdmins || this.isRestrictedWorkshopRole(this.newUser.Rol)) return;
+    if (!this.canManageSuperAdmins || this.isFixedModuleRole(this.newUser.Rol)) return;
     this.newUser.IsSuperAdmin = enabled;
     if (enabled) this.newUser.Modules = [];
   }
@@ -286,10 +307,14 @@ export class UserManagementComponent {
     });
   }
 
-  // Los roles de recepción y técnico solo usan Taller; el administrador de taller siempre lo incluye.
+  // Los roles de recepción y técnico solo usan Taller, y los de tickets solo Tickets;
+  // el administrador de taller siempre incluye Taller.
   private resolveModuleAccess(): Pick<CreateAdminUser, 'Modules' | 'IsSuperAdmin'> {
     if (this.isRestrictedWorkshopRole(this.newUser.Rol)) {
       return { Modules: [AppModules.Workshop], IsSuperAdmin: false };
+    }
+    if (this.isTicketRole(this.newUser.Rol)) {
+      return { Modules: [AppModules.Tickets], IsSuperAdmin: false };
     }
     const modules = [...this.newUser.Modules];
     if (this.newUser.Rol === 'AdminTaller' && !modules.includes(AppModules.Workshop)) {

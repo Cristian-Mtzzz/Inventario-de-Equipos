@@ -20,8 +20,13 @@ public sealed class TallerController(ITallerService tallerService) : ControllerB
 
     [HttpGet("maintenances")]
     [Authorize(Roles = AppRoles.WorkshopTechnicians)]
-    public async Task<ActionResult<IReadOnlyList<MaintenanceDto>>> GetMaintenances(CancellationToken cancellationToken) =>
-        Ok(await tallerService.GetMaintenances(cancellationToken));
+    // El administrador de taller ve todas las reparaciones; el técnico, solo las que tiene asignadas.
+    public async Task<ActionResult<IReadOnlyList<MaintenanceDto>>> GetMaintenances(CancellationToken cancellationToken)
+    {
+        if (IsWorkshopManager) return Ok(await tallerService.GetMaintenances(null, cancellationToken));
+        if (CurrentUserId() is not { } userId) return BadRequest(new { Message = "No se pudo identificar al técnico." });
+        return Ok(await tallerService.GetMaintenances(userId, cancellationToken));
+    }
 
     [HttpGet("reception-defaults")]
     [Authorize(Roles = AppRoles.WorkshopReception)]
@@ -48,7 +53,10 @@ public sealed class TallerController(ITallerService tallerService) : ControllerB
         if (Exceeds(reception.MemoNumero, 100)) return BadRequest(new { Message = "El memo no puede superar 100 caracteres." });
         if (string.IsNullOrWhiteSpace(reception.DescripcionEquipo)) return BadRequest(new { Message = "Describe el equipo." });
         if (Exceeds(reception.DescripcionEquipo, 2000)) return BadRequest(new { Message = "La descripción no puede superar 2000 caracteres." });
-        if (reception.EquipoEnGarantia is not ("SI" or "NO")) return BadRequest(new { Message = "Indica si el equipo está en garantía." });
+        if (!string.IsNullOrWhiteSpace(reception.EquipoEnGarantia) && reception.EquipoEnGarantia.Trim().ToUpperInvariant() is not ("SI" or "NO"))
+        {
+            return BadRequest(new { Message = "La garantía debe ser SI o NO." });
+        }
         if (reception.IdEdificio <= 0) return BadRequest(new { Message = "Selecciona el centro o regional de origen." });
         if (reception.FechaIngreso == default) return BadRequest(new { Message = "La fecha de ingreso es obligatoria." });
 
@@ -88,13 +96,14 @@ public sealed class TallerController(ITallerService tallerService) : ControllerB
     {
         if (idMantenimiento <= 0) return BadRequest(new { Message = "El mantenimiento no es válido." });
         if (exit.EquipoFuncional is not ("SI" or "NO")) return BadRequest(new { Message = "Indica si el equipo quedó funcional." });
-        if (string.IsNullOrWhiteSpace(exit.TecnicoEntrega) || string.IsNullOrWhiteSpace(exit.ClienteRecibe))
+        // Quien entrega no se pide: es el técnico asignado a la reparación.
+        if (string.IsNullOrWhiteSpace(exit.ClienteRecibe))
         {
-            return BadRequest(new { Message = "Indica quién entrega y quién recibe el equipo." });
+            return BadRequest(new { Message = "Indica quién recibe el equipo." });
         }
-        if (Exceeds(exit.TecnicoEntrega, 200) || Exceeds(exit.ClienteRecibe, 200))
+        if (Exceeds(exit.ClienteRecibe, 200))
         {
-            return BadRequest(new { Message = "Los nombres de entrega no pueden superar 200 caracteres." });
+            return BadRequest(new { Message = "El nombre de quien recibe no puede superar 200 caracteres." });
         }
         if (exit.FechaEntrega == default) return BadRequest(new { Message = "Indica la fecha de entrega." });
         return await tallerService.RegisterMaintenanceExit(idMantenimiento, exit, cancellationToken)
@@ -116,9 +125,29 @@ public sealed class TallerController(ITallerService tallerService) : ControllerB
         {
             return BadRequest(new { Message = "El diagnóstico, las piezas y las observaciones no pueden superar 2000 caracteres." });
         }
-        return await tallerService.UpdateMaintenanceAssessment(idMantenimiento, assessment, cancellationToken)
+        // La garantía la indica quien hace el dictamen: el técnico asignado o el admin de taller.
+        var garantia = assessment.EquipoEnGarantia?.Trim().ToUpperInvariant();
+        if (!string.IsNullOrEmpty(garantia) && garantia is not ("SI" or "NO"))
+        {
+            return BadRequest(new { Message = "La garantía debe ser SI o NO." });
+        }
+        // El administrador de taller puede dictaminar cualquier reparación; el técnico, solo las que tiene asignadas.
+        int? assignedTechnician = null;
+        if (!IsWorkshopManager)
+        {
+            if (CurrentUserId() is not { } userId) return BadRequest(new { Message = "No se pudo identificar al técnico." });
+            assignedTechnician = userId;
+        }
+
+        return await tallerService.UpdateMaintenanceAssessment(
+                idMantenimiento, assessment with { EquipoEnGarantia = garantia }, assignedTechnician, cancellationToken)
             ? NoContent()
-            : NotFound(new { Message = MaintenanceNotFound });
+            : NotFound(new
+            {
+                Message = assignedTechnician is null
+                    ? MaintenanceNotFound
+                    : "No se encontró una reparación asignada a ti con ese número.",
+            });
     }
 
     [HttpPut("maintenances/{idMantenimiento:int}/edit")]
@@ -131,6 +160,9 @@ public sealed class TallerController(ITallerService tallerService) : ControllerB
             ? NoContent()
             : NotFound(new { Message = MaintenanceNotFound });
     }
+
+    private bool IsWorkshopManager =>
+        User.IsInRole(AppRoles.Admin) || User.IsInRole(AppRoles.AdminTaller) || User.IsInRole(AppRoles.Taller);
 
     // ID del usuario autenticado (claim "sub" del JWT).
     private int? CurrentUserId() =>

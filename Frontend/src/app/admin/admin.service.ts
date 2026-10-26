@@ -3,7 +3,7 @@ import { Injectable } from '@angular/core';
 import { catchError, map, Observable, shareReplay, tap, throwError } from 'rxjs';
 import { apiUrl } from '../api-url';
 import { toPascalCase } from '../shared/api-response';
-import { AdminUser, Area, Building, CatalogDepartment, CreateAdminUser, CreateDesktopCombo, CreateDevice, CreateReassignment, Device, DeviceOption, DevicePageQuery, DeviceType, DirectoryEmployee, EmployeeAssignedDevice, EmployeeOption, EmployeeSearchResult, PagedResult, RegionalOption, Reassignment, SaveBuilding, SaveDepartment, SaveDeviceType, SaveDirectoryEmployee, SaveRegional, UpdateAdminUser, UpdateEmployee } from './admin.models';
+import { AdminUser, Area, Building, CatalogDepartment, CreateAdminUser, CreateDesktopCombo, CreateDevice, CreateReassignment, Device, DeviceOption, DevicePageQuery, DeviceType, DirectoryEmployee, EmployeeAssignedDevice, EmployeeOption, EmployeeRosterRow, EmployeeSearchResult, PagedResult, RegionalOption, Reassignment, SaveBuilding, SaveDepartment, SaveDeviceType, SaveDirectoryEmployee, SaveRegional, UpdateAdminUser, UpdateEmployee } from './admin.models';
 
 const API_ADMIN_URL = apiUrl('admin');
 
@@ -94,6 +94,16 @@ export class AdminService {
 
   getDirectoryEmployees(): Observable<DirectoryEmployee[]> {
     return this.get<DirectoryEmployee[]>('employees/directory');
+  }
+
+  // Módulo Empleados: listado por ubicación y asignación del No. de pago.
+  getEmployeeRoster(): Observable<EmployeeRosterRow[]> {
+    return this.get<EmployeeRosterRow[]>('employees/roster');
+  }
+
+  setEmployeePaymentNumber(employeeKey: string, noPago: string | null): Observable<void> {
+    const params = new HttpParams().set('employeeKey', employeeKey);
+    return this.httpClient.put<void>(`${API_ADMIN_URL}/employees/roster/no-pago`, { NoPago: noPago }, { params });
   }
 
   clearEmployeeOptionsCache(): void { this.employeeOptionsCacheByArea.clear(); }

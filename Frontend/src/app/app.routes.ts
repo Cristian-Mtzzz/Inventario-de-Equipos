@@ -51,6 +51,12 @@ export const routes: Routes = [
 		loadComponent: () => import('./taller/taller.component').then((module) => module.TallerComponent),
 	},
 	{
+		path: 'tickets',
+		canActivate: [authGuard],
+		data: { role: ['AdminTicket', 'TecnicoTaller'], modules: [AppModules.Tickets] },
+		loadComponent: () => import('./tickets/tickets.component').then((module) => module.TicketsComponent),
+	},
+	{
 		path: 'sin-acceso',
 		loadComponent: () => import('./protected-placeholder/protected-placeholder.component').then((module) => module.ProtectedPlaceholderComponent),
 	},

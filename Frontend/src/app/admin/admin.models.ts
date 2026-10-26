@@ -136,6 +136,16 @@ export interface DirectoryEmployee {
   IdArea: number | null;
 }
 
+// Fila del módulo Empleados: ubicación del empleado y su No. de pago, que puede estar vacío.
+export interface EmployeeRosterRow {
+  EmployeeKey: string;
+  Region: string | null;
+  Edificio: string | null;
+  Departamento: string | null;
+  NombreCompleto: string;
+  NoPago: string | null;
+}
+
 export interface RegionalOption {
   IdRegional: number;
   NombreRegional: string;

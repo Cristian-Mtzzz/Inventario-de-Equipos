@@ -20,6 +20,12 @@
     <button type="button" [class.active]="activeSection === 'workshop'"
       (click)="selectSection('workshop')">Taller</button>
     }
+    @if (canAccessAdminSection('employees')) {
+    <button type="button" [class.active]="activeSection === 'employees'" (click)="selectSection('employees')">Empleados</button>
+    }
+    @if (canAccessAdminSection('tickets')) {
+    <button type="button" [class.active]="activeSection === 'tickets'" (click)="selectSection('tickets')">Tickets</button>
+    }
     @if (canAccessAdminSection('catalogs')) {
     <button type="button" [class.active]="activeSection === 'catalogs'" (click)="selectSection('catalogs')">Mantenimiento</button>
     }
@@ -129,7 +135,7 @@
             <td [attr.rowspan]="group.Devices.length" class="combo-shared-cell">
               {{ device.NombreArea ? (device.NombreArea + (device.NombreEdificio ? ' · ' + device.NombreEdificio : '')) : '-' }}
             </td>
-            <td [attr.rowspan]="group.Devices.length" class="combo-shared-cell">{{ (device.FechaAsignacion | date:'dd/MM/yyyy') || '-' }}</td>
+            <td [attr.rowspan]="group.Devices.length" class="combo-shared-cell">{{ (device.FechaAsignacion | date:'dd/MM/yy') || '-' }}</td>
             }
             <td class="combo-actions">
               @if (device.Estado !== 'ASIGNADO') {
@@ -183,7 +189,7 @@
             <td>{{ device.AsignadoA || 'Sin asignar' }}</td>
             <td>{{ device.NumeroPagoAsignado || '-' }}</td>
             <td>{{ device.NombreArea ? (device.NombreArea + (device.NombreEdificio ? ' · ' + device.NombreEdificio : '')) : '-' }}</td>
-            <td>{{ (device.FechaAsignacion | date:'dd/MM/yyyy') || '-' }}</td>
+            <td>{{ (device.FechaAsignacion | date:'dd/MM/yy') || '-' }}</td>
             <td class="combo-actions">
               @if (device.Estado !== 'ASIGNADO') {
               <button type="button" class="secondary" (click)="assignDevice(device)">Asignar</button>
@@ -237,6 +243,8 @@
         <option [value]="device.CodigoInventario">{{ deviceOptionLabel(device) }}</option>
         }
       </select>
+      <!-- Primero el buscador: al elegir al empleado se completan Regional, Edificio, Departamento y empleado. -->
+      <app-employee-lookup class="reassignment-employee-lookup" (selected)="applyReassignmentEmployee($event)" />
       <div class="reassignment-location-fields">
         <div>
           <label for="admin-reassignment-region">Regional</label>
@@ -329,7 +337,7 @@
             <td>{{ item.NombreAnterior || item.NoPagoAnterior || 'Sin asignar' }}</td>
             <td>{{ item.NombreNuevo || item.NoPagoNuevo || '-' }}</td>
             <td>{{ item.NombreArea ? (item.NombreArea + (item.NombreEdificio ? ' · ' + item.NombreEdificio : '')) : '-' }}</td>
-            <td>{{ item.FechaCambio | date:'dd/MM/yyyy' }}</td>
+            <td>{{ item.FechaCambio | date:'dd/MM/yy' }}</td>
             <td>{{ item.Motivo }}</td>
             <td><button type="button" class="secondary"
                 (click)="selectDeviceForReassignmentFromItem(item)">Reasignar</button></td>
@@ -347,6 +355,14 @@
   
   @if (canAccessAdminSection('users')) {
   <app-user-management [active]="activeSection === 'users'" />
+  }
+
+  @if (canAccessAdminSection('employees')) {
+  <app-employee-management [active]="activeSection === 'employees'" />
+  }
+
+  @if (canAccessAdminSection('tickets') && activeSection === 'tickets') {
+  <app-tickets [embedded]="true" />
   }
 
 
@@ -397,6 +413,8 @@
 
         <!-- Ubicación y responsable: se eligen del catálogo; el No. de pago se completa con el del empleado
           y se puede corregir. Elegir cualquiera de ellos marca el equipo como Asignado. -->
+        <!-- Primero el buscador: al elegir al empleado se completan Regional, Edificio y Departamento. -->
+        <app-employee-lookup class="device-employee-lookup" (selected)="applyDeviceEmployee($event)" />
         <label class="device-create-field">Regional
           <select [(ngModel)]="selectedRegionId" (ngModelChange)="selectDeviceRegion($event)" name="editRegional">
             <option [ngValue]="null">Seleccionar regional</option>
@@ -551,6 +569,10 @@
               <option value="ASIGNADO">Asignado</option>
             </select>
           </label>
+          <!-- Disponible: sin ubicación ni responsable. Asignado: primero se busca al empleado y se
+            completan Regional, Edificio, Área, Nombre asignado y No. de pago. -->
+          @if (newDevice.Estado === 'ASIGNADO') {
+          <app-employee-lookup class="device-create-lookup" (selected)="applyDeviceEmployee($event)" />
           <label class="device-create-field">Regional
             <select [(ngModel)]="selectedRegionId" (ngModelChange)="selectDeviceRegion($event)" name="createRegional">
               <option [ngValue]="null">Seleccionar regional</option>
@@ -576,20 +598,19 @@
               }
             </select>
           </label>
+          }
         </div>
         @if (newDevice.Estado === 'ASIGNADO') {
         <div class="device-create-employee-fields">
-          <label class="device-create-field">Empleado existente
-            <select [(ngModel)]="selectedEmployeeIndex" (ngModelChange)="selectDeviceEmployee($event)"
-              name="createEmployee" [disabled]="newDevice.IdArea === null || isLoadingEmployeesForDevice || employeesForDeviceArea.length === 0">
-              <option [ngValue]="null">{{ isLoadingEmployeesForDevice ? 'Cargando empleados...' : employeeCatalogError ? 'No se pudo cargar el catálogo' : newDevice.IdArea === null ? 'Selecciona primero un área' : employeesForDeviceArea.length === 0 ? 'No hay empleados en esta área' : 'Selecciona un empleado existente' }}</option>
+          <!-- Un solo campo con los empleados del área (solo nombres); al elegir se completa el No. de pago. -->
+          <label class="device-create-field">Nombre asignado
+            <select [(ngModel)]="selectedEmployeeIndex" (ngModelChange)="selectDeviceEmployee($event)" name="createEmployee"
+              [disabled]="newDevice.IdArea === null || isLoadingEmployeesForDevice || employeesForDeviceArea.length === 0">
+              <option [ngValue]="null">{{ isLoadingEmployeesForDevice ? 'Cargando empleados...' : employeeCatalogError ? 'No se pudo cargar el catálogo' : newDevice.IdArea === null ? 'Selecciona primero un área' : employeesForDeviceArea.length === 0 ? 'No hay empleados en esta área' : 'Selecciona un empleado' }}</option>
               @for (employee of employeesForDeviceArea; track $index) {
-              <option [ngValue]="$index">{{ employee.NombreCompleto }} ({{ employee.NoPago || 'Sin pago' }})</option>
+              <option [ngValue]="$index">{{ employee.NombreCompleto }}</option>
               }
             </select>
-          </label>
-          <label class="device-create-field">Nombre asignado
-            <input [(ngModel)]="newDevice.NombreAsignado" (input)="onDeviceEmployeeNameChange()" name="createNombreAsignado" placeholder="Nombre del empleado" />
           </label>
           <label class="device-create-field">Número de pago
             <input appDigitsOnly [(ngModel)]="newDevice.NumeroPagoAsignado" (input)="onPaymentNumberInput(newDevice)" name="createPago" placeholder="No. de pago" maxlength="5" pattern="[0-9]*" />

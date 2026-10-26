@@ -5,7 +5,8 @@ import { provideHttpClientTesting, HttpTestingController } from '@angular/common
 import { Observable } from 'rxjs';
 import { App } from './app';
 import { authGuard } from './auth/auth.guard';
-import { UserRole } from './auth/auth.models';
+import { USER_ROLES, UserRole } from './auth/auth.models';
+import { AuthService } from './auth/auth.service';
 
 // Pruebas básicas del componente raíz y del shell de navegación.
 describe('App', () => {
@@ -86,5 +87,26 @@ describe('App', () => {
       .flush({ Modules: ['DISPOSITIVOS'], IsSuperAdmin: false });
 
     expect(guardResult).toBe(true);
+  });
+
+  // Cada rol de USER_ROLES debe conservar la sesión al recargar la página (antes AdminTicket la perdía).
+  it.each(USER_ROLES)('should keep the stored session after a reload for role %s', (role) => {
+    const encodeBase64Url = (value: object): string => btoa(JSON.stringify(value))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
+    const tokenPayload = encodeBase64Url({
+      sub: '7',
+      unique_name: 'usuario.prueba',
+      role,
+      exp: Math.floor(Date.now() / 1000) + 3600,
+    });
+    localStorage.setItem('sistema_inventario_token', `header.${tokenPayload}.signature`);
+
+    const authService = TestBed.inject(AuthService);
+
+    expect(authService.isAuthenticated()).toBe(true);
+    expect(authService.hasRole([role])).toBe(true);
+    expect(localStorage.getItem('sistema_inventario_token')).not.toBeNull();
   });
 });

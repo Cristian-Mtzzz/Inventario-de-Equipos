@@ -11,9 +11,9 @@
         @for (role of availableUserRoles; track role) { <option [value]="role">{{ role }}</option> }
       </select>
       <button type="button" class="secondary" (click)="clearUserFilters()">Limpiar</button>
+      <app-table-page-size [(page)]="userPage" [(pageSize)]="userPageSize" />
       <button type="button" class="add-user-button" (click)="openUserDialog()">Añadir usuario</button>
     </div>
-    <app-table-page-size [(page)]="userPage" [(pageSize)]="userPageSize" />
     <div class="table-wrap users-table-wrap">
       <table class="users-table">
         <thead>
@@ -43,12 +43,16 @@
             <td>{{ user.Estado }}</td>
             <td>{{ user.Rol }}</td>
             <td class="user-row-actions">
+              @if (canManageUser(user)) {
               <button type="button" class="secondary" (click)="editUser(user)">Editar</button>
               <button type="button" class="danger" (click)="askRemoveUser(user.IdUsuario)">Quitar</button>
               @if (user.Dominio === 0) {
               <button type="button" class="reset-password-button" title="Restablecer contraseña"
                 [attr.aria-label]="'Restablecer contraseña de ' + user.Usuario"
                 (click)="askResetUserPassword(user.IdUsuario, user.Usuario)"><span aria-hidden="true">⟳</span></button>
+              }
+              } @else {
+              <span title="Solo un usuario con acceso total puede modificarlo">Acceso total</span>
               }
             </td>
           </tr> }
@@ -143,6 +147,7 @@
             <option value="RecepcionTaller">Recepción de taller</option>
             <option value="TecnicoTaller">Técnico de taller</option>
             <option value="AdminTaller">Administrador de taller</option>
+            <option value="AdminTicket">Administrador de tickets</option>
           </select>
         </div>
 
@@ -151,14 +156,14 @@
           @for (module of moduleOptions; track module.code) {
           <label class="user-module-option">
             <input type="checkbox" [checked]="newUser.IsSuperAdmin || newUser.Modules.includes(module.code)"
-              [disabled]="newUser.IsSuperAdmin || isRestrictedWorkshopRole(newUser.Rol)"
+              [disabled]="newUser.IsSuperAdmin || isFixedModuleRole(newUser.Rol)"
               (change)="setUserModule(module.code, $any($event.target).checked)" />
             <span>{{ module.label }}</span>
           </label>
           }
           <label class="user-module-option user-superadmin-option">
             <input type="checkbox" [ngModel]="newUser.IsSuperAdmin" (ngModelChange)="setUserSuperAdmin($event)"
-              name="userSuperAdmin" [disabled]="!canManageSuperAdmins || isRestrictedWorkshopRole(newUser.Rol)" />
+              name="userSuperAdmin" [disabled]="!canManageSuperAdmins || isFixedModuleRole(newUser.Rol)" />
             <span>Administrador total</span>
           </label>
         </fieldset>

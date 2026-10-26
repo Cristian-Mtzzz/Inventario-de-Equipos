@@ -7,6 +7,9 @@ namespace SistemaInventario.Api.Services;
 // Persistencia de la administración de usuarios del sistema y sus módulos de acceso.
 public sealed class UserAdminService(InventoryDbContext dbContext) : OracleRepository(dbContext), IUserAdminService
 {
+    // Contraseña con la que se crean o restablecen los usuarios locales; se pide cambiarla al entrar.
+    private const string InitialPassword = "1234";
+
     public async Task<IReadOnlyList<AdminUserDto>> GetUsers(CancellationToken cancellationToken)
     {
         var rows = await ReadList("""
@@ -49,13 +52,13 @@ public sealed class UserAdminService(InventoryDbContext dbContext) : OracleRepos
                      ESTADO, PASSWORD_HASH, ROL, DOMINIOP, DOMINIO, CLAVE_SEGURA)
                 VALUES
                     (:idUsuario, :usuario, :nombrePersona, :fechaExpiracion,
-                     :estado, ORA_HASH(:password, 4294967295) || ORA_HASH(:usuarioHash, 4294967295),
+                     :estado, :passwordHash,
                      :rol, :dominioP, :dominio, '0')
                 """, cancellationToken,
                 ("idUsuario", userId), ("usuario", user.Usuario.Trim()),
                 ("nombrePersona", user.NombrePersona.Trim()), ("fechaExpiracion", user.FechaExpiracion),
-                ("estado", user.Estado.Trim()), ("password", "1234"),
-                ("usuarioHash", user.Usuario.Trim()), ("rol", user.Rol.Trim()),
+                ("estado", user.Estado.Trim()), ("passwordHash", PasswordHashing.Hash(InitialPassword)),
+                ("rol", user.Rol.Trim()),
                 ("dominioP", user.DominioP.Trim().ToUpperInvariant()), ("dominio", user.Dominio));
             await ReplaceUserModules(connection, transaction, userId, user.Modules, user.Rol, user.IsSuperAdmin, cancellationToken);
         }, cancellationToken);
@@ -98,13 +101,12 @@ public sealed class UserAdminService(InventoryDbContext dbContext) : OracleRepos
     public async Task<bool> ResetUserPassword(int idUsuario, CancellationToken cancellationToken) =>
         await Execute("""
             UPDATE USUARIOS
-            SET PASSWORD_HASH = ORA_HASH(:password, 4294967295)
-                                  || ORA_HASH(USUARIO, 4294967295),
+            SET PASSWORD_HASH = :passwordHash,
                 CLAVE_SEGURA = '0'
             WHERE ID_USUARIO = :idUsuario
               AND DOMINIO = 0
             """, cancellationToken,
-            ("password", "1234"),
+            ("passwordHash", PasswordHashing.Hash(InitialPassword)),
             ("idUsuario", idUsuario)) == 1;
 
     private static async Task ReplaceUserModules(
@@ -123,7 +125,18 @@ public sealed class UserAdminService(InventoryDbContext dbContext) : OracleRepos
         string[] assignedModules;
         if (AppRoles.IsRestrictedWorkshopRole(role))
         {
-            assignedModules = [AppModules.Workshop];
+            // El técnico de taller, además del taller, atiende los tickets de soporte.
+            assignedModules = role.Equals(AppRoles.TecnicoTaller, StringComparison.OrdinalIgnoreCase)
+                ? [AppModules.Workshop, AppModules.Tickets]
+                : [AppModules.Workshop];
+        }
+        else if (AppRoles.IsTicketRole(role))
+        {
+            assignedModules = [AppModules.Tickets];
+        }
+        else if (AppRoles.IsTicketRole(role))
+        {
+            assignedModules = [AppModules.Tickets];
         }
         else if (isSuperAdmin)
         {

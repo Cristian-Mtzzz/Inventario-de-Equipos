@@ -2,6 +2,7 @@ import { DatePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DigitsOnlyDirective } from '../shared/digits-only.directive';
+import { EmployeeLookupComponent, EmployeeLookupResult, findEmployeeIndex } from '../shared/employee-lookup.component';
 import { PagePipe, TablePageSizeComponent, TablePaginatorComponent } from '../shared/table-paginator';
 import { Router } from '@angular/router';
 import { finalize, forkJoin } from 'rxjs';
@@ -15,7 +16,7 @@ import { AppHeaderComponent } from '../shared/app-header.component';
 // Componente de inventario que permite consultar, filtrar, paginar y gestionar dispositivos y reasignaciones.
 @Component({
   selector: 'app-inventory',
-  imports: [DatePipe, FormsModule, EmployeeSearchDialogComponent, AppHeaderComponent, PagePipe, TablePageSizeComponent, TablePaginatorComponent, DigitsOnlyDirective],
+  imports: [DatePipe, FormsModule, EmployeeSearchDialogComponent, AppHeaderComponent, PagePipe, TablePageSizeComponent, TablePaginatorComponent, DigitsOnlyDirective, EmployeeLookupComponent],
   templateUrl: './inventory.component.html',
   styleUrl: './inventory.component.css',
   // Angular 22 usa OnPush por defecto; este panel actualiza la vista al llegar cada respuesta HTTP
@@ -277,7 +278,18 @@ export class InventoryComponent {
     }
   }
 
-  selectDeviceArea(idArea: number | null): void {
+  // Empleado elegido con el buscador: completa Regional, Edificio, Departamento y el empleado
+  // (sirve igual para Agregar y Editar dispositivo).
+  applyDeviceEmployee(employee: EmployeeLookupResult): void {
+    this.selectBuilding(employee.IdEdificio);
+    if (employee.IdRegional !== null) this.selectedRegionId = employee.IdRegional;
+    if (employee.IdArea !== null) this.selectDeviceArea(employee.IdArea, employee);
+    this.newDevice.NombreAsignado = employee.NombreCompleto;
+    this.newDevice.NumeroPagoAsignado = employee.NoPago || null;
+  }
+
+  // preselect: empleado del buscador que queda elegido en el combo cuando termina de cargar la lista.
+  selectDeviceArea(idArea: number | null, preselect?: EmployeeLookupResult): void {
     this.newDevice.IdArea = idArea;
     this.clearDeviceEmployeeSelection();
     this.employeeCatalogError = '';
@@ -292,7 +304,10 @@ export class InventoryComponent {
       this.isLoadingEmployeesForDevice = false;
     })).subscribe({
       next: (employees) => {
-        if (requestId === this.employeeOptionsRequestId) this.employeesForDeviceArea = employees;
+        if (requestId !== this.employeeOptionsRequestId) return;
+        this.employeesForDeviceArea = employees;
+        const index = preselect ? findEmployeeIndex(employees, preselect) : -1;
+        if (index >= 0) this.selectDeviceEmployee(index);
       },
       error: () => {
         if (requestId === this.employeeOptionsRequestId) {
@@ -323,14 +338,14 @@ export class InventoryComponent {
     }
   }
 
+  // "Nombre asignado" se escribe o se elige de la lista del área; si coincide con un empleado del
+  // catálogo queda seleccionado y se completa su No. de pago (si lo tiene).
   onDeviceEmployeeNameChange(): void {
     const name = this.newDevice.NombreAsignado?.trim().toUpperCase();
-    if (name) {
-      const match = this.employeesForDeviceArea.find(e => e.NombreCompleto.trim().toUpperCase() === name);
-      if (match && match.NoPago) {
-        this.newDevice.NumeroPagoAsignado = match.NoPago;
-      }
-    }
+    const index = name ? this.employeesForDeviceArea.findIndex(e => e.NombreCompleto.trim().toUpperCase() === name) : -1;
+    this.selectedEmployeeIndex = index >= 0 ? index : null;
+    const match = index >= 0 ? this.employeesForDeviceArea[index] : undefined;
+    if (match?.NoPago) this.newDevice.NumeroPagoAsignado = match.NoPago;
   }
 
   private clearDeviceEmployeeSelection(): void {
@@ -547,7 +562,17 @@ export class InventoryComponent {
     }
   }
 
-  selectReassignmentArea(idArea: number): void {
+  // Empleado elegido con el buscador: completa Regional, Edificio, Departamento y el empleado nuevo.
+  applyReassignmentEmployee(employee: EmployeeLookupResult): void {
+    this.selectReassignmentRegion(employee.IdRegional);
+    if (employee.IdEdificio !== null) this.selectReassignmentBuilding(employee.IdEdificio);
+    if (employee.IdArea !== null) this.selectReassignmentArea(employee.IdArea, employee);
+    this.newReassignment.NombreNuevo = employee.NombreCompleto;
+    this.newReassignment.NoPagoNuevo = employee.NoPago || null;
+  }
+
+  // preselect: empleado del buscador que queda elegido en el combo cuando termina de cargar la lista.
+  selectReassignmentArea(idArea: number, preselect?: EmployeeLookupResult): void {
     this.newReassignment.IdArea = Number(idArea);
     this.clearReassignmentEmployee();
     if (this.newReassignment.IdArea <= 0) return;
@@ -560,7 +585,10 @@ export class InventoryComponent {
       this.isLoadingReassignmentEmployees = false;
     })).subscribe({
       next: (employees) => {
-        if (requestId === this.reassignmentEmployeeRequestId) this.reassignmentEmployees = employees;
+        if (requestId !== this.reassignmentEmployeeRequestId) return;
+        this.reassignmentEmployees = employees;
+        const index = preselect ? findEmployeeIndex(employees, preselect) : -1;
+        if (index >= 0) this.selectReassignmentEmployee(index);
       },
       error: () => {
         if (requestId === this.reassignmentEmployeeRequestId) {

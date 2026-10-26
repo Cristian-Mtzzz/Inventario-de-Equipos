@@ -12,13 +12,15 @@ import { AdminService } from '../admin/admin.service';
 import { SearchableSelectDirective } from '../shared/searchable-select.directive';
 import { apiErrorMessage } from '../shared/api-response';
 import { AppHeaderComponent } from '../shared/app-header.component';
+import { ModuleTabsComponent } from '../shared/module-tabs.component';
 import { Area, Building, DeviceType, RegionalOption } from '../admin/admin.models';
 import { Maintenance, MaintenanceAssessmentRequest, MaintenanceEntryRequest, MaintenanceExitRequest, ReceptionDefaults, ReceptionEntryRequest, WorkshopDevice, WorkshopTechnician } from './taller.models';
 import { TallerService } from './taller.service';
+import { ReportColumn, addReportSheet, createReportWorkbook, downloadReportWorkbook, excelDate, generatedAt, reportFileName } from '../shared/excel-report';
 
 @Component({
   selector: 'app-taller',
-  imports: [DatePipe, FormsModule, SearchableSelectDirective, AppHeaderComponent, PagePipe, TablePageSizeComponent, TablePaginatorComponent, DigitsOnlyDirective],
+  imports: [DatePipe, FormsModule, SearchableSelectDirective, AppHeaderComponent, ModuleTabsComponent, PagePipe, TablePageSizeComponent, TablePaginatorComponent, DigitsOnlyDirective],
   templateUrl: './taller.component.html',
   styleUrl: './taller.component.css',
 })
@@ -72,12 +74,11 @@ export class TallerComponent {
     FechaIngreso: this.getCurrentDateTime(),
   };
   entry: MaintenanceEntryRequest = { IdEquipo: 0, Dictamen: '', TipoReparacion: '', FechaIngreso: this.getCurrentDateTime() };
-  exit: MaintenanceExitRequest = { EquipoFuncional: '', TecnicoEntrega: '', ClienteRecibe: '', FechaEntrega: this.getCurrentDateTime() };
-  assessment: MaintenanceAssessmentRequest = { Dictamen: '', PiezasSustituidas: '', Observaciones: '' };
-  // "Recibe" (usuario en sesión) y técnico asignado por defecto: se muestran bloqueados en la recepción.
+  exit: MaintenanceExitRequest = { EquipoFuncional: '', ClienteRecibe: '', FechaEntrega: this.getCurrentDateTime() };
+  assessment: MaintenanceAssessmentRequest = { Dictamen: '', PiezasSustituidas: '', Observaciones: '', EquipoEnGarantia: '' };
+  // "Recibe" (usuario en sesión) y técnico asignado por defecto. El formulario ya no los
+  // muestra; el servidor es quien los guarda al registrar la recepción.
   receptionDefaults: ReceptionDefaults | null = null;
-  // En la salida, el técnico que entrega es el asignado a la reparación y no se edita.
-  isExitTechnicianLocked = false;
 
   constructor() {
     if (this.isReceptionOnly) this.activeWindow = 'reception';
@@ -298,101 +299,55 @@ export class TallerComponent {
     }
   }
 
+  // Mismas columnas y celdas que la tabla del taller en la vista web (lo vacío o "PENDIENTE" sale como "-").
   private async createWorkshopWorkbook(maintenances: Maintenance[]): Promise<void> {
-    const { default: ExcelJSModule } = await import('exceljs');
-    const workbook = new ExcelJSModule.Workbook();
-    workbook.creator = 'Sistema inventario';
-    workbook.created = new Date();
-    workbook.subject = 'Reporte del taller';
-    workbook.title = 'Taller';
-
-    // Misma presentación que el reporte de dispositivos: título, resumen y tabla con filtros.
-    const repairSheet = workbook.addWorksheet('Reparaciones', { properties: { tabColor: { argb: 'FF4F8A83' } } });
-    const columns: Array<[string, number, (item: Maintenance) => string | number | Date]> = [
-      ['ID', 10, (item) => item.IdReparacion],
-      ['Inventario', 16, (item) => item.CodigoInventario],
-      ['No. serie', 22, (item) => item.NoSerie],
-      ['Marca', 16, (item) => item.Marca],
-      ['Modelo', 20, (item) => item.Modelo],
-      ['Tipo Dispositivo', 22, (item) => item.TipoDispositivo ?? ''],
-      ['Memo', 16, (item) => item.MemoNumero ?? ''],
-      ['Recibe', 24, (item) => item.Recibe ?? ''],
-      ['Técnico', 24, (item) => item.Tecnico ?? ''],
-      ['Área', 28, (item) => item.Departamento ?? ''],
-      ['Descripción del equipo', 36, (item) => item.DescripcionEquipo ?? ''],
-      ['Garantía', 12, (item) => item.EquipoEnGarantia ?? ''],
-      ['Dictamen', 28, (item) => item.Dictamen ?? ''],
-      ['Piezas sustituidas', 32, (item) => item.PiezasSustituidas ?? ''],
-      ['Observaciones', 32, (item) => item.Observaciones ?? ''],
-      ['Ingreso', 18, (item) => this.toExcelDate(item.FechaIngreso)],
-      ['Equipo funcional', 16, (item) => item.EquipoFuncional ?? ''],
-      ['Técnico que entrega', 24, (item) => item.TecnicoEntrega ?? ''],
-      ['Cliente que recibe', 24, (item) => item.ClienteRecibe ?? ''],
-      ['Fecha de entrega', 18, (item) => this.toExcelDate(item.FechaEntrega)],
+    const workbook = await createReportWorkbook('Reporte del taller');
+    const columns: ReportColumn<Maintenance>[] = [
+      { header: 'Memo', width: 20, value: (item) => this.display(item.MemoNumero) },
+      { header: 'Área', width: 30, value: (item) => this.display(item.Departamento) },
+      { header: 'Equipo', width: 20, value: (item) => this.display(item.TipoDispositivo) },
+      { header: 'Marca', width: 16, value: (item) => this.display(item.Marca) },
+      { header: 'Inventario', width: 14, value: (item) => item.CodigoInventario },
+      { header: 'Recibió', width: 24, value: (item) => this.display(item.Recibe) },
+      { header: 'Descripción', width: 36, wrap: true, value: (item) => this.display(item.DescripcionEquipo) },
+      { header: 'Garantía', width: 12, value: (item) => this.display(item.EquipoEnGarantia) },
+      { header: 'Ingreso', width: 18, format: 'datetime', value: (item) => excelDate(item.FechaIngreso) },
+      { header: 'Técnico que entrega', width: 24, value: (item) => this.display(item.TecnicoEntrega) },
+      { header: 'Dictamen', width: 32, wrap: true, value: (item) => this.display(item.Dictamen) },
+      { header: 'Piezas sustituidas', width: 32, wrap: true, value: (item) => this.display(item.PiezasSustituidas) },
+      { header: 'Observaciones', width: 32, wrap: true, value: (item) => this.display(item.Observaciones) },
+      { header: 'Equipo funcional', width: 16, value: (item) => this.display(item.EquipoFuncional) },
+      { header: 'Cliente que recibe', width: 24, value: (item) => this.display(item.ClienteRecibe) },
+      { header: 'Fecha de entrega', width: 18, format: 'datetime', value: (item) => excelDate(item.FechaEntrega) },
     ];
-
-    const lastColumn = repairSheet.getColumn(columns.length).letter;
-    repairSheet.mergeCells(`A1:${lastColumn}1`);
-    repairSheet.getCell('A1').value = 'REPORTE DEL TALLER';
-    repairSheet.getCell('A1').font = { name: 'Aptos Display', size: 16, bold: true, color: { argb: 'FFFFFFFF' } };
-    repairSheet.getCell('A1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF173F43' } };
-    repairSheet.getCell('A1').alignment = { vertical: 'middle' };
-    repairSheet.getRow(1).height = 31;
-    repairSheet.mergeCells(`A2:${lastColumn}2`);
     const delivered = maintenances.filter((item) => item.FechaEntrega).length;
-    repairSheet.getCell('A2').value = `${maintenances.length} reparaciones · ${delivered} entregadas · `
-      + `${maintenances.length - delivered} en taller · Generado ${new Date().toLocaleString('es-HN')}`;
-    repairSheet.getCell('A2').font = { name: 'Aptos', size: 10, color: { argb: 'FF617573' }, italic: true };
-
-    repairSheet.addTable({
-      name: 'ReporteTaller',
-      ref: 'A4',
-      headerRow: true,
-      totalsRow: false,
-      style: { theme: 'TableStyleMedium2', showRowStripes: true },
-      columns: columns.map(([name]) => ({ name })),
-      // Una tabla de Excel necesita al menos una fila de datos.
-      rows: maintenances.length > 0
-        ? maintenances.map((item) => columns.map(([, , value]) => value(item)))
-        : [columns.map(() => '')],
+    addReportSheet(workbook, {
+      sheetName: 'Reparaciones',
+      title: 'REPORTE DEL TALLER',
+      subtitle: `${maintenances.length} reparaciones · ${delivered} entregadas · ${maintenances.length - delivered} en taller · ${generatedAt()}`,
+      tableName: 'ReporteTaller',
+      columns,
+      rows: maintenances,
     });
-    columns.forEach(([header, width], index) => {
-      const column = repairSheet.getColumn(index + 1);
-      column.width = width;
-      if (header === 'Ingreso' || header === 'Fecha de entrega') column.numFmt = 'dd/mm/yyyy hh:mm';
-    });
-    repairSheet.views = [{ state: 'frozen', ySplit: 4 }];
-
-    const buffer = await workbook.xlsx.writeBuffer();
-    const workbookBytes = new Uint8Array(buffer).slice();
-    if (workbookBytes.byteLength < 4 || workbookBytes[0] !== 0x50 || workbookBytes[1] !== 0x4b) {
-      throw new Error('ExcelJS generó un archivo XLSX vacío o inválido.');
-    }
-    const file = new Blob([workbookBytes.buffer as ArrayBuffer], {
-      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    });
-
-    const url = URL.createObjectURL(file);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `reporte-taller-${new Date().toISOString().slice(0, 10)}.xlsx`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    await downloadReportWorkbook(workbook, reportFileName('taller'));
   }
 
-  // Convierte la fecha de la API en fecha de Excel para que se pueda ordenar y filtrar.
-  private toExcelDate(value: string | null | undefined): Date | string {
-    if (!value) return '';
-    const date = new Date(value);
-    return Number.isNaN(date.getTime()) ? value : date;
+  // Garantía legible; mientras el admin de taller no la define en el dictamen queda "Sin definir".
+  warrantyLabel(value: string | null | undefined): string {
+    const text = (value ?? '').trim().toUpperCase();
+    return text === 'SI' ? 'Sí' : text === 'NO' ? 'No' : 'Sin definir';
   }
 
   // En la tabla, los valores vacíos o "PENDIENTE" se muestran como "-".
   display(value: string | null | undefined): string {
     const text = value?.trim() ?? '';
     return text === '' || text.toUpperCase() === 'PENDIENTE' ? '-' : text;
+  }
+
+  // El técnico solo dictamina las reparaciones que tiene asignadas (la API también lo valida).
+  isAssignedToMe(item: Maintenance): boolean {
+    const userId = this.authService.currentUserId();
+    return userId !== null && item.IdTecnico === userId;
   }
 
   // El técnico ya respondió el dictamen: en lugar del botón se muestra "Trabajo finalizado".
@@ -410,7 +365,6 @@ export class TallerComponent {
       || !this.reception.Modelo.trim()
       || !this.reception.TipoDispositivo.trim()
       || !this.reception.DescripcionEquipo.trim()
-      || !this.reception.EquipoEnGarantia
       || this.reception.IdEdificio <= 0
       || !this.reception.FechaIngreso) {
       this.errorMessage = 'Completa los campos obligatorios del formato físico de recepción.';
@@ -490,11 +444,9 @@ export class TallerComponent {
     this.selectedMaintenance = item;
     this.exit = {
       EquipoFuncional: item.EquipoFuncional ?? '',
-      TecnicoEntrega: item.Tecnico?.trim() || item.TecnicoEntrega || '',
       ClienteRecibe: item.ClienteRecibe ?? '',
       FechaEntrega: this.getCurrentDateTime(),
     };
-    this.isExitTechnicianLocked = !!item.Tecnico?.trim();
     this.activeWindow = 'exit';
   }
 
@@ -503,8 +455,8 @@ export class TallerComponent {
     this.message = '';
     this.errorMessage = '';
     if (!this.selectedMaintenance || !this.exit.FechaEntrega
-      || !this.exit.EquipoFuncional || !this.exit.TecnicoEntrega.trim() || !this.exit.ClienteRecibe.trim()) {
-      this.errorMessage = 'Completa el estado funcional, quién entrega, quién recibe y la fecha de entrega.';
+      || !this.exit.EquipoFuncional || !this.exit.ClienteRecibe.trim()) {
+      this.errorMessage = 'Completa el estado funcional, quién recibe y la fecha de entrega.';
       this.changeDetector.markForCheck();
       return;
     }
@@ -533,9 +485,11 @@ export class TallerComponent {
     this.errorMessage = '';
     this.selectedMaintenance = item;
     this.assessment = {
-      Dictamen: item.Dictamen ?? '',
+      // "PENDIENTE" es solo la marca interna de "sin dictamen": el campo se abre vacío.
+      Dictamen: this.display(item.Dictamen) === '-' ? '' : (item.Dictamen ?? ''),
       PiezasSustituidas: item.PiezasSustituidas ?? '',
       Observaciones: item.Observaciones ?? '',
+      EquipoEnGarantia: (item.EquipoEnGarantia ?? '').toUpperCase(),
     };
     this.activeWindow = 'assessment';
   }
@@ -543,6 +497,11 @@ export class TallerComponent {
   saveAssessment(): void {
     if (!this.selectedMaintenance || !this.assessment.Dictamen.trim()) {
       this.errorMessage = 'Ingresa el diagnóstico del equipo.';
+      this.changeDetector.markForCheck();
+      return;
+    }
+    if (!this.assessment.EquipoEnGarantia) {
+      this.errorMessage = 'Indica si el equipo está en garantía.';
       this.changeDetector.markForCheck();
       return;
     }

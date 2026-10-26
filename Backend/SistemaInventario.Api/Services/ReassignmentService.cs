@@ -15,20 +15,33 @@ public sealed class ReassignmentService(InventoryDbContext dbContext) : Assignme
                    a_ant.DEPARTAMENTO_IHSS_DESC AS NOMBRE_AREA_ANTERIOR,
                    TO_CHAR(r.NO_PAGO_NUEVO) AS NO_PAGO_NUEVO,
                    COALESCE(r.NOMBRE_NUEVO, e.NOMBRE_EMPLEADO, TO_CHAR(r.NO_PAGO_NUEVO), 'Sin asignar') AS NOMBRE_NUEVO,
-                   -- Área de trabajo del responsable actual de ese cambio; si no tiene No. de pago, la del equipo.
-                   COALESCE(b_new.EDIFICIO_DESCRIPCION, b.EDIFICIO_DESCRIPCION) AS NOMBRE_EDIFICIO,
-                   COALESCE(a_new.DEPARTAMENTO_IHSS_DESC, a.DEPARTAMENTO_IHSS_DESC) AS NOMBRE_AREA,
+                   -- Área de trabajo de quien quedó responsable en ESE cambio, no la del equipo:
+                   -- cada fila del historial muestra el área de su propio responsable.
+                   b_new.EDIFICIO_DESCRIPCION AS NOMBRE_EDIFICIO,
+                   a_new.DEPARTAMENTO_IHSS_DESC AS NOMBRE_AREA,
                    r.FECHA_CAMBIO, r.MOTIVO,
                    t.TIPO_DISPOSITIVO || CASE WHEN d.COMPONENTE IS NOT NULL THEN ' · ' || d.COMPONENTE END AS NOMBRE_TIPO,
                    d.MARCA, d.MODELO, d.NO_SERIE
-            FROM REASIGNACIONES r
+            FROM (
+                SELECT ra.ID_REASIGNACION, ra.ID_EQUIPO, ra.NO_PAGO_ANTERIOR, ra.NOMBRE_ANTERIOR,
+                       ra.NO_PAGO_NUEVO, ra.NOMBRE_NUEVO, ra.FECHA_CAMBIO, ra.MOTIVO,
+                       -- Departamento del nuevo responsable: primero por No. de pago y, si ese
+                       -- número no corresponde a ningún empleado (o el empleado no lo tiene
+                       -- registrado), por nombre.
+                       COALESCE(
+                           (SELECT MAX(emp.DEPARTAMENTO_IHSS_ID)
+                            FROM EMPLEADOS_IHSS emp
+                            WHERE TRIM(TO_CHAR(emp.NPAGO)) = TRIM(TO_CHAR(ra.NO_PAGO_NUEVO))),
+                           (SELECT MAX(emp.DEPARTAMENTO_IHSS_ID)
+                            FROM EMPLEADOS_IHSS emp
+                            WHERE UPPER(TRIM(emp.NOMBRE_EMPLEADO)) = UPPER(TRIM(ra.NOMBRE_NUEVO)))) AS ID_AREA_NUEVO
+                FROM REASIGNACIONES ra
+            ) r
             LEFT JOIN DISPOSITIVOS d ON d.ID_EQUIPO = r.ID_EQUIPO
             LEFT JOIN EMPLEADOS_IHSS e ON TRIM(TO_CHAR(e.NPAGO)) = TRIM(TO_CHAR(r.NO_PAGO_NUEVO))
             LEFT JOIN EMPLEADOS_IHSS e_ant ON TRIM(TO_CHAR(e_ant.NPAGO)) = TRIM(TO_CHAR(r.NO_PAGO_ANTERIOR))
             LEFT JOIN DEPARTAMENTO_IHSS a_ant ON a_ant.DEPARTAMENTO_IHSS_ID = e_ant.DEPARTAMENTO_IHSS_ID
-            LEFT JOIN DEPARTAMENTO_IHSS a ON a.DEPARTAMENTO_IHSS_ID = d.ID_AREA
-            LEFT JOIN EDIFICIO b ON b.EDIFICIO_ID = a.EDIFICIO_ID
-            LEFT JOIN DEPARTAMENTO_IHSS a_new ON a_new.DEPARTAMENTO_IHSS_ID = e.DEPARTAMENTO_IHSS_ID
+            LEFT JOIN DEPARTAMENTO_IHSS a_new ON a_new.DEPARTAMENTO_IHSS_ID = r.ID_AREA_NUEVO
             LEFT JOIN EDIFICIO b_new ON b_new.EDIFICIO_ID = a_new.EDIFICIO_ID
             LEFT JOIN TIPOS_DISPOSITIVOS t ON t.ID_TIPO = d.ID_TIPO
             ORDER BY r.FECHA_CAMBIO DESC

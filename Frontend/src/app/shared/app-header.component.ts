@@ -14,6 +14,7 @@ const ROLE_LABELS: Record<UserRole, string> = {
   AdminTaller: 'Administrador de taller',
   RecepcionTaller: 'Recepción de taller',
   TecnicoTaller: 'Técnico de taller',
+  AdminTicket: 'Administrador de tickets',
 };
 
 @Component({

@@ -1,0 +1,61 @@
+<!-- Sección Empleados del panel administrativo: directorio por ubicación con el
+  No. de pago editable en la misma tabla. -->
+@if (active) {
+  @if (message) { <p class="feedback success" role="status">{{ message }}</p> }
+  @if (errorMessage) { <p class="feedback error" role="alert">{{ errorMessage }}</p> }
+  <section class="admin-section">
+    <div class="filter-bar employee-filter-bar">
+      <input type="search" [ngModel]="searchTerm" (ngModelChange)="updateSearch($event)" name="employeeSearch"
+        placeholder="Buscar por empleado, No. de pago, departamento, edificio o región"
+        aria-label="Buscar empleados" />
+      <app-table-page-size [(page)]="employeePage" [(pageSize)]="employeePageSize" />
+      <button type="button" class="secondary" (click)="reload()" [disabled]="isLoading">
+        {{ isLoading ? 'Cargando...' : 'Refrescar' }}
+      </button>
+    </div>
+    <p class="employee-hint">Escribe el No. de pago y presiona <strong>Enter</strong> para guardarlo.</p>
+    <div class="table-wrap employees-table-wrap">
+      <table class="employees-table">
+        <thead>
+          <tr>
+            <th>REGIÓN</th>
+            <th>EDIFICIO</th>
+            <th>DEPARTAMENTO</th>
+            <th>EMPLEADO</th>
+            <th class="employee-payment-column">NO. PAGO</th>
+          </tr>
+        </thead>
+        <tbody>
+          @if (isLoading && employees.length === 0) {
+          <tr>
+            <td colspan="5">Cargando empleados...</td>
+          </tr>
+          } @else if (filteredEmployees.length === 0) {
+          <tr>
+            <td colspan="5">No se encontraron empleados con la búsqueda actual.</td>
+          </tr>
+          } @else {
+          @for (employee of filteredEmployees | page: employeePage : employeePageSize; track employee.EmployeeKey) {
+          <tr>
+            <td>{{ display(employee.Region) }}</td>
+            <td>{{ display(employee.Edificio) }}</td>
+            <td>{{ display(employee.Departamento) }}</td>
+            <td>{{ employee.NombreCompleto }}</td>
+            <td class="employee-payment-column">
+              <input appDigitsOnly type="text" inputmode="numeric" maxlength="5" placeholder="Sin asignar"
+                class="employee-payment-input" [value]="paymentValue(employee)"
+                [readonly]="savingKey === employee.EmployeeKey"
+                [attr.aria-label]="'No. de pago de ' + employee.NombreCompleto"
+                (input)="onPaymentInput(employee, $any($event.target).value)"
+                (keydown.enter)="savePaymentNumber(employee)" (blur)="discardDraft(employee)" />
+            </td>
+          </tr>
+          }
+          }
+        </tbody>
+      </table>
+    </div>
+    <app-table-paginator [total]="filteredEmployees.length" [(page)]="employeePage" [pageSize]="employeePageSize"
+      label="Paginación de empleados" />
+  </section>
+}

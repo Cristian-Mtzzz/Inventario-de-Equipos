@@ -15,6 +15,9 @@ var builder = WebApplication.CreateBuilder(args);
 
 const string AngularCorsPolicy = "AngularCorsPolicy";
 
+// Sin la cabecera "Server: Kestrel" las respuestas no anuncian el servidor que las atiende.
+builder.WebHost.ConfigureKestrel(options => options.AddServerHeader = false);
+
 // Habilita controladores para exponer endpoints, Swagger para probarlos y EF Core
 // para administrar la conexión compartida con Oracle.
 // Las respuestas JSON conservan los nombres en PascalCase de los DTO (IdEquipo, Message...),
@@ -44,8 +47,11 @@ builder.Services.AddSwaggerGen(options =>
     options.OperationFilter<AuthorizeCheckOperationFilter>();
 });
 // La cadena de conexión completa está configurada directamente en appsettings.json.
-var oracleConnection = builder.Configuration.GetConnectionString("OracleConnection")
-    ?? "User Id=TRANSACIONES_SOPORTE;Data Source=exd01-scan.corp.ihss.hn:1521/BDIHSS;Password=ts26ihss*";
+var oracleConnection = builder.Configuration.GetConnectionString("OracleConnection");
+if (string.IsNullOrWhiteSpace(oracleConnection))
+{
+    throw new InvalidOperationException("Falta ConnectionStrings:OracleConnection en appsettings.json.");
+}
 
 // Registra servicios que concentran reglas y SQL de cada módulo, manteniendo los
 // controladores enfocados en HTTP y validaciones básicas.
@@ -59,7 +65,9 @@ builder.Services.AddScoped<IReassignmentService, ReassignmentService>();
 builder.Services.AddScoped<IUserAdminService, UserAdminService>();
 builder.Services.AddScoped<IModulePermissionService, ModulePermissionService>();
 builder.Services.AddScoped<ITallerService, TallerService>();
+builder.Services.AddScoped<ITicketService, TicketService>();
 builder.Services.AddScoped<IAuthorizationHandler, ModuleAccessAuthorizationHandler>();
+builder.Services.AddLoginProtection(builder.Configuration);
 
 var allowedOrigins = new List<string>
 {
@@ -86,7 +94,11 @@ if (!string.IsNullOrWhiteSpace(apiBaseUrl)
 
 // Configura la validación JWT. Los claims del token identifican al usuario y sus
 // roles para que cada endpoint pueda decidir qué operaciones permite.
-var jwtKey = builder.Configuration["Jwt:Key"] ?? "SistemaInventarioSecretKey_2026_IHSS_InventarioEquipos";
+var jwtKey = builder.Configuration["Jwt:Key"];
+if (string.IsNullOrWhiteSpace(jwtKey))
+{
+    throw new InvalidOperationException("Falta Jwt:Key en appsettings.json.");
+}
 
 var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "SistemaInventario.Api";
 var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "SistemaInventario.Web";
@@ -119,6 +131,10 @@ builder.Services.AddAuthorization(options =>
         new ModuleAccessRequirement(AppModules.Users)));
     options.AddPolicy(ModulePolicies.Maintenance, policy => policy.Requirements.Add(
         new ModuleAccessRequirement(AppModules.Maintenance)));
+    options.AddPolicy(ModulePolicies.Employees, policy => policy.Requirements.Add(
+        new ModuleAccessRequirement(AppModules.Employees)));
+    options.AddPolicy(ModulePolicies.Tickets, policy => policy.Requirements.Add(
+        new ModuleAccessRequirement(AppModules.Tickets)));
     options.AddPolicy(ModulePolicies.Devices, policy => policy.Requirements.Add(
         new ModuleAccessRequirement(AppModules.Devices, AppModules.Inventory)));
     options.AddPolicy(ModulePolicies.Reassignments, policy => policy.Requirements.Add(
@@ -129,7 +145,11 @@ builder.Services.AddAuthorization(options =>
         new ModuleAccessRequirement(AppModules.Devices, AppModules.Inventory, AppModules.Reassignments)));
     options.AddPolicy(ModulePolicies.LocationCatalogs, policy => policy.Requirements.Add(
         new ModuleAccessRequirement(AppModules.Devices, AppModules.Inventory, AppModules.Reassignments,
-            AppModules.Workshop, AppModules.Maintenance)));
+            AppModules.Workshop, AppModules.Maintenance, AppModules.Tickets)));
+    // Buscador de empleados: lo usan todos los formularios que eligen un empleado.
+    options.AddPolicy(ModulePolicies.EmployeeLookup, policy => policy.Requirements.Add(
+        new ModuleAccessRequirement(AppModules.Devices, AppModules.Inventory, AppModules.Reassignments,
+            AppModules.Tickets, AppModules.Employees, AppModules.Maintenance)));
     options.AddPolicy(ModulePolicies.SuperAdmin, policy => policy.Requirements.Add(
         new ModuleAccessRequirement(AppModules.SuperAdmin)));
     options.DefaultPolicy = new Microsoft.AspNetCore.Authorization.AuthorizationPolicyBuilder()
@@ -141,6 +161,14 @@ builder.Services.AddCors(options => options.AddPolicy(AngularCorsPolicy, policy 
     policy.WithOrigins(allowedOrigins.Distinct().ToArray())
         .AllowAnyHeader()
         .AllowAnyMethod()));
+
+// Con Hosting:RequireHttps = true la API redirige HTTP a HTTPS y envía HSTS. Se activa
+// junto con la regla "Forzar HTTPS" del web.config del frontend, cuando IIS ya tenga certificado.
+var requireHttps = builder.Configuration.GetValue("Hosting:RequireHttps", false);
+if (requireHttps)
+{
+    builder.Services.AddHsts(options => options.MaxAge = TimeSpan.FromDays(365));
+}
 
 var app = builder.Build();
 
@@ -163,6 +191,13 @@ if (!string.IsNullOrWhiteSpace(apiBaseUrl)
     }
 }
 
+app.UseSecurityHeaders();
+if (requireHttps)
+{
+    app.UseHsts();
+    app.UseHttpsRedirection();
+}
+
 // La documentación también está disponible en despliegues: /swagger y /swagger/v1/swagger.json.
 // Usar endpoint relativo permite que funcione tanto en la raíz como bajo subdirectorios de IIS.
 app.UseSwagger();
@@ -174,6 +209,7 @@ app.UseSwaggerUI(options =>
 
 // El orden garantiza CORS, autenticación y autorización antes de ejecutar controladores.
 app.UseCors(AngularCorsPolicy);
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 

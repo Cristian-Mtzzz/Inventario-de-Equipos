@@ -5,6 +5,8 @@ export const AppModules = {
   Workshop: 'TALLER',
   Users: 'USUARIOS',
   Maintenance: 'MANTENIMIENTO',
+  Employees: 'EMPLEADOS',
+  Tickets: 'TICKETS',
   Inventory: 'INVENTARIO',
 } as const;
 
@@ -17,4 +19,6 @@ export const ADMIN_PANEL_MODULES: AppModule[] = [
   AppModules.Workshop,
   AppModules.Users,
   AppModules.Maintenance,
+  AppModules.Employees,
+  AppModules.Tickets,
 ];

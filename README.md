@@ -34,9 +34,11 @@ Los módulos son: `DISPOSITIVOS`, `REASIGNACIONES`, `TALLER`, `MANTENIMIENTO`, `
 
 ### Inicio de sesión
 
-- **Usuarios locales:** la contraseña se valida contra Oracle. La primera vez se obliga a cambiarla.
+- **Usuarios locales:** la contraseña se guarda con BCrypt en `USUARIOS.PASSWORD_HASH`. La primera vez se obliga a cambiarla. Las contraseñas antiguas (formato `ORA_HASH`) siguen funcionando y se convierten a BCrypt la próxima vez que el usuario inicia sesión.
+- **Intentos fallidos:** tras `Security:LoginMaxFailedAttempts` fallos seguidos (5) el usuario queda bloqueado `Security:LoginLockoutMinutes` minutos (15), sin consultar Active Directory para no bloquear también su cuenta de dominio. Además, cada equipo puede intentar `Security:LoginRequestsPerMinutePerIp` veces por minuto (20). Los bloqueos viven en memoria: reciclar el grupo de aplicaciones de la API los borra.
+- **Acceso total:** solo un usuario con `ADMIN_TOTAL` puede otorgarlo, quitarlo o editar, restablecer o eliminar a otro usuario que lo tenga. No se puede quitar al último.
 - **Usuarios de dominio:** se validan contra Active Directory en los dominios `BA`, `HE`, `HRN` e `IVM`. Se aceptan `usuario`, `BA\usuario` o `usuario@dominio`, sin importar mayúsculas. Para esto, la API debe ejecutarse en Windows con acceso al AD.
-- La sesión se cierra tras **30 minutos de inactividad**. El token se renueva solo mientras el usuario está activo.
+- La sesión se cierra tras **30 minutos de inactividad**. El token se renueva solo mientras el usuario está activo; cada renovación vuelve a leer `USUARIOS`, así que un usuario desactivado o expirado pierde la sesión en la siguiente renovación y un cambio de rol se aplica ahí mismo.
 
 ## Estructura del repositorio
 
@@ -46,14 +48,14 @@ Backend/SistemaInventario.Api/
 ├── Services/         Reglas de negocio y SQL de cada módulo; roles y permisos por módulo
 ├── Models/           DTO de entrada y salida
 ├── Data/             DbContext y acceso a Oracle
-├── Infrastructure/   Manejo global de errores
+├── Infrastructure/   Manejo global de errores, cabeceras de seguridad y límite de intentos de login
 ├── appsettings.json  Configuración (ver abajo)
-└── web.config        Configuración para IIS (desactiva WebDAV)
+└── web.config        Configuración para IIS (desactiva WebDAV, quita X-Powered-By)
 
 Frontend/
 ├── public/           logo.png y favicon.png
 └── src/
-    ├── web.config    Configuración de IIS: rutas de Angular con URL Rewrite (se copia al build)
+    ├── web.config    Configuración de IIS: rutas de Angular con URL Rewrite, cabeceras de seguridad y regla HTTPS (se copia al build)
     └── app/
         ├── auth/       Login, cambio de contraseña, sesión, guardas e interceptor JWT
         ├── admin/      Panel administrativo: dispositivos, reasignaciones, catálogos, usuarios, importación y reportes
@@ -82,9 +84,27 @@ La API se configura en `Backend/SistemaInventario.Api/appsettings.json`. Para de
 | `Jwt:ExpirationMinutes` | Vigencia del token (35 por defecto). |
 | `Hosting:ApiBaseUrl` | URL pública de la API. De su ruta sale el directorio virtual de IIS (`/ApiInventariosTic`). |
 | `Hosting:FrontendBaseUrl` | URL pública del frontend. Se agrega a los orígenes permitidos por CORS. |
+| `Hosting:RequireHttps` | `true` redirige HTTP a HTTPS y envía HSTS. Déjalo en `false` hasta que IIS tenga certificado (ver [HTTPS](#https)). |
+| `Security:LoginMaxFailedAttempts` / `Security:LoginLockoutMinutes` | Fallos seguidos que bloquean a un usuario y minutos que dura el bloqueo (5 y 15). |
+| `Security:LoginRequestsPerMinutePerIp` | Intentos de login por minuto desde un mismo equipo (20). |
 | `Taller:TecnicoRecepcion` | Técnico al que se asignan por defecto los equipos recibidos en el taller. Acepta el login (`frank.midence`) o el nombre de la persona (`Frank Midence`), sin importar mayúsculas; el usuario debe estar activo, vigente y tener rol `TecnicoTaller`. |
+| `Taller:NombreTecnicoRecepcion` | Nombre que se guarda como técnico cuando el usuario anterior no se encuentra en `USUARIOS` o perdió el rol. El formulario de recepción no muestra este dato, así que sin esta clave quedaría como `Sin asignar`. |
 
 > No subas contraseñas ni claves reales en documentación o capturas.
+
+### Scripts de base de datos
+
+Los cambios de esquema que necesita la aplicación están en `docs/sql/`. Se corren una vez
+contra Oracle con el usuario del sistema y se pueden repetir sin efecto.
+
+| Script | Para qué |
+| --- | --- |
+| `reparacion-datos-equipo.sql` | Da a `REPARACION` sus propias columnas del equipo (`CODIGO_INVENTARIO`, `NO_SERIE`, `MARCA`, `MODELO`, `TIPO_DISPOSITIVO`) y vuelve opcional `ID_EQUIPO`, para que la recepción del taller no registre el equipo en Dispositivos. |
+| `roles-modulos-nuevos.sql` | Agrega a las restricciones `CHECK` de `USUARIOS` y `USUARIO_MODULOS` el rol `AdminTicket` y los módulos `EMPLEADOS` y `TICKETS`. Sin esto, crear un usuario con esos valores falla. |
+| `tickets-soporte.sql` | Crea la tabla `TICKETS_SOPORTE` del módulo Tickets de soporte. |
+| `tickets-config.sql` | Crea `TICKETS_CONFIG` con los minutos en que un ticket pendiente pasa de verde a amarillo y de amarillo a rojo. Para cambiarlos basta un `UPDATE` sobre esa tabla. |
+
+Los archivos `diagnostico-*.sql` no cambian nada: son consultas de apoyo para revisar datos.
 
 En el frontend, la ruta de la API está en `Frontend/src/app/api-url.ts` (`/ApiInventariosTic/api/`). Si cambia el nombre de la aplicación de la API en IIS, actualiza ese archivo y vuelve a compilar.
 
@@ -146,6 +166,21 @@ ng build --configuration production --base-href /InventariosTic/
 > En Git Bash, la ruta `/InventariosTic/` se convierte en `C:/Program Files/Git/InventariosTic/` y la aplicación queda en blanco. Usa PowerShell o CMD.
 
 Copia el contenido de `dist\SistemaInventario\browser` (no la carpeta `dist` completa) al directorio de `/InventariosTic`. El `web.config` incluido hace que recargar la página o abrir un enlace directo (por ejemplo `/InventariosTic/admin`) funcione en lugar de dar 404; requiere el módulo URL Rewrite.
+
+### HTTPS
+
+La aplicación está preparada para HTTPS, pero viene desactivado porque el servidor todavía no tiene certificado. Para activarlo:
+
+1. En IIS, instala el certificado y agrega al sitio un enlace `https` (puerto 443).
+2. En el `appsettings.json` de la API pon `Hosting:RequireHttps` en `true` y cambia `Hosting:FrontendBaseUrl` y `Hosting:ApiBaseUrl` a `https://...`.
+3. En `Frontend/src/web.config` cambia la regla `Forzar HTTPS` a `enabled="true"`.
+4. Publica la API y el frontend **juntos**. Si solo uno de los dos fuerza HTTPS, las llamadas a la API pierden el token y la sesión se cierra.
+
+> Activar los pasos 2 o 3 sin el certificado del paso 1 deja la aplicación sin acceso.
+
+### Cabeceras de seguridad
+
+La API agrega `Content-Security-Policy`, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy` y `Cache-Control: no-store` (Swagger queda sin CSP para que cargue su página). El frontend las define en su `web.config`. La CSP del frontend solo permite scripts propios, por eso `angular.json` desactiva `inlineCritical`: esa optimización carga los estilos con un `onload` en línea que la CSP bloquearía y la aplicación se vería sin estilos.
 
 ### Logo e ícono
 

@@ -1,0 +1,52 @@
+/* La sección se integra en el flujo del panel admin; anula el :host de admin.component.css. */
+:host {
+    display: contents;
+}
+
+/* Buscador a la izquierda; el selector de registros y Refrescar cierran la fila. */
+.filter-bar.employee-filter-bar {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center;
+}
+
+.filter-bar.employee-filter-bar app-table-page-size {
+    margin-bottom: 0;
+}
+
+.employee-hint {
+    margin: .6rem 0 0;
+    color: #617573;
+    font-size: .8rem;
+}
+
+.employee-payment-column {
+    width: 9rem;
+}
+
+/* El input se ve como parte de la celda hasta que se escribe en él. */
+.employee-payment-input {
+    width: 100%;
+    min-height: 2.1rem;
+    padding: .3rem .5rem;
+    border: 1px solid #d3dfdb;
+    border-radius: 8px;
+    color: #203238;
+    background: #fff;
+    font: inherit;
+}
+
+.employee-payment-input::placeholder {
+    color: #9bada9;
+    font-style: italic;
+}
+
+.employee-payment-input:focus {
+    border-color: #8fb5ab;
+    outline: 2px solid rgba(39, 105, 104, .18);
+    outline-offset: 1px;
+}
+
+.employee-payment-input[readonly] {
+    color: #7b8d8a;
+    background: #f1f5f3;
+}

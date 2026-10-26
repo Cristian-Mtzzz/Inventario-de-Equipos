@@ -7,6 +7,7 @@ using System.Security.Claims;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Oracle.ManagedDataAccess.Client;
 using SistemaInventario.Api.Data;
 using SistemaInventario.Api.Models;
 
@@ -29,24 +30,22 @@ public sealed class AuthService(
 
         try
         {
-            await using var command = connection.CreateCommand();
+            await using var command = CreateCommand(connection);
             // Los usuarios locales se buscan tal como se escriben. Los de dominio, como en Active Directory,
             // sin distinguir mayúsculas ni espacios y aceptando "usuario", "DOMINIO\usuario" o "usuario@dominio".
-            // Los parámetros se enlazan por posición: deben agregarse en el mismo orden en que aparecen.
+            // La contraseña ya no se compara en el SQL: se valida después según el tipo de usuario.
             command.CommandText = """
-                                SELECT ID_USUARIO, USUARIO, NOMBRE_PERSONA, PASSWORD_HASH, ROL, ESTADO,
-                                             DOMINIOP, DOMINIO, CLAVE_SEGURA
+                SELECT ID_USUARIO, USUARIO, NOMBRE_PERSONA, PASSWORD_HASH, ROL, ESTADO,
+                       DOMINIOP, DOMINIO, CLAVE_SEGURA
                 FROM USUARIOS
                 WHERE (USUARIO = :userName OR (DOMINIO = 1 AND LOWER(TRIM(USUARIO)) = :domainUserName))
-                  AND (DOMINIO = 1 OR PASSWORD_HASH = ORA_HASH(:password, 4294967295)
-                      || ORA_HASH(:userNameForHash, 4294967295))
                   AND UPPER(ESTADO) = 'ACTIVO'
                   AND (FECHA_EXPIRACION IS NULL OR FECHA_EXPIRACION >= TRUNC(SYSDATE))
+                ORDER BY CASE WHEN USUARIO = :exactUserName THEN 0 ELSE 1 END
                 """;
             AddParameter(command, "userName", loginRequest.UserName);
             AddParameter(command, "domainUserName", NormalizeDomainUserName(loginRequest.UserName));
-            AddParameter(command, "password", loginRequest.Password);
-            AddParameter(command, "userNameForHash", loginRequest.UserName);
+            AddParameter(command, "exactUserName", loginRequest.UserName);
 
             User user;
             int domain;
@@ -57,8 +56,10 @@ public sealed class AuthService(
             {
                 if (!await reader.ReadAsync(cancellationToken))
                 {
+                    // Igual se calcula un hash para que un usuario inexistente no responda más rápido.
+                    PasswordHashing.SimulateVerify(loginRequest.Password);
                     logger.LogWarning(
-                        "Login rechazado para {UserName}: no existe, está inactivo o expirado, o la contraseña local no coincide.",
+                        "Login rechazado para {UserName}: no existe, está inactivo o expirado.",
                         loginRequest.UserName);
                     return null;
                 }
@@ -68,7 +69,7 @@ public sealed class AuthService(
                     UserId = reader.GetInt32(reader.GetOrdinal("ID_USUARIO")),
                     UserName = reader.GetString(reader.GetOrdinal("USUARIO")),
                     FullName = ReadString(reader, "NOMBRE_PERSONA"),
-                    PasswordHash = reader.GetString(reader.GetOrdinal("PASSWORD_HASH")),
+                    PasswordHash = ReadString(reader, "PASSWORD_HASH"),
                     Role = reader.GetString(reader.GetOrdinal("ROL")),
                 };
                 domain = Convert.ToInt32(reader.GetValue(reader.GetOrdinal("DOMINIO")));
@@ -94,7 +95,15 @@ public sealed class AuthService(
                     return null;
                 }
             }
-            else if (domain != 0)
+            else if (domain == 0)
+            {
+                if (!await VerifyLocalPassword(connection, user, loginRequest.Password, cancellationToken))
+                {
+                    logger.LogWarning("Login rechazado para {UserName}: la contraseña local no coincide.", loginRequest.UserName);
+                    return null;
+                }
+            }
+            else
             {
                 return null;
             }
@@ -127,7 +136,7 @@ public sealed class AuthService(
     }
 
     // "BA\Juan.Perez", "juan.perez@ihss.hn" y " Juan.Perez " se reducen a "juan.perez".
-    private static string NormalizeDomainUserName(string userName)
+    internal static string NormalizeDomainUserName(string userName)
     {
         var value = userName.Trim();
         var slash = value.LastIndexOf('\\');
@@ -166,35 +175,161 @@ public sealed class AuthService(
         }
     }
 
+    // Valida la contraseña de un usuario local. Si todavía tiene el hash antiguo de ORA_HASH y la
+    // contraseña es correcta, lo reemplaza por BCrypt para que la próxima vez ya no se use ORA_HASH.
+    private async Task<bool> VerifyLocalPassword(
+        DbConnection connection,
+        User user,
+        string password,
+        CancellationToken cancellationToken)
+    {
+        if (PasswordHashing.IsBcrypt(user.PasswordHash))
+        {
+            return PasswordHashing.Verify(password, user.PasswordHash);
+        }
+
+        if (!await MatchesLegacyHash(connection, user.UserId, password, cancellationToken))
+        {
+            return false;
+        }
+
+        try
+        {
+            await using var command = CreateCommand(connection);
+            command.CommandText = """
+                UPDATE USUARIOS
+                SET PASSWORD_HASH = :newHash
+                WHERE ID_USUARIO = :userId
+                  AND PASSWORD_HASH = :oldHash
+                """;
+            AddParameter(command, "newHash", PasswordHashing.Hash(password));
+            AddParameter(command, "userId", user.UserId);
+            AddParameter(command, "oldHash", user.PasswordHash);
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+        catch (OracleException exception)
+        {
+            // El login sigue siendo válido; se reintentará la migración en el próximo inicio de sesión.
+            logger.LogWarning(exception, "No se pudo actualizar a BCrypt la contraseña de {UserName}.", user.UserName);
+        }
+
+        return true;
+    }
+
+    // Formato anterior: ORA_HASH(contraseña) || ORA_HASH(usuario), calculado por Oracle.
+    private static async Task<bool> MatchesLegacyHash(
+        DbConnection connection,
+        int userId,
+        string password,
+        CancellationToken cancellationToken)
+    {
+        await using var command = CreateCommand(connection);
+        command.CommandText = """
+            SELECT COUNT(*) FROM USUARIOS
+            WHERE ID_USUARIO = :userId
+              AND PASSWORD_HASH = ORA_HASH(:password, 4294967295) || ORA_HASH(USUARIO, 4294967295)
+            """;
+        AddParameter(command, "userId", userId);
+        AddParameter(command, "password", password);
+        return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken)) == 1;
+    }
+
     public async Task<bool> ChangeInitialPassword(
         int userId,
         ChangePasswordDto request,
         CancellationToken cancellationToken)
     {
+        var connection = dbContext.Database.GetDbConnection();
         await dbContext.Database.OpenConnectionAsync(cancellationToken);
         try
         {
-            await using var command = dbContext.Database.GetDbConnection().CreateCommand();
-            command.CommandText = """
+            string currentHash;
+            await using (var select = CreateCommand(connection))
+            {
+                select.CommandText = """
+                    SELECT USUARIO, PASSWORD_HASH FROM USUARIOS
+                    WHERE ID_USUARIO = :userId
+                      AND DOMINIO = 0
+                      AND CLAVE_SEGURA = '0'
+                    """;
+                AddParameter(select, "userId", userId);
+                await using var reader = await select.ExecuteReaderAsync(cancellationToken);
+                if (!await reader.ReadAsync(cancellationToken)) return false;
+                currentHash = ReadString(reader, "PASSWORD_HASH");
+            }
+
+            var currentIsValid = PasswordHashing.IsBcrypt(currentHash)
+                ? PasswordHashing.Verify(request.CurrentPassword, currentHash)
+                : await MatchesLegacyHash(connection, userId, request.CurrentPassword, cancellationToken);
+            if (!currentIsValid) return false;
+
+            await using var update = CreateCommand(connection);
+            update.CommandText = """
                 UPDATE USUARIOS
-                SET PASSWORD_HASH = ORA_HASH(:newPassword, 4294967295)
-                                      || ORA_HASH(USUARIO, 4294967295),
-                                        CLAVE_SEGURA = '1'
+                SET PASSWORD_HASH = :newHash,
+                    CLAVE_SEGURA = '1'
                 WHERE ID_USUARIO = :userId
                   AND DOMINIO = 0
-                                    AND CLAVE_SEGURA = '0'
-                  AND PASSWORD_HASH = ORA_HASH(:currentPassword, 4294967295)
-                                      || ORA_HASH(USUARIO, 4294967295)
+                  AND CLAVE_SEGURA = '0'
+                  AND PASSWORD_HASH = :currentHash
                 """;
-            AddParameter(command, "newPassword", request.NewPassword);
-            AddParameter(command, "userId", userId);
-            AddParameter(command, "currentPassword", request.CurrentPassword);
-            return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+            AddParameter(update, "newHash", PasswordHashing.Hash(request.NewPassword));
+            AddParameter(update, "userId", userId);
+            AddParameter(update, "currentHash", currentHash);
+            return await update.ExecuteNonQueryAsync(cancellationToken) == 1;
         }
         finally
         {
             await dbContext.Database.CloseConnectionAsync();
         }
+    }
+
+    // Renueva el token con los datos actuales de la base: un usuario desactivado o expirado
+    // ya no recibe token nuevo, y un cambio de rol se refleja en la siguiente renovación.
+    public async Task<string?> RefreshToken(int userId, CancellationToken cancellationToken)
+    {
+        var connection = dbContext.Database.GetDbConnection();
+        await dbContext.Database.OpenConnectionAsync(cancellationToken);
+        try
+        {
+            await using var command = CreateCommand(connection);
+            command.CommandText = """
+                SELECT ID_USUARIO, USUARIO, NOMBRE_PERSONA, ROL, DOMINIO, CLAVE_SEGURA
+                FROM USUARIOS
+                WHERE ID_USUARIO = :userId
+                  AND UPPER(ESTADO) = 'ACTIVO'
+                  AND (FECHA_EXPIRACION IS NULL OR FECHA_EXPIRACION >= TRUNC(SYSDATE))
+                """;
+            AddParameter(command, "userId", userId);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            if (!await reader.ReadAsync(cancellationToken))
+            {
+                logger.LogWarning("Renovación de sesión rechazada para el usuario {UserId}: no existe, está inactivo o expirado.", userId);
+                return null;
+            }
+
+            var user = new User
+            {
+                UserId = reader.GetInt32(reader.GetOrdinal("ID_USUARIO")),
+                UserName = reader.GetString(reader.GetOrdinal("USUARIO")),
+                FullName = ReadString(reader, "NOMBRE_PERSONA"),
+                Role = reader.GetString(reader.GetOrdinal("ROL")),
+            };
+            var domain = Convert.ToInt32(reader.GetValue(reader.GetOrdinal("DOMINIO")));
+            var mustChangePassword = domain == 0 && ReadString(reader, "CLAVE_SEGURA") == "0";
+            return GenerateToken(user, mustChangePassword);
+        }
+        finally
+        {
+            await dbContext.Database.CloseConnectionAsync();
+        }
+    }
+
+    private static DbCommand CreateCommand(DbConnection connection)
+    {
+        var command = connection.CreateCommand();
+        if (command is OracleCommand oracleCommand) oracleCommand.BindByName = true;
+        return command;
     }
 
     private static void AddParameter(
@@ -221,15 +356,6 @@ public sealed class AuthService(
         parameter.Value = value;
         command.Parameters.Add(parameter);
     }
-
-    public string RefreshToken(int userId, string userName, string fullName, string role, bool mustChangePassword) =>
-        GenerateToken(new User
-        {
-            UserId = userId,
-            UserName = userName,
-            FullName = fullName,
-            Role = role,
-        }, mustChangePassword);
 
     private string GenerateToken(User user, bool mustChangePassword)
     {

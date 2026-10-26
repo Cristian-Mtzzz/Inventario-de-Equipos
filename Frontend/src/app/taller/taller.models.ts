@@ -12,7 +12,8 @@ export interface WorkshopDevice {
 // Reparación completa tal como se muestra en la tabla del taller.
 export interface Maintenance {
   IdReparacion: number;
-  IdEquipo: number;
+  // Vacío cuando el ingreso vino por recepción: ese equipo no está en Dispositivos.
+  IdEquipo: number | null;
   CodigoInventario: string;
   NoSerie: string;
   Marca: string;
@@ -68,12 +69,13 @@ export interface MaintenanceAssessmentRequest {
   Dictamen: string;
   PiezasSustituidas: string;
   Observaciones: string;
+  // SI o NO; lo indica quien hace el dictamen (técnico asignado o admin de taller).
+  EquipoEnGarantia?: string;
 }
 
 // Información necesaria para cerrar una reparación.
 export interface MaintenanceExitRequest {
   EquipoFuncional: string;
-  TecnicoEntrega: string;
   ClienteRecibe: string;
   FechaEntrega: string;
 }

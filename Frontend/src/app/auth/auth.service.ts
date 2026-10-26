@@ -3,7 +3,7 @@ import { Injectable, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { BehaviorSubject, EMPTY, Observable, catchError, finalize, map, tap } from 'rxjs';
 import { apiUrl } from '../api-url';
-import { AuthUser, LoginRequest, LoginResponse, ModuleAccess, UserRole } from './auth.models';
+import { AuthUser, LoginRequest, LoginResponse, ModuleAccess, USER_ROLES, UserRole } from './auth.models';
 
 const WELCOME_TOAST_DURATION_MS = 2000;
 const SESSION_IDLE_TIMEOUT_MS = 30 * 60 * 1000;
@@ -115,7 +115,7 @@ export class AuthService {
   defaultRoute(): string {
     const access = this.moduleAccess();
     const hasAdminModule = access.IsSuperAdmin || access.Modules.some((module) => [
-      'DISPOSITIVOS', 'REASIGNACIONES', 'TALLER', 'USUARIOS', 'MANTENIMIENTO',
+      'DISPOSITIVOS', 'REASIGNACIONES', 'TALLER', 'USUARIOS', 'MANTENIMIENTO', 'EMPLEADOS', 'TICKETS',
     ].includes(module));
     if (hasAdminModule) return this.roleHomeRoute();
     if (access.Modules.includes('INVENTARIO')) return '/inventario';
@@ -130,8 +130,15 @@ export class AuthService {
       case 'RecepcionTaller': return '/taller/recepcion';
       case 'TecnicoTaller': return '/taller/tecnico';
       case 'AdminTaller': return '/taller';
+      case 'AdminTicket': return '/tickets';
       default: return '/sin-acceso';
     }
+  }
+
+  // ID numérico del usuario en sesión, o null si no hay sesión.
+  currentUserId(): number | null {
+    const userId = Number(this.currentUserSubject.value?.UserId);
+    return Number.isInteger(userId) && userId > 0 ? userId : null;
   }
 
   // Verifica si el usuario actual tiene alguno de los roles especificados.
@@ -227,7 +234,7 @@ export class AuthService {
     const userName = String(claims['unique_name'] ?? claims['name'] ?? '').trim();
     const rawRole = claims['role'] ?? claims['http://schemas.microsoft.com/ws/2008/06/identity/claims/role'];
     const role = Array.isArray(rawRole) ? rawRole[0] : rawRole;
-    if (!userName || !['Admin', 'UsuarioComun', 'Taller', 'RecepcionTaller', 'TecnicoTaller', 'AdminTaller'].includes(String(role))) return null;
+    if (!userName || !(USER_ROLES as readonly string[]).includes(String(role))) return null;
 
     return {
       UserId: String(claims['sub'] ?? ''),

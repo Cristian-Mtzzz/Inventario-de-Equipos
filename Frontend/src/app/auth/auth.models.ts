@@ -1,11 +1,16 @@
-// Roles reconocidos por el frontend y por las políticas del backend.
-export type UserRole =
-  | 'Admin'
-  | 'UsuarioComun'
-  | 'Taller'
-  | 'RecepcionTaller'
-  | 'TecnicoTaller'
-  | 'AdminTaller';
+// Roles reconocidos por el frontend y por las políticas del backend (AppRoles.cs).
+// La sesión guardada solo se acepta si el rol del token está en esta lista.
+export const USER_ROLES = [
+  'Admin',
+  'UsuarioComun',
+  'Taller',
+  'RecepcionTaller',
+  'TecnicoTaller',
+  'AdminTaller',
+  'AdminTicket',
+] as const;
+
+export type UserRole = (typeof USER_ROLES)[number];
 
 // Datos que el formulario envía al endpoint de autenticación.
 export interface LoginRequest {

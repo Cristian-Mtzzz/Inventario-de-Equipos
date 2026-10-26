@@ -7,11 +7,13 @@ namespace SistemaInventario.Api.Services;
 public interface ITallerService
 {
     Task<IReadOnlyList<WorkshopDeviceDto>> GetDevices(CancellationToken cancellationToken);
-    Task<IReadOnlyList<MaintenanceDto>> GetMaintenances(CancellationToken cancellationToken);
+    // Con idTecnico, solo las reparaciones asignadas a ese técnico.
+    Task<IReadOnlyList<MaintenanceDto>> GetMaintenances(int? idTecnico, CancellationToken cancellationToken);
     Task RegisterReception(CreateReceptionEntryDto reception, int userId, CancellationToken cancellationToken);
     Task<ReceptionDefaultsDto> GetReceptionDefaults(int userId, CancellationToken cancellationToken);
     Task CreateMaintenance(int idTecnico, CreateMaintenanceEntryDto maintenance, CancellationToken cancellationToken);
-    Task<bool> UpdateMaintenanceAssessment(int idMantenimiento, UpdateMaintenanceAssessmentDto assessment, CancellationToken cancellationToken);
+    // Con idTecnico, solo actualiza si la reparación está asignada a ese técnico.
+    Task<bool> UpdateMaintenanceAssessment(int idMantenimiento, UpdateMaintenanceAssessmentDto assessment, int? idTecnico, CancellationToken cancellationToken);
     Task<bool> RegisterMaintenanceExit(int idMantenimiento, UpdateMaintenanceExitDto exit, CancellationToken cancellationToken);
     Task<bool> EditMaintenance(int idMantenimiento, UpdateMaintenanceDto maintenance, CancellationToken cancellationToken);
     Task<bool> DeleteMaintenance(int idMantenimiento, CancellationToken cancellationToken);
