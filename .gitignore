@@ -47,3 +47,6 @@ yarn-error.log
 !.vscode/launch.json
 !.vscode/extensions.json
 !.vscode/mcp.jsonyipo 
+
+# Documentación interna (instrucciones de despliegue y datos del entorno): solo local, no se sube.
+docs/interno/

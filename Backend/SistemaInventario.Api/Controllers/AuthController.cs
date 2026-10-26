@@ -1,7 +1,6 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.RateLimiting;
 using SistemaInventario.Api.Infrastructure;
 using Microsoft.Extensions.Logging;
 using Oracle.ManagedDataAccess.Client;
@@ -17,30 +16,39 @@ public sealed class AuthController(
     IAuthService authService,
     IModulePermissionService modulePermissions,
     LoginAttemptLimiter loginAttempts,
+    LoginLimitsProvider loginLimits,
     ILogger<AuthController> logger) : ControllerBase
 {
     [HttpPost("login")]
     [AllowAnonymous]
-    [EnableRateLimiting(LoginRateLimit.Policy)]
     // Valida las credenciales contra Oracle; una respuesta nula se convierte en 401.
-    // Tras varios fallos seguidos el usuario queda bloqueado unos minutos (429) y ni
-    // siquiera se consulta Active Directory, para no bloquear también su cuenta de dominio.
+    // Los límites salen de LOGIN_CONFIG: intentos por minuto desde un equipo y fallos seguidos
+    // por usuario. Un usuario bloqueado recibe 429 y ni siquiera se consulta Active Directory,
+    // para no bloquear también su cuenta de dominio.
     public async Task<ActionResult<LoginResponseDto>> AuthenticateUser(
         LoginRequestDto loginRequest,
         CancellationToken cancellationToken)
     {
-        if (loginAttempts.GetRemainingLockout(loginRequest.UserName) is { } remaining)
-        {
-            logger.LogWarning("Login bloqueado temporalmente para {UserName} por intentos fallidos.", loginRequest.UserName);
-            return LoginRateLimit.TooManyAttempts(remaining);
-        }
-
         try
         {
+            var limits = await loginLimits.GetAsync(cancellationToken);
+            var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "desconocido";
+            if (!loginAttempts.TryRegisterIpAttempt(ipAddress, limits))
+            {
+                logger.LogWarning("Demasiados intentos de login desde {IpAddress}.", ipAddress);
+                return LoginRateLimit.TooManyAttemptsFromIp();
+            }
+
+            if (loginAttempts.GetRemainingLockout(loginRequest.UserName) is { } remaining)
+            {
+                logger.LogWarning("Login bloqueado temporalmente para {UserName} por intentos fallidos.", loginRequest.UserName);
+                return LoginRateLimit.TooManyAttempts(remaining);
+            }
+
             var loginResponse = await authService.AuthenticateUser(loginRequest, cancellationToken);
             if (loginResponse is null)
             {
-                loginAttempts.RegisterFailure(loginRequest.UserName);
+                loginAttempts.RegisterFailure(loginRequest.UserName, limits);
                 return Unauthorized(new { Message = "Credenciales invalidas." });
             }
 

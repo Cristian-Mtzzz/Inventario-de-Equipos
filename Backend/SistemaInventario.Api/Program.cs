@@ -67,7 +67,7 @@ builder.Services.AddScoped<IModulePermissionService, ModulePermissionService>();
 builder.Services.AddScoped<ITallerService, TallerService>();
 builder.Services.AddScoped<ITicketService, TicketService>();
 builder.Services.AddScoped<IAuthorizationHandler, ModuleAccessAuthorizationHandler>();
-builder.Services.AddLoginProtection(builder.Configuration);
+builder.Services.AddLoginProtection();
 
 var allowedOrigins = new List<string>
 {
@@ -209,7 +209,6 @@ app.UseSwaggerUI(options =>
 
 // El orden garantiza CORS, autenticación y autorización antes de ejecutar controladores.
 app.UseCors(AngularCorsPolicy);
-app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 
