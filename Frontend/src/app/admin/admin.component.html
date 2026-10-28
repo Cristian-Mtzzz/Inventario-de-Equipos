@@ -174,12 +174,12 @@
           <tr>
             <td colspan="11" class="empty">Busca un dispositivo o selecciona un filtro para mostrar resultados.</td>
           </tr>
-          } @else if (filteredDevices.length === 0) {
+          } @else if (devices.length === 0) {
           <tr>
             <td colspan="11">No se encontraron equipos con los filtros actuales.</td>
           </tr>
           } @else {
-          @for (device of pagedDevices; track device.IdEquipo) { <tr [title]="'ID: ' + device.IdEquipo + ' | Estado: ' + (device.Estado || '') + ' | Edificio: ' + (device.NombreEdificio || '-')">
+          @for (device of devices; track device.IdEquipo) { <tr [title]="'ID: ' + device.IdEquipo + ' | Estado: ' + (device.Estado || '') + ' | Edificio: ' + (device.NombreEdificio || '-')">
             <td>{{ device.NumeroIngreso || device.NCombo || '-' }}</td>
             <td>{{ (device.NombreTipo || '-') + (device.Componente ? ' · ' + device.Componente : '') }}</td>
             <td>{{ device.Marca || '-' }}</td>
@@ -231,9 +231,9 @@
   <section class="admin-section">
     <div class="devices-section-toolbar">
       <h2>Registrar reasignación</h2>
-      <button type="button" class="report-launch-button" (click)="exportReassignmentReport()">Exportar reporte</button>
+      <button type="button" class="report-launch-button" (click)="openReassignmentReport()">Exportar reporte</button>
     </div>
-    <form class="admin-form compact" novalidate (ngSubmit)="addReassignment()">
+    <form appHighlightInvalid class="admin-form compact" novalidate (ngSubmit)="addReassignment()">
       <input [(ngModel)]="deviceOptionSearch" (ngModelChange)="searchDeviceOptions()" name="deviceOptionSearch"
         placeholder="INVENTARIO, SERIE o modelo del equipo" />
       <select [ngModel]="selectedInventoryCode" (ngModelChange)="selectDeviceForReassignment($event)" name="equipo"
@@ -258,7 +258,7 @@
         </div>
         <div>
           <label for="admin-reassignment-building">Edificio</label>
-          <select id="admin-reassignment-building" [ngModel]="reassignmentBuildingId"
+          <select appRequiredId id="admin-reassignment-building" [ngModel]="reassignmentBuildingId"
             (ngModelChange)="selectReassignmentBuilding($event)" name="reassignmentBuilding"
             [disabled]="reassignmentRegionalId === null" required>
             <option [ngValue]="0">Selecciona un edificio</option>
@@ -269,7 +269,7 @@
         </div>
         <div>
           <label for="admin-reassignment-area">Área</label>
-          <select id="admin-reassignment-area" [ngModel]="newReassignment.IdArea"
+          <select appRequiredId id="admin-reassignment-area" [ngModel]="newReassignment.IdArea"
             (ngModelChange)="selectReassignmentArea($event)" name="reassignmentArea"
             [disabled]="reassignmentBuildingId <= 0 || isLoadingReassignmentAreas" required>
             <option [ngValue]="0">{{ isLoadingReassignmentAreas ? 'Cargando áreas...' : 'Selecciona un área' }}</option>
@@ -381,7 +381,7 @@
       </div>
       <!-- Datos del equipo en el orden Equipo, Marca, Modelo, Serie, Inventario. En modo Asignar son
         de solo lectura y solo se completan la ubicación y el empleado. -->
-      <form class="modal-form device-edit-form" (ngSubmit)="saveEditedDevice()">
+      <form appHighlightInvalid class="modal-form device-edit-form" (ngSubmit)="saveEditedDevice()">
         <label class="device-create-field">Equipo
           <select [(ngModel)]="newDevice.IdTipo" name="editTipo" required [disabled]="editingDeviceNCombo !== '' || isAssignMode">
             <option [ngValue]="null">Tipo de dispositivo</option>@for (type of deviceTypes; track type.IdTipo) { <option
@@ -390,16 +390,16 @@
           </select>
         </label>
         <label class="device-create-field">Marca
-          <input [(ngModel)]="newDevice.Marca" name="editMarca" placeholder="Marca" required [readonly]="isAssignMode" [class.readonly-field]="isAssignMode" />
+          <input appUppercase [(ngModel)]="newDevice.Marca" name="editMarca" placeholder="Marca" required [readonly]="isAssignMode" [class.readonly-field]="isAssignMode" />
         </label>
         <label class="device-create-field">Modelo
-          <input [(ngModel)]="newDevice.Modelo" name="editModelo" placeholder="Modelo" required [readonly]="isAssignMode" [class.readonly-field]="isAssignMode" />
+          <input appUppercase [(ngModel)]="newDevice.Modelo" name="editModelo" placeholder="Modelo" required [readonly]="isAssignMode" [class.readonly-field]="isAssignMode" />
         </label>
         <label class="device-create-field">Serie
-          <input [(ngModel)]="newDevice.NoSerie" name="editSerie" placeholder="Serie" required [readonly]="isAssignMode" [class.readonly-field]="isAssignMode" />
+          <input appUppercase [(ngModel)]="newDevice.NoSerie" name="editSerie" placeholder="Serie" required [readonly]="isAssignMode" [class.readonly-field]="isAssignMode" />
         </label>
         <label class="device-create-field">Inventario
-          <input appDigitsOnly [(ngModel)]="newDevice.CodigoInventario" (input)="onInventoryCodeInput(newDevice)" name="editCodigo" placeholder="Inventario" maxlength="7" pattern="[0-9]*" required [readonly]="isAssignMode" [class.readonly-field]="isAssignMode" />
+          <input appDigitsOnly [(ngModel)]="newDevice.CodigoInventario" name="editCodigo" placeholder="Inventario" maxlength="7" pattern="[0-9]*" required [readonly]="isAssignMode" [class.readonly-field]="isAssignMode" />
         </label>
         @if (!isAssignMode) {
         <label class="device-create-field">Estado
@@ -416,7 +416,7 @@
         <!-- Primero el buscador: al elegir al empleado se completan Regional, Edificio y Departamento. -->
         <app-employee-lookup class="device-employee-lookup" (selected)="applyDeviceEmployee($event)" />
         <label class="device-create-field">Regional
-          <select [(ngModel)]="selectedRegionId" (ngModelChange)="selectDeviceRegion($event)" name="editRegional">
+          <select [(ngModel)]="selectedRegionId" (ngModelChange)="selectDeviceRegion($event)" name="editRegional" [required]="newDevice.Estado === 'ASIGNADO'">
             <option [ngValue]="null">Seleccionar regional</option>
             @for (region of regionalOptions; track region.IdRegional) {
             <option [ngValue]="region.IdRegional">{{ region.NombreRegional }}</option>
@@ -424,7 +424,7 @@
           </select>
         </label>
         <label class="device-create-field">Edificio
-          <select [(ngModel)]="selectedBuildingId" (ngModelChange)="selectBuilding($event)" name="editEdificio">
+          <select [(ngModel)]="selectedBuildingId" (ngModelChange)="selectBuilding($event)" name="editEdificio" [required]="newDevice.Estado === 'ASIGNADO'">
             <option [ngValue]="null">Seleccionar edificio</option>
             @for (building of deviceFormBuildings; track building.IdEdificio) {
             <option [ngValue]="building.IdEdificio">{{ building.NombreEdificio }}</option>
@@ -432,7 +432,7 @@
           </select>
         </label>
         <label class="device-create-field">Departamento
-          <select [ngModel]="newDevice.IdArea" (ngModelChange)="selectDeviceArea($event)" name="editArea"
+          <select [ngModel]="newDevice.IdArea" (ngModelChange)="selectDeviceArea($event)" name="editArea" [required]="newDevice.Estado === 'ASIGNADO'"
             [disabled]="selectedBuildingId === null || isLoadingAreas">
             <option [ngValue]="null">{{ isLoadingAreas ? 'Cargando departamentos...' : selectedBuildingId === null ? 'Selecciona primero un edificio' : 'Seleccionar departamento' }}</option>
             @for (area of areas; track area.IdArea) { <option [ngValue]="area.IdArea">{{ area.NombreArea }}</option> }
@@ -463,11 +463,11 @@
         <div class="combo-edit-scope">
           <label>
             <input type="checkbox" [(ngModel)]="applyEditToCombo" name="applyEditToCombo" />
-            <span>Asignar todo el combo {{ editingDeviceNCombo }} (CPU, teclado y monitor)</span>
+            <span>Asignar todo el combo {{ editingDeviceNCombo }} (todas sus piezas)</span>
           </label>
           <small>{{ applyEditToCombo
-            ? 'El estado, el departamento y el empleado se aplicarán a las tres piezas.'
-            : 'Si cambias la asignación solo de esta pieza, el combo se separa y sus piezas quedan como dispositivos individuales.' }}</small>
+            ? 'El estado, el departamento y el empleado se aplicarán a todas las piezas del combo.'
+            : 'Si cambias la asignación solo de esta pieza, sale del combo como dispositivo individual; las otras piezas siguen en el combo con su asignación.' }}</small>
         </div>
         }
         @if (employeeCatalogError) { <p class="feedback error modal-feedback" role="alert">{{ employeeCatalogError }}</p> }
@@ -495,7 +495,7 @@
         </div>
         <button type="button" class="modal-close" aria-label="Cerrar formulario" (click)="closeDeviceCreateDialog()">×</button>
       </div>
-      <form #deviceCreateForm="ngForm" class="modal-form device-create-form" (ngSubmit)="addDevice()">
+      <form appHighlightInvalid #deviceCreateForm="ngForm" class="modal-form device-create-form" (ngSubmit)="addDevice()">
         <div class="device-create-top-row">
           <div>
             <label style="display: block; font-size: 0.82em; font-weight: 600; margin-bottom: 0.25rem;">Equipo *</label>
@@ -531,16 +531,16 @@
           <fieldset class="desktop-combo-component">
             <legend>{{ component.Componente }}</legend>
             <label class="device-create-field">Marca
-              <input [(ngModel)]="component.Marca" [name]="'comboMarca' + index" placeholder="Marca" required />
+              <input appUppercase [(ngModel)]="component.Marca" [name]="'comboMarca' + index" placeholder="Marca" required />
             </label>
             <label class="device-create-field">Modelo
-              <input [(ngModel)]="component.Modelo" [name]="'comboModelo' + index" placeholder="Modelo" required />
+              <input appUppercase [(ngModel)]="component.Modelo" [name]="'comboModelo' + index" placeholder="Modelo" required />
             </label>
             <label class="device-create-field">Serie
-              <input [(ngModel)]="component.NoSerie" [name]="'comboSerie' + index" placeholder="Serie" required />
+              <input appUppercase [(ngModel)]="component.NoSerie" [name]="'comboSerie' + index" placeholder="Serie" required />
             </label>
             <label class="device-create-field">Inventario
-              <input appDigitsOnly [(ngModel)]="component.CodigoInventario" (input)="onInventoryCodeInput(component)" [name]="'comboCodigo' + index"
+              <input appDigitsOnly [(ngModel)]="component.CodigoInventario" [name]="'comboCodigo' + index"
                 placeholder="Inventario" maxlength="7" pattern="[0-9]*" required />
             </label>
           </fieldset>
@@ -549,16 +549,16 @@
         } @else {
         <div class="device-create-identification">
           <label class="device-create-field">Marca
-            <input [(ngModel)]="newDevice.Marca" name="createMarca" placeholder="Marca" required />
+            <input appUppercase [(ngModel)]="newDevice.Marca" name="createMarca" placeholder="Marca" required />
           </label>
           <label class="device-create-field">Modelo
-            <input [(ngModel)]="newDevice.Modelo" name="createModelo" placeholder="Modelo" required />
+            <input appUppercase [(ngModel)]="newDevice.Modelo" name="createModelo" placeholder="Modelo" required />
           </label>
           <label class="device-create-field">Serie
-            <input [(ngModel)]="newDevice.NoSerie" name="createSerie" placeholder="Serie" required />
+            <input appUppercase [(ngModel)]="newDevice.NoSerie" name="createSerie" placeholder="Serie" required />
           </label>
           <label class="device-create-field">Inventario
-            <input appDigitsOnly [(ngModel)]="newDevice.CodigoInventario" (input)="onInventoryCodeInput(newDevice)" name="createCodigo" placeholder="Inventario" maxlength="7" pattern="[0-9]*" required />
+            <input appDigitsOnly [(ngModel)]="newDevice.CodigoInventario" name="createCodigo" placeholder="Inventario" maxlength="7" pattern="[0-9]*" required />
           </label>
         </div>
         }
@@ -630,26 +630,56 @@
   </div>
   }
 
-  <!-- Modal común de confirmación para quitar equipos o reasignaciones. -->
-  @if (isDeleteDialogOpen) {
+  <!-- Exportación del historial de reasignaciones por rango de fecha del cambio. -->
+  @if (isReassignmentReportOpen) {
+  <div class="modal-backdrop" role="presentation">
+    <section class="edit-modal report-range-modal" role="dialog" aria-modal="true"
+      aria-labelledby="reassignment-report-title" (click)="$event.stopPropagation()">
+      <div class="modal-heading">
+        <div>
+          <p class="eyebrow">REPORTE</p>
+          <h2 id="reassignment-report-title">Exportar reporte de reasignaciones</h2>
+        </div>
+        <button type="button" class="modal-close" aria-label="Cerrar reporte"
+          (click)="isReassignmentReportOpen = false">×</button>
+      </div>
+      @if (errorMessage) { <p class="feedback error modal-feedback" role="alert">{{ errorMessage }}</p> }
+      <form class="modal-form" (ngSubmit)="exportReassignmentReport()">
+        <div class="user-field">
+          <label for="reassignment-report-from">Desde</label>
+          <input id="reassignment-report-from" type="date" [(ngModel)]="reassignmentReportRange.desde" name="reportFrom" />
+        </div>
+        <div class="user-field">
+          <label for="reassignment-report-to">Hasta</label>
+          <input id="reassignment-report-to" type="date" [(ngModel)]="reassignmentReportRange.hasta" name="reportTo" />
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="secondary" (click)="isReassignmentReportOpen = false">Cancelar</button>
+          <button type="submit" [disabled]="isExportingReassignments">
+            {{ isExportingReassignments ? 'Generando...' : 'Exportar a Excel' }}</button>
+        </div>
+      </form>
+    </section>
+  </div>
+  }
+
+  <!-- Confirmación para quitar un equipo. -->
+  @if (pendingDeviceId !== null) {
   <div class="modal-backdrop" role="presentation">
     <section class="delete-modal" role="dialog" aria-modal="true" aria-labelledby="delete-title"
       (click)="$event.stopPropagation()">
       <div class="modal-heading">
         <div>
           <p class="eyebrow">CONFIRMAR ACCIÓN</p>
-          <h2 id="delete-title">{{ pendingReassignmentId !== null ? '¿Eliminar esta reasignación?' : '¿Quieres quitar este
-            registro?' }}</h2>
+          <h2 id="delete-title">¿Quieres quitar este registro?</h2>
         </div>
         <button type="button" class="modal-close" aria-label="Cerrar confirmación"
-          (click)="cancelPendingDelete()">×</button>
+          (click)="cancelRemoveDevice()">×</button>
       </div>
-      <p>{{ pendingReassignmentId !== null
-        ? 'Esta acción eliminará permanentemente el registro de reasignación.'
-        : 'Se eliminará el dispositivo junto con su historial de reparaciones y reasignaciones.' }}</p>
+      <p>Se eliminará el dispositivo junto con su historial de reparaciones y reasignaciones.</p>
       <div class="modal-actions"><button type="button" class="secondary"
-          (click)="cancelPendingDelete()">Cancelar</button><button type="button" class="danger modal-danger"
-          (click)="confirmPendingDelete()">Confirmar
+          (click)="cancelRemoveDevice()">Cancelar</button><button type="button" class="danger modal-danger"
+          (click)="confirmRemoveDevice()">Confirmar
           eliminación</button></div>
     </section>
   </div>

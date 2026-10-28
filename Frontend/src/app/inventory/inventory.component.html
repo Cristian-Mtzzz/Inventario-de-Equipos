@@ -20,7 +20,7 @@
     <!-- Formulario, tabla y paginación de dispositivos. -->
     @if (activeSection === 'devices') {
     <section class="inventory-section">
-        <form class="inventory-form" (ngSubmit)="addDevice()">
+        <form appHighlightInvalid class="inventory-form" (ngSubmit)="addDevice()">
             <h2>
                 Agregar dispositivo
                 @if (deviceBatchCount > 1) {
@@ -52,10 +52,10 @@
                 <p class="feedback success" style="grid-column: 1 / -1; margin-bottom: 0.5rem;" role="status">{{ batchSuccessMessage }}</p>
             }
 
-            <input [(ngModel)]="newDevice.Marca" name="marca" placeholder="Marca" required />
-            <input [(ngModel)]="newDevice.Modelo" name="modelo" placeholder="Modelo" required />
-            <input [(ngModel)]="newDevice.NoSerie" name="serie" placeholder="SERIE" required />
-            <input appDigitsOnly [(ngModel)]="newDevice.CodigoInventario" (input)="onInventoryCodeInput(newDevice)" name="codigo" placeholder="INVENTARIO" maxlength="7" pattern="[0-9]*" required />
+            <input appUppercase [(ngModel)]="newDevice.Marca" name="marca" placeholder="Marca" required />
+            <input appUppercase [(ngModel)]="newDevice.Modelo" name="modelo" placeholder="Modelo" required />
+            <input appUppercase [(ngModel)]="newDevice.NoSerie" name="serie" placeholder="SERIE" required />
+            <input appDigitsOnly [(ngModel)]="newDevice.CodigoInventario" name="codigo" placeholder="INVENTARIO" maxlength="7" pattern="[0-9]*" required />
 
             <select [(ngModel)]="newDevice.Estado" (ngModelChange)="handleDeviceStateChange($event)" name="estado"
                 required>
@@ -202,7 +202,7 @@
     <!-- Registro y consulta de reasignaciones. -->
     @if (activeSection === 'reassignments') {
     <section class="inventory-section">
-        <form class="inventory-form compact" novalidate (ngSubmit)="addReassignment()">
+        <form appHighlightInvalid class="inventory-form compact" novalidate (ngSubmit)="addReassignment()">
             <h2>Registrar reasignación</h2>
             <input [(ngModel)]="deviceOptionSearch" (ngModelChange)="searchDeviceOptions()" name="deviceOptionSearch" placeholder="INVENTARIO, SERIE o modelo del equipo" />
             <select [ngModel]="selectedInventoryCode" (ngModelChange)="selectDevice($event)" name="equipo" required>
@@ -226,7 +226,7 @@
                 </div>
                 <div>
                     <label for="inventory-reassignment-building">Edificio</label>
-                    <select id="inventory-reassignment-building" [ngModel]="reassignmentBuildingId"
+                    <select appRequiredId id="inventory-reassignment-building" [ngModel]="reassignmentBuildingId"
                         (ngModelChange)="selectReassignmentBuilding($event)" name="reassignmentBuilding"
                         [disabled]="reassignmentRegionalId === null" required>
                         <option [ngValue]="0">Selecciona un edificio</option>
@@ -237,7 +237,7 @@
                 </div>
                 <div>
                     <label for="inventory-reassignment-area">Área</label>
-                    <select id="inventory-reassignment-area" [ngModel]="newReassignment.IdArea"
+                    <select appRequiredId id="inventory-reassignment-area" [ngModel]="newReassignment.IdArea"
                         (ngModelChange)="selectReassignmentArea($event)" name="reassignmentArea"
                         [disabled]="reassignmentBuildingId <= 0 || isLoadingAreas" required>
                         <option [ngValue]="0">{{ isLoadingAreas ? 'Cargando áreas...' : 'Selecciona un área' }}</option>
@@ -328,7 +328,7 @@
                     <h2 id="inventory-edit-title">Editar dispositivo</h2>
                 </div><button type="button" class="modal-close" (click)="cancelEdit()">×</button>
             </div>
-            <form class="modal-form" (ngSubmit)="saveEditedDevice()">
+            <form appHighlightInvalid class="modal-form" (ngSubmit)="saveEditedDevice()">
                 <!-- Mismos encabezados que Agregar y orden Equipo, Marca, Modelo, Serie, Inventario. -->
                 <label class="form-field-label">Equipo
                     <select [(ngModel)]="newDevice.IdTipo" name="editTipo" required>
@@ -337,16 +337,16 @@
                     </select>
                 </label>
                 <label class="form-field-label">Marca
-                    <input [(ngModel)]="newDevice.Marca" name="editMarca" placeholder="Marca" required />
+                    <input appUppercase [(ngModel)]="newDevice.Marca" name="editMarca" placeholder="Marca" required />
                 </label>
                 <label class="form-field-label">Modelo
-                    <input [(ngModel)]="newDevice.Modelo" name="editModelo" placeholder="Modelo" required />
+                    <input appUppercase [(ngModel)]="newDevice.Modelo" name="editModelo" placeholder="Modelo" required />
                 </label>
                 <label class="form-field-label">Serie
-                    <input [(ngModel)]="newDevice.NoSerie" name="editSerie" placeholder="Serie" required />
+                    <input appUppercase [(ngModel)]="newDevice.NoSerie" name="editSerie" placeholder="Serie" required />
                 </label>
                 <label class="form-field-label">Inventario
-                    <input appDigitsOnly [(ngModel)]="newDevice.CodigoInventario" (input)="onInventoryCodeInput(newDevice)" name="editCodigo" placeholder="Inventario" maxlength="7" pattern="[0-9]*"
+                    <input appDigitsOnly [(ngModel)]="newDevice.CodigoInventario" name="editCodigo" placeholder="Inventario" maxlength="7" pattern="[0-9]*"
                         required />
                 </label>
                 <label class="form-field-label">Estado

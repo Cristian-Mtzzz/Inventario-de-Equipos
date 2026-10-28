@@ -15,7 +15,6 @@ public interface ITallerService
     // Con idTecnico, solo actualiza si la reparación está asignada a ese técnico.
     Task<bool> UpdateMaintenanceAssessment(int idMantenimiento, UpdateMaintenanceAssessmentDto assessment, int? idTecnico, CancellationToken cancellationToken);
     Task<bool> RegisterMaintenanceExit(int idMantenimiento, UpdateMaintenanceExitDto exit, CancellationToken cancellationToken);
-    Task<bool> EditMaintenance(int idMantenimiento, UpdateMaintenanceDto maintenance, CancellationToken cancellationToken);
     Task<bool> DeleteMaintenance(int idMantenimiento, CancellationToken cancellationToken);
     Task<IReadOnlyList<WorkshopTechnicianDto>> GetTechnicians(CancellationToken cancellationToken);
     Task<bool> AssignTechnician(int idMantenimiento, int idUsuario, CancellationToken cancellationToken);

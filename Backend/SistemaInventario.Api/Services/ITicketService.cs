@@ -7,7 +7,6 @@ public interface ITicketService
 {
     // Con idTecnico el listado se limita a los tickets de ese técnico; sin él, trae todos.
     Task<IReadOnlyList<TicketDto>> GetTickets(int? idTecnico, CancellationToken cancellationToken);
-    Task<IReadOnlyList<TicketEmployeeDto>> GetEmployeesByArea(int idArea, CancellationToken cancellationToken);
     Task<IReadOnlyList<TicketTechnicianDto>> GetTechnicians(CancellationToken cancellationToken);
     Task<TicketAlertThresholdsDto> GetAlertThresholds(CancellationToken cancellationToken);
     Task CreateTicket(CreateTicketDto ticket, int createdByUserId, CancellationToken cancellationToken);

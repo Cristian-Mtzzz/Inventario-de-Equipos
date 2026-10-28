@@ -10,7 +10,7 @@ import { AuthService } from './auth/auth.service';
   styleUrl: './app.css',
   templateUrl: './app.html',
 })
-// Componente raíz: aloja el outlet y vigila la actividad y los permisos de la sesión.
+// Componente raíz: aloja el outlet y vigila la actividad y los módulos de la sesión.
 export class App {
   private readonly authService = inject(AuthService);
 

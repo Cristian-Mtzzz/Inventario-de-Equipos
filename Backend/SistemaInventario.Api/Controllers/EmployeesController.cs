@@ -76,25 +76,6 @@ public sealed class EmployeesController(IEmployeeService employeeService) : Cont
             : NotFound(new { Message = EmployeeNotFound });
     }
 
-    [HttpPut("employees/{noPagoActual}")]
-    [Authorize(Policy = ModulePolicies.Maintenance)]
-    public async Task<IActionResult> UpdateEmployee(
-        string noPagoActual,
-        UpdateEmployeeDto employee,
-        CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrWhiteSpace(noPagoActual)
-            || string.IsNullOrWhiteSpace(employee.NombreCompleto)
-            || employee.IdArea <= 0)
-        {
-            return BadRequest(new { Message = "Nombre y departamento son obligatorios." });
-        }
-
-        return await employeeService.UpdateEmployee(noPagoActual, employee, cancellationToken)
-            ? NoContent()
-            : NotFound(new { Message = EmployeeNotFound });
-    }
-
     [HttpPost("employees/directory")]
     [Authorize(Policy = ModulePolicies.Maintenance)]
     public async Task<IActionResult> CreateDirectoryEmployee(SaveDirectoryEmployeeDto employee, CancellationToken cancellationToken)
@@ -109,17 +90,6 @@ public sealed class EmployeesController(IEmployeeService employeeService) : Cont
         catch (OracleException exception) when (exception.Number == 1)
         {
             return Conflict(new { Message = "Ya existe un empleado con ese número de pago." });
-        }
-    }
-
-    [HttpDelete("employees/directory/{noPago}")]
-    [Authorize(Policy = ModulePolicies.Maintenance)]
-    public async Task<IActionResult> DeleteDirectoryEmployee(string noPago, CancellationToken cancellationToken)
-    {
-        try { return await employeeService.DeleteDirectoryEmployee(noPago, cancellationToken) ? NoContent() : NotFound(); }
-        catch (OracleException exception) when (exception.Number == 2292)
-        {
-            return Conflict(new { Message = EmployeeInUse });
         }
     }
 

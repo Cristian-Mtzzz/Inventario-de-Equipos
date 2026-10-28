@@ -2,6 +2,8 @@ import { DatePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DigitsOnlyDirective } from '../shared/digits-only.directive';
+import { UppercaseDirective } from '../shared/uppercase.directive';
+import { HighlightInvalidDirective, RequiredIdDirective } from '../shared/required-fields.directive';
 import { EmployeeLookupComponent, EmployeeLookupResult, findEmployeeIndex } from '../shared/employee-lookup.component';
 import { PagePipe, TablePageSizeComponent, TablePaginatorComponent } from '../shared/table-paginator';
 import { Router } from '@angular/router';
@@ -16,7 +18,7 @@ import { AppHeaderComponent } from '../shared/app-header.component';
 // Componente de inventario que permite consultar, filtrar, paginar y gestionar dispositivos y reasignaciones.
 @Component({
   selector: 'app-inventory',
-  imports: [DatePipe, FormsModule, EmployeeSearchDialogComponent, AppHeaderComponent, PagePipe, TablePageSizeComponent, TablePaginatorComponent, DigitsOnlyDirective, EmployeeLookupComponent],
+  imports: [DatePipe, FormsModule, EmployeeSearchDialogComponent, AppHeaderComponent, PagePipe, TablePageSizeComponent, TablePaginatorComponent, DigitsOnlyDirective, UppercaseDirective, HighlightInvalidDirective, RequiredIdDirective, EmployeeLookupComponent],
   templateUrl: './inventory.component.html',
   styleUrl: './inventory.component.css',
   // Angular 22 usa OnPush por defecto; este panel actualiza la vista al llegar cada respuesta HTTP
@@ -324,10 +326,6 @@ export class InventoryComponent {
     this.newDevice.NombreAsignado = employee?.NombreCompleto ?? null;
   }
 
-  onInventoryCodeInput(target: { CodigoInventario: string }): void {
-    target.CodigoInventario = (target.CodigoInventario || '').replace(/\D/g, '').slice(0, 7);
-  }
-
   onPaymentNumberInput(target: { NumeroPagoAsignado: string | null }): void {
     if (target.NumeroPagoAsignado) {
       target.NumeroPagoAsignado = target.NumeroPagoAsignado.replace(/\D/g, '').slice(0, 5);
@@ -383,16 +381,14 @@ export class InventoryComponent {
   selectSection(section: 'devices' | 'reassignments'): void {
     // Cambia de pestaña y solicita únicamente los datos necesarios
     this.activeSection = section;
-    this.message = '';
-    this.errorMessage = '';
+    this.clearMessages();
     if (section === 'devices') this.loadDevices();
     else this.loadReassignments();
   }
 
   refreshPanel(): void {
     // Repite la carga de la pestaña activa y limpia mensajes anteriores
-    this.message = '';
-    this.errorMessage = '';
+    this.clearMessages();
     this.selectSection(this.activeSection);
   }
 

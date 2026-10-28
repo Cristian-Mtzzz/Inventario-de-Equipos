@@ -27,10 +27,15 @@
           </select>
         </label>
 
-        <label class="report-field report-search-field">
-          <span>Buscar</span>
-          <input type="search" [(ngModel)]="searchTerm" name="reportSearch"
-            placeholder="Código de inventario o número de serie" />
+        <!-- Los dispositivos no guardan fecha de registro: el rango se aplica a la fecha de asignación. -->
+        <label class="report-field">
+          <span>Asignados desde</span>
+          <input type="date" [(ngModel)]="dateRange.desde" name="reportFrom" />
+        </label>
+
+        <label class="report-field">
+          <span>Asignados hasta</span>
+          <input type="date" [(ngModel)]="dateRange.hasta" name="reportTo" />
         </label>
 
         @if (reportType === 'type') {
@@ -49,7 +54,7 @@
         @if (reportType === 'brand') {
         <label class="report-field">
           <span>Marca</span>
-          <input type="text" [(ngModel)]="brand" name="reportBrand" placeholder="Escribe la marca" required />
+          <input appUppercase type="text" [(ngModel)]="brand" name="reportBrand" placeholder="Escribe la marca" required />
         </label>
         }
 

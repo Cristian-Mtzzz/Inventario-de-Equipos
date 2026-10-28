@@ -112,7 +112,7 @@
         </div>
         <button type="button" class="modal-close" aria-label="Cerrar ventana" (click)="closeWindow()">×</button>
       </div>
-      <form (ngSubmit)="saveTicket()">
+      <form appHighlightInvalid (ngSubmit)="saveTicket()">
         @if (errorMessage) { <p class="feedback error" role="alert">{{ errorMessage }}</p> }
 
         <h3 class="form-section-title">Datos del usuario</h3>
@@ -120,6 +120,8 @@
         <!-- Tras elegir, el botón muestra el nombre del empleado; al pulsarlo se puede cambiar. -->
         <label>Nombre del empleado</label>
         <app-employee-lookup [label]="selectedEmployee?.NombreCompleto ?? 'Buscar empleado'" (selected)="selectEmployee($event)" />
+        <!-- El empleado se elige con el botón; este campo oculto lo hace obligatorio para el sombreado en rojo. -->
+        <input type="hidden" appRequiredId [ngModel]="form.IdEmpleado" name="ticketEmployee" />
 
         <label for="ticket-regional">Regional</label>
         <input id="ticket-regional" type="text" class="readonly-field" readonly tabindex="-1"
@@ -151,7 +153,7 @@
 
         <h3 class="form-section-title">Asignación</h3>
         <label for="ticket-technician">Técnico</label>
-        <select id="ticket-technician" [(ngModel)]="form.IdTecnico" name="ticketTechnician" required>
+        <select appRequiredId id="ticket-technician" [(ngModel)]="form.IdTecnico" name="ticketTechnician" required>
           <option [ngValue]="0">Selecciona un técnico</option>
           @for (technician of technicians; track technician.IdUsuario) {
           <option [ngValue]="technician.IdUsuario">{{ technician.Nombre }}</option>
@@ -185,10 +187,10 @@
         </div>
         <button type="button" class="modal-close" aria-label="Cerrar ventana" (click)="closeWindow()">×</button>
       </div>
-      <form (ngSubmit)="saveReassignment()">
+      <form appHighlightInvalid (ngSubmit)="saveReassignment()">
         @if (errorMessage) { <p class="feedback error" role="alert">{{ errorMessage }}</p> }
         <label for="reassign-technician">Técnico</label>
-        <select id="reassign-technician" [(ngModel)]="reassignTechnicianId" name="reassignTechnician" required>
+        <select appRequiredId id="reassign-technician" [(ngModel)]="reassignTechnicianId" name="reassignTechnician" required>
           <option [ngValue]="0">Selecciona un técnico</option>
           @for (technician of technicians; track technician.IdUsuario) {
           <option [ngValue]="technician.IdUsuario">{{ technician.Nombre }}</option>
@@ -219,7 +221,7 @@
         </div>
         <button type="button" class="modal-close" aria-label="Cerrar ventana" (click)="closeWindow()">×</button>
       </div>
-      <form (ngSubmit)="saveFinish()">
+      <form appHighlightInvalid (ngSubmit)="saveFinish()">
         @if (errorMessage) { <p class="feedback error" role="alert">{{ errorMessage }}</p> }
         <label for="finish-observations">Observaciones del soporte</label>
         <textarea id="finish-observations" [(ngModel)]="finish.Observaciones" name="finishObservations" rows="4"
@@ -228,11 +230,11 @@
         <fieldset class="finish-rating">
           <legend>Valoración de la ayuda</legend>
           <label class="rating-option" [class.selected]="finish.Valoracion === 'BUENO'">
-            <input type="radio" name="finishRating" value="BUENO" [(ngModel)]="finish.Valoracion" />
+            <input type="radio" name="finishRating" value="BUENO" [(ngModel)]="finish.Valoracion" required />
             <span>Bueno</span>
           </label>
           <label class="rating-option" [class.selected]="finish.Valoracion === 'MALO'">
-            <input type="radio" name="finishRating" value="MALO" [(ngModel)]="finish.Valoracion" />
+            <input type="radio" name="finishRating" value="MALO" [(ngModel)]="finish.Valoracion" required />
             <span>Malo</span>
           </label>
         </fieldset>

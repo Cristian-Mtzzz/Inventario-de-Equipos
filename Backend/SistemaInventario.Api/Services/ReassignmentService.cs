@@ -110,10 +110,21 @@ public sealed class ReassignmentService(InventoryDbContext dbContext) : Assignme
                 """, cancellationToken,
                 ("nuevoPago", nuevoPago), ("nuevoNombre", nuevoNombre),
                 ("idArea", reassignment.IdArea), ("idEquipo", reassignment.IdEquipo));
-        }, cancellationToken);
 
-    // Elimina solo el registro del historial; no revierte la asignación actual del equipo.
-    public async Task<bool> DeleteReassignment(int idReasignacion, CancellationToken cancellationToken) =>
-        await Execute("DELETE FROM REASIGNACIONES WHERE ID_REASIGNACION = :idReasignacion", cancellationToken,
-            ("idReasignacion", idReasignacion)) > 0;
+            // Si el equipo es pieza de un combo y ya no coincide con el resto, sale del combo.
+            var differsFromCombo = await Exists(connection, transaction, """
+                SELECT 1
+                FROM DISPOSITIVOS d
+                JOIN DISPOSITIVOS s ON s.NCOMBO = d.NCOMBO AND s.ID_EQUIPO <> d.ID_EQUIPO
+                WHERE d.ID_EQUIPO = :idEquipo
+                  AND (NVL(TRIM(s.NUMERO_PAGO_ASIGNADO), ' ') <> NVL(TRIM(d.NUMERO_PAGO_ASIGNADO), ' ')
+                       OR NVL(UPPER(TRIM(s.NOMBRE_ASIGNADO)), ' ') <> NVL(UPPER(TRIM(d.NOMBRE_ASIGNADO)), ' ')
+                       OR NVL(s.ID_AREA, -1) <> NVL(d.ID_AREA, -1)
+                       OR NVL(s.ESTADO, ' ') <> NVL(d.ESTADO, ' '))
+                """, cancellationToken, ("idEquipo", reassignment.IdEquipo));
+            if (differsFromCombo)
+            {
+                await RemoveFromCombo(connection, transaction, reassignment.IdEquipo, cancellationToken);
+            }
+        }, cancellationToken);
 }

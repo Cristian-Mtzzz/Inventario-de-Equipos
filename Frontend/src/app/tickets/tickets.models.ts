@@ -22,14 +22,6 @@ export interface Ticket {
   TipoSoporte: string | null;
 }
 
-// Empleado del departamento elegido. TieneNoPago avisa que todavía no se podrá confirmar
-// el cierre de un ticket suyo.
-export interface TicketEmployee {
-  IdEmpleado: number;
-  NombreCompleto: string;
-  TieneNoPago: boolean;
-}
-
 export interface TicketTechnician {
   IdUsuario: number;
   Nombre: string;

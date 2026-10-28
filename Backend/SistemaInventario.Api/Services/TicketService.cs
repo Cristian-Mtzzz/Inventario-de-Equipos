@@ -51,21 +51,6 @@ public sealed class TicketService(InventoryDbContext dbContext) : OracleReposito
             cancellationToken,
             idTecnico is null ? [] : [("idTecnico", (object?)idTecnico.Value)]);
 
-    // Empleados de un departamento. TIENE_NO_PAGO avisa en el formulario que ese empleado
-    // todavía no se puede confirmar al cerrar el ticket.
-    public Task<IReadOnlyList<TicketEmployeeDto>> GetEmployeesByArea(int idArea, CancellationToken cancellationToken) =>
-        ReadList("""
-            SELECT EMPLEADOS_IHSS_ID AS ID_EMPLEADO, NOMBRE_EMPLEADO AS NOMBRE_COMPLETO,
-                   CASE WHEN TRIM(NPAGO) IS NULL THEN 0 ELSE 1 END AS TIENE_NO_PAGO
-            FROM EMPLEADOS_IHSS
-            WHERE DEPARTAMENTO_IHSS_ID = :idArea
-            ORDER BY UPPER(NOMBRE_EMPLEADO)
-            """, reader => new TicketEmployeeDto(
-                ReadInt(reader, "ID_EMPLEADO"),
-                ReadString(reader, "NOMBRE_COMPLETO"),
-                ReadInt(reader, "TIENE_NO_PAGO") == 1),
-            cancellationToken, ("idArea", idArea));
-
     // Los tickets los atienden los técnicos de taller: el mismo rol que ya existía.
     public Task<IReadOnlyList<TicketTechnicianDto>> GetTechnicians(CancellationToken cancellationToken) =>
         ReadList("""

@@ -3,13 +3,13 @@
   <header class="app-header">
     <!-- Logo del ihss. -->
     <img class="brand-logo" src="logo.png" alt="Gobierno de la República de Honduras · IHSS" />
-    <span class="header-title">Gestion de Equipos</span>
+    <span class="header-title">Gestión de Equipos</span>
   </header>
   
   <section class="form-panel">
     <div class="form-wrap">
       <p class="eyebrow">BIENVENIDO</p>
-      <h2>Inicia sesion</h2>
+      <h2>Inicia sesión</h2>
       <p class="form-intro">Ingresa tus credenciales.</p>
 
       <form [formGroup]="loginForm" (ngSubmit)="submitLogin()" novalidate>
@@ -18,25 +18,25 @@
           placeholder="Tu nombre de usuario" />
         @if (loginForm.controls.userName.touched && loginForm.controls.userName.invalid) { <small
           class="field-error">Ingresa tu nombre de usuario.</small> }
-        <label for="password">Contrasena</label>
+        <label for="password">Contraseña</label>
 
         <div class="password-field">
           <input id="password" [type]="showPassword ? 'text' : 'password'" formControlName="password"
-            autocomplete="current-password" placeholder="Tu contrasena" />
+            autocomplete="current-password" placeholder="Tu contraseña" />
           <button type="button" class="password-toggle" (click)="showPassword = !showPassword"
-            [attr.aria-label]="showPassword ? 'Ocultar contrasena' : 'Mostrar contrasena'">{{ showPassword ? 'Ocultar' :
+            [attr.aria-label]="showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'">{{ showPassword ? 'Ocultar' :
             'Ver' }}</button>
         </div>
 
         @if (loginForm.controls.password.touched && loginForm.controls.password.invalid) { <small
-          class="field-error">Usa una contrasena de al menos 6 caracteres.</small> }
+          class="field-error">Usa una contraseña de al menos 6 caracteres.</small> }
         @if (errorMessage()) { <p class="error-banner" role="alert">{{ errorMessage() }}</p> }
         <button class="submit-button" type="submit" [disabled]="isLoading()"><span>{{ isLoading() ? 'Validando...' :
             'Ingresar' }}</span>@if (!isLoading()) { <span class="submit-arrow" aria-hidden="true">&rarr;</span>
           }</button>
       </form>
-      <p class="security-note"><span aria-hidden="true">&#9672;</span> Conexion segura y protegida</p>
+      <p class="security-note"><span aria-hidden="true">&#9672;</span> Conexión segura y protegida</p>
     </div>
-    <footer>© 2026 Gestion de Equipos <span>·</span> Acceso autorizado</footer>
+    <footer>© 2026 Gestión de Equipos <span>·</span> Acceso autorizado</footer>
   </section>
 </main>

@@ -26,6 +26,11 @@ public static class AppRoles
     public const string TicketManagers = Admin + "," + AdminTicket;
     public const string TicketUsers = TicketManagers + "," + TecnicoTaller;
 
+    // Cuenta del Control de permisos, que es un sistema aparte con la misma base de datos. En el
+    // inventario no tiene panel (entra a "sin acceso") y la pantalla de Usuarios no la lista ni la
+    // puede asignar: no está en All.
+    public const string Permisos = "Permisos";
+
     public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
         Admin, UsuarioComun, Taller, AdminTaller, RecepcionTaller, TecnicoTaller, AdminTicket,

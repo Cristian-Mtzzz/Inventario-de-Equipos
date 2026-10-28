@@ -9,11 +9,12 @@ import { AppHeaderComponent } from '../shared/app-header.component';
 import { ModuleTabsComponent } from '../shared/module-tabs.component';
 import { apiErrorMessage } from '../shared/api-response';
 import { DigitsOnlyDirective } from '../shared/digits-only.directive';
+import { HighlightInvalidDirective, RequiredIdDirective } from '../shared/required-fields.directive';
 import { EmployeeLookupComponent, EmployeeLookupResult } from '../shared/employee-lookup.component';
 import { PagePipe, TablePageSizeComponent, TablePaginatorComponent } from '../shared/table-paginator';
 import { CreateTicketRequest, FinishTicketRequest, TICKET_SUPPORT_TYPES, Ticket, TicketAlertThresholds, TicketSupportType, TicketTechnician } from './tickets.models';
 import { TicketsService } from './tickets.service';
-import { TicketReportFilters, emptyTicketReportFilters, exportTicketsReport, filterTicketsForReport } from './tickets-report';
+import { TicketReportFilters, elapsed, emptyTicketReportFilters, exportTicketsReport, filterTicketsForReport } from './tickets-report';
 
 type TicketWindow = 'none' | 'create' | 'reassign' | 'finish' | 'report';
 
@@ -32,7 +33,7 @@ const emptyFinish = (): FinishTicketRequest => ({ NoPago: '', Observaciones: '',
 
 @Component({
   selector: 'app-tickets',
-  imports: [DatePipe, FormsModule, AppHeaderComponent, ModuleTabsComponent, DigitsOnlyDirective, EmployeeLookupComponent, PagePipe, TablePageSizeComponent, TablePaginatorComponent],
+  imports: [DatePipe, FormsModule, AppHeaderComponent, ModuleTabsComponent, DigitsOnlyDirective, HighlightInvalidDirective, RequiredIdDirective, EmployeeLookupComponent, PagePipe, TablePageSizeComponent, TablePaginatorComponent],
   templateUrl: './tickets.component.html',
   // Reusa los estilos del taller para que el módulo se vea igual que el resto del sistema;
   // tickets.component.css solo agrega lo propio de esta pantalla.
@@ -174,14 +175,9 @@ export class TicketsComponent {
     return 'late';
   }
 
-  // Duración del servicio en un formato corto: "1 h 25 min".
+  // Duración del servicio en un formato corto: "1d, 22h, 20m".
   elapsed(ticket: Ticket): string {
-    if (ticket.MinutosTranscurridos === null) return '-';
-    const minutes = Math.max(0, ticket.MinutosTranscurridos);
-    const hours = Math.floor(minutes / 60);
-    const rest = minutes % 60;
-    if (hours === 0) return `${rest} min`;
-    return rest === 0 ? `${hours} h` : `${hours} h ${rest} min`;
+    return elapsed(ticket);
   }
 
   updateSearch(term: string): void {

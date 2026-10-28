@@ -3,8 +3,9 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectorRef, Component, inject, Input } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DigitsOnlyDirective } from '../shared/digits-only.directive';
+import { UppercaseDirective } from '../shared/uppercase.directive';
+import { HighlightInvalidDirective, RequiredIdDirective } from '../shared/required-fields.directive';
 import { PagePipe, TablePageSizeComponent, TablePaginatorComponent } from '../shared/table-paginator';
-import type ExcelJS from 'exceljs';
 import { finalize, firstValueFrom } from 'rxjs';
 import { Router } from '@angular/router';
 import { AuthService } from '../auth/auth.service';
@@ -16,11 +17,11 @@ import { ModuleTabsComponent } from '../shared/module-tabs.component';
 import { Area, Building, DeviceType, RegionalOption } from '../admin/admin.models';
 import { Maintenance, MaintenanceAssessmentRequest, MaintenanceEntryRequest, MaintenanceExitRequest, ReceptionDefaults, ReceptionEntryRequest, WorkshopDevice, WorkshopTechnician } from './taller.models';
 import { TallerService } from './taller.service';
-import { ReportColumn, addReportSheet, createReportWorkbook, downloadReportWorkbook, excelDate, generatedAt, reportFileName } from '../shared/excel-report';
+import { ReportColumn, ReportDateRange, addReportSheet, createReportWorkbook, dateRangeLabel, downloadReportWorkbook, emptyReportDateRange, excelDate, generatedAt, isInDateRange, isInvalidDateRange, reportFileName } from '../shared/excel-report';
 
 @Component({
   selector: 'app-taller',
-  imports: [DatePipe, FormsModule, SearchableSelectDirective, AppHeaderComponent, ModuleTabsComponent, PagePipe, TablePageSizeComponent, TablePaginatorComponent, DigitsOnlyDirective],
+  imports: [DatePipe, FormsModule, SearchableSelectDirective, AppHeaderComponent, ModuleTabsComponent, PagePipe, TablePageSizeComponent, TablePaginatorComponent, DigitsOnlyDirective, UppercaseDirective, HighlightInvalidDirective, RequiredIdDirective],
   templateUrl: './taller.component.html',
   styleUrl: './taller.component.css',
 })
@@ -46,7 +47,10 @@ export class TallerComponent {
   selectedReceptionOriginId: number | null = null;
   selectedMaintenance: Maintenance | null = null;
   pendingDeleteMaintenance: Maintenance | null = null;
-  activeWindow: 'reception' | 'entry' | 'exit' | 'assessment' | 'assign' | null = null;
+  activeWindow: 'reception' | 'entry' | 'exit' | 'assessment' | 'assign' | 'report' | null = null;
+  // Filtros de la ventana "Exportar reporte": rango de fecha de ingreso y tipo de equipo ('' = todos).
+  reportDateRange: ReportDateRange = emptyReportDateRange();
+  reportDeviceType = '';
   // Ventana "Asignar": técnicos disponibles y el elegido.
   technicians: WorkshopTechnician[] = [];
   selectedTechnicianId: number | null = null;
@@ -103,16 +107,6 @@ export class TallerComponent {
   get isTechnicianOnly(): boolean { return this.authService.hasRole(['TecnicoTaller']) && !this.isWorkshopAdmin; }
   get canReceive(): boolean { return this.isWorkshopAdmin || this.isReceptionOnly; }
   get canWorkOnRepairs(): boolean { return this.isWorkshopAdmin || this.authService.hasRole(['TecnicoTaller']); }
-
-  get combinedOrigins(): { IdEdificio: number; Label: string }[] {
-    return this.buildings.map((b) => {
-      const reg = this.regionals.find((r) => r.IdRegional === b.IdRegional);
-      return {
-        IdEdificio: b.IdEdificio,
-        Label: reg ? `${b.NombreEdificio} (${reg.NombreRegional})` : b.NombreEdificio,
-      };
-    }).sort((a, b) => a.Label.localeCompare(b.Label));
-  }
 
   get receptionBuildings(): Building[] {
     return this.selectedReceptionRegionalId === null
@@ -244,8 +238,7 @@ export class TallerComponent {
   openReceptionWindow(): void {
     // Inicializa una recepción nueva con la fecha/hora actual del navegador.
     if (!this.canReceive) return;
-    this.message = '';
-    this.errorMessage = '';
+    this.clearMessages();
     this.resetReceptionForm();
     this.activeWindow = 'reception';
   }
@@ -278,14 +271,34 @@ export class TallerComponent {
     this.receptionAreas = [];
   }
 
+  // Tipos de dispositivo que aparecen en las reparaciones, para el filtro del reporte.
+  get reportDeviceTypes(): string[] {
+    const types = new Set(this.maintenances
+      .map((item) => item.TipoDispositivo?.trim().toUpperCase())
+      .filter((type): type is string => !!type));
+    return [...types].sort((first, second) => first.localeCompare(second));
+  }
+
+  openReportWindow(): void {
+    this.clearMessages();
+    this.activeWindow = 'report';
+  }
+
   async exportWorkshopReport(): Promise<void> {
     if (!this.isWorkshopAdmin) return;
-    this.message = '';
-    this.errorMessage = '';
+    this.clearMessages();
+    if (isInvalidDateRange(this.reportDateRange)) {
+      this.errorMessage = 'La fecha "desde" no puede ser posterior a la fecha "hasta".';
+      return;
+    }
     this.isSaving = true;
     try {
-      const maintenances = await firstValueFrom(this.tallerService.getMaintenances());
+      // Rango sobre la fecha de ingreso al taller; el tipo se compara sin importar mayúsculas.
+      const maintenances = (await firstValueFrom(this.tallerService.getMaintenances())).filter((item) =>
+        isInDateRange(item.FechaIngreso, this.reportDateRange)
+        && (!this.reportDeviceType || item.TipoDispositivo?.trim().toUpperCase() === this.reportDeviceType));
       await this.createWorkshopWorkbook(maintenances);
+      this.activeWindow = null;
       this.message = `Reporte del taller exportado: ${maintenances.length} reparaciones.`;
     } catch (error) {
       if (!(error instanceof DOMException && error.name === 'AbortError')) {
@@ -304,9 +317,9 @@ export class TallerComponent {
     const workbook = await createReportWorkbook('Reporte del taller');
     const columns: ReportColumn<Maintenance>[] = [
       { header: 'Memo', width: 20, value: (item) => this.display(item.MemoNumero) },
-      { header: 'Área', width: 30, value: (item) => this.display(item.Departamento) },
+      { header: 'Departamento', width: 30, value: (item) => this.display(item.Departamento) },
       { header: 'Equipo', width: 20, value: (item) => this.display(item.TipoDispositivo) },
-      { header: 'Marca', width: 16, value: (item) => this.display(item.Marca) },
+      { header: 'Marca', width: 16, value: (item) => this.display(item.Marca).toLocaleUpperCase('es') },
       { header: 'Inventario', width: 14, value: (item) => item.CodigoInventario },
       { header: 'Recibió', width: 24, value: (item) => this.display(item.Recibe) },
       { header: 'Descripción', width: 36, wrap: true, value: (item) => this.display(item.DescripcionEquipo) },
@@ -324,7 +337,12 @@ export class TallerComponent {
     addReportSheet(workbook, {
       sheetName: 'Reparaciones',
       title: 'REPORTE DEL TALLER',
-      subtitle: `${maintenances.length} reparaciones · ${delivered} entregadas · ${maintenances.length - delivered} en taller · ${generatedAt()}`,
+      subtitle: [
+        `${maintenances.length} reparaciones · ${delivered} entregadas · ${maintenances.length - delivered} en taller`,
+        `Ingreso: ${dateRangeLabel(this.reportDateRange)}`,
+        this.reportDeviceType ? `Equipo: ${this.reportDeviceType}` : '',
+        generatedAt(),
+      ].filter(Boolean).join(' · '),
       tableName: 'ReporteTaller',
       columns,
       rows: maintenances,
@@ -357,8 +375,7 @@ export class TallerComponent {
 
   saveReception(): void {
     // Valida y registra la recepción con la fecha/hora generada por el sistema.
-    this.message = '';
-    this.errorMessage = '';
+    this.clearMessages();
     if (!this.reception.CodigoInventario.trim()
       || !this.reception.NoSerie.trim()
       || !this.reception.Marca.trim()
@@ -403,16 +420,14 @@ export class TallerComponent {
   openEntryWindow(): void {
     // Abre el flujo tradicional de ingreso para un equipo ya registrado.
     if (!this.isWorkshopAdmin) return;
-    this.message = '';
-    this.errorMessage = '';
+    this.clearMessages();
     this.entry = { IdEquipo: 0, Dictamen: '', TipoReparacion: '', FechaIngreso: this.getCurrentDateTime() };
     this.activeWindow = 'entry';
   }
 
   // Guarda la información de ingreso 
   saveEntry(): void {
-    this.message = '';
-    this.errorMessage = '';
+    this.clearMessages();
     if (this.entry.IdEquipo <= 0 || !this.entry.FechaIngreso) {
       this.errorMessage = 'Selecciona un equipo e indica la fecha de ingreso.';
       this.changeDetector.markForCheck();
@@ -439,8 +454,7 @@ export class TallerComponent {
   openExitWindow(item: Maintenance): void {
     // Prepara la salida usando la reparación elegida como contexto.
     if (!this.canWorkOnRepairs || !this.isOpenMaintenance(item)) return;
-    this.message = '';
-    this.errorMessage = '';
+    this.clearMessages();
     this.selectedMaintenance = item;
     this.exit = {
       EquipoFuncional: item.EquipoFuncional ?? '',
@@ -452,8 +466,7 @@ export class TallerComponent {
 
   saveExit(): void {
     // Registra la condición funcional y la constancia de entrega.
-    this.message = '';
-    this.errorMessage = '';
+    this.clearMessages();
     if (!this.selectedMaintenance || !this.exit.FechaEntrega
       || !this.exit.EquipoFuncional || !this.exit.ClienteRecibe.trim()) {
       this.errorMessage = 'Completa el estado funcional, quién recibe y la fecha de entrega.';
@@ -481,8 +494,7 @@ export class TallerComponent {
 
   openAssessmentWindow(item: Maintenance): void {
     if (!this.canWorkOnRepairs) return;
-    this.message = '';
-    this.errorMessage = '';
+    this.clearMessages();
     this.selectedMaintenance = item;
     this.assessment = {
       // "PENDIENTE" es solo la marca interna de "sin dictamen": el campo se abre vacío.
@@ -495,13 +507,11 @@ export class TallerComponent {
   }
 
   saveAssessment(): void {
-    if (!this.selectedMaintenance || !this.assessment.Dictamen.trim()) {
-      this.errorMessage = 'Ingresa el diagnóstico del equipo.';
-      this.changeDetector.markForCheck();
-      return;
-    }
-    if (!this.assessment.EquipoEnGarantia) {
-      this.errorMessage = 'Indica si el equipo está en garantía.';
+    if (!this.selectedMaintenance) return;
+    // Todos los campos del dictamen son obligatorios.
+    if (!this.assessment.EquipoEnGarantia || !this.assessment.Dictamen?.trim()
+      || !this.assessment.PiezasSustituidas?.trim() || !this.assessment.Observaciones?.trim()) {
+      this.errorMessage = 'Completa la garantía, el diagnóstico, la sustitución de piezas y las observaciones.';
       this.changeDetector.markForCheck();
       return;
     }
@@ -525,8 +535,7 @@ export class TallerComponent {
   // Abre la ventana para asignar técnico; carga la lista cada vez para incluir usuarios recién creados.
   openAssignWindow(item: Maintenance): void {
     if (!this.isWorkshopAdmin) return;
-    this.message = '';
-    this.errorMessage = '';
+    this.clearMessages();
     this.selectedMaintenance = item;
     this.selectedTechnicianId = null;
     this.technicians = [];
@@ -608,8 +617,7 @@ export class TallerComponent {
   }
   // Refresca el panel de información del taller.
   refreshPanel(): void {
-    this.message = '';
-    this.errorMessage = '';
+    this.clearMessages();
     this.loadData();
   }
 
@@ -644,4 +652,8 @@ export class TallerComponent {
     return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
   }
 
+  private clearMessages(): void {
+    this.message = '';
+    this.errorMessage = '';
+  }
 }

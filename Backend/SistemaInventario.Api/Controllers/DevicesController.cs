@@ -145,7 +145,7 @@ public sealed partial class DevicesController(IDeviceService deviceService) : Co
     [HttpPut("devices/{idEquipo:int}")]
     [Authorize(Policy = ModulePolicies.Devices)]
     // applyToCombo=true reasigna las tres piezas de un combo; sin él solo cambia este equipo
-    // (y el combo se separa si cambia su asignación).
+    // (y sale del combo si cambia su asignación; las otras piezas siguen juntas).
     public async Task<IActionResult> UpdateDevice(
         int idEquipo,
         CreateDeviceDto device,
@@ -159,31 +159,6 @@ public sealed partial class DevicesController(IDeviceService deviceService) : Co
         }
 
         return await deviceService.UpdateDevice(idEquipo, device, applyToCombo, cancellationToken)
-            ? NoContent()
-            : NotFound(new { Message = DeviceNotFound });
-    }
-
-    [HttpPut("devices/by-identifier")]
-    [Authorize(Policy = ModulePolicies.Devices)]
-    // Actualiza usando el código o la serie originales, aunque el usuario los modifique.
-    public async Task<IActionResult> UpdateDeviceByIdentifier(
-        [FromQuery] string? codigoInventario,
-        [FromQuery] string? noSerie,
-        CreateDeviceDto device,
-        CancellationToken cancellationToken)
-    {
-        var validationMessage = ValidateDevice(device);
-        if (validationMessage is not null)
-        {
-            return BadRequest(new { Message = validationMessage });
-        }
-
-        if (string.IsNullOrWhiteSpace(codigoInventario) && string.IsNullOrWhiteSpace(noSerie))
-        {
-            return BadRequest(new { Message = "Indica el código de inventario o el número de serie original." });
-        }
-
-        return await deviceService.UpdateDeviceByIdentifier(codigoInventario, noSerie, device, cancellationToken)
             ? NoContent()
             : NotFound(new { Message = DeviceNotFound });
     }

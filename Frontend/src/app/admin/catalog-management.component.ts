@@ -3,7 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { DigitsOnlyDirective } from '../shared/digits-only.directive';
 import { finalize, forkJoin, Observable } from 'rxjs';
 import { SearchableSelectDirective } from '../shared/searchable-select.directive';
-import { ApiError, apiErrorMessage } from '../shared/api-response';
+import { apiErrorMessage } from '../shared/api-response';
 import { AdminService } from './admin.service';
 import { Building, CatalogDepartment, DeviceType, DirectoryEmployee, RegionalOption } from './admin.models';
 
@@ -21,19 +21,11 @@ export class CatalogManagementComponent {
   readonly changed = output<void>();
   @ViewChild('employeeSearchInput') private employeeSearchInput?: ElementRef<HTMLInputElement>;
   private readonly changeDetector = inject(ChangeDetectorRef);
-  readonly views: { id: CatalogView; label: string }[] = [
-    { id: 'regionals', label: 'Regionales' },
-    { id: 'buildings', label: 'Edificios' },
-    { id: 'departments', label: 'Departamentos' },
-    { id: 'employees', label: 'Empleados' },
-    { id: 'deviceTypes', label: 'Tipos de dispositivos' },
-  ];
   activePanel: CatalogPanel = 'locations';
   activeView: CatalogView = 'regionals';
-  pageSize = 50;
+  private readonly pageSize = 50;
   currentPage = 1;
   searchTerm = '';
-  readonly pageSizeOptions = [10, 25, 50, 100];
   sortColumn = '';
   sortDirection: 'asc' | 'desc' = 'asc';
   regionals: RegionalOption[] = [];
@@ -102,10 +94,6 @@ export class CatalogManagementComponent {
       .slice(0, 50);
   }
 
-  get selectedRegional(): RegionalOption | null {
-    return this.regionals.find((regional) => regional.IdRegional === this.catalogRegionalId) ?? null;
-  }
-
   get selectedCatalogDepartment(): CatalogDepartment | null {
     return this.departments.find((department) => department.IdArea === this.catalogAreaId) ?? null;
   }
@@ -151,27 +139,11 @@ export class CatalogManagementComponent {
     return this.filterRows(this.regionals, (row) => [row.IdRegional, row.NombreRegional]);
   }
 
-  get catalogBuildings(): Building[] {
-    return this.filterRows(this.buildings, (row) => [row.IdEdificio, row.NombreEdificio, row.NombreRegional]);
-  }
-
-  get catalogDepartments(): CatalogDepartment[] {
-    return this.filterRows(this.departments, (row) => [row.IdArea, row.NombreArea, row.NombreEdificio, row.NombreRegional]);
-  }
-
-  get catalogEmployees(): DirectoryEmployee[] {
-    return this.filterRows(this.employeeRows, (row) => [row.NoPago, row.NombreCompleto,
-      this.employeeRegionalName(row), this.employeeBuildingName(row), this.employeeDepartmentName(row)]);
-  }
-
   get catalogDeviceTypes(): DeviceType[] {
     return this.filterRows(this.deviceTypes, (row) => [row.IdTipo, row.NombreTipo]);
   }
 
   get visibleRegionals(): RegionalOption[] { return this.pageRows(this.catalogRegionals); }
-  get visibleBuildings(): Building[] { return this.pageRows(this.catalogBuildings); }
-  get visibleDepartments(): CatalogDepartment[] { return this.pageRows(this.catalogDepartments); }
-  get visibleEmployees(): DirectoryEmployee[] { return this.pageRows(this.catalogEmployees); }
   get visibleDeviceTypes(): DeviceType[] { return this.pageRows(this.catalogDeviceTypes); }
 
   get filteredCount(): number {
@@ -221,22 +193,10 @@ export class CatalogManagementComponent {
         this.changeDetector.markForCheck();
       },
       error: (error) => {
-        this.errorMessage = this.getErrorMessage(error, 'No se pudieron cargar los catálogos.');
+        this.errorMessage = apiErrorMessage(error, 'No se pudieron cargar los catálogos.');
         this.changeDetector.markForCheck();
       },
     });
-  }
-
-  //metodo para seleccionar la vista del catalogo 
-  selectView(view: CatalogView): void {
-    this.activeView = view;
-    this.currentPage = 1;
-    this.searchTerm = '';
-    this.sortColumn = '';
-    this.sortDirection = 'asc';
-    this.closeDialog();
-    this.message = '';
-    this.errorMessage = '';
   }
 
   selectPanel(panel: CatalogPanel): void {
@@ -253,11 +213,6 @@ export class CatalogManagementComponent {
   //actualiza la busqueda 
   updateSearch(value: string): void {
     this.searchTerm = value;
-    this.currentPage = 1;
-  }
-
-  updatePageSize(value: number): void {
-    this.pageSize = Number(value);
     this.currentPage = 1;
   }
 
@@ -400,16 +355,6 @@ export class CatalogManagementComponent {
     this.closeEmployeeSearch();
   }
 
-  editSelectedRegional(): void {
-    if (this.selectedRegional) this.editRegional(this.selectedRegional);
-  }
-
-  deleteSelectedRegional(): void {
-    if (this.selectedRegional) {
-      this.askDelete('regionals', this.selectedRegional.IdRegional, this.selectedRegional.NombreRegional);
-    }
-  }
-
   editSelectedBuilding(): void {
     if (this.selectedCatalogBuilding) this.editBuilding(this.selectedCatalogBuilding);
   }
@@ -505,7 +450,7 @@ export class CatalogManagementComponent {
         this.closeDialog();
         this.loadCatalogs();
       },
-      error: (error) => this.errorMessage = this.getErrorMessage(error, 'No se pudo guardar el registro.'),
+      error: (error) => this.errorMessage = apiErrorMessage(error, 'No se pudo guardar el registro.'),
     });
   }
 
@@ -537,7 +482,7 @@ export class CatalogManagementComponent {
         this.cancelDelete();
         this.loadCatalogs();
       },
-      error: (error) => this.errorMessage = this.getErrorMessage(error, 'No se pudo eliminar el registro.'),
+      error: (error) => this.errorMessage = apiErrorMessage(error, 'No se pudo eliminar el registro.'),
     });
   }
 
@@ -609,9 +554,5 @@ export class CatalogManagementComponent {
     this.selectedBuildingId = null;
     this.selectedAreaId = null;
     this.errorMessage = '';
-  }
-
-  private getErrorMessage(error: ApiError, fallback: string): string {
-    return apiErrorMessage(error, fallback);
   }
 }

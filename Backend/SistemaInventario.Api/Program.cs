@@ -1,6 +1,7 @@
 using System.Text;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
@@ -23,7 +24,27 @@ builder.WebHost.ConfigureKestrel(options => options.AddServerHeader = false);
 // Las respuestas JSON conservan los nombres en PascalCase de los DTO (IdEquipo, Message...),
 // que es el formato que usan los modelos del frontend.
 builder.Services.AddControllers()
-    .AddJsonOptions(options => options.JsonSerializerOptions.PropertyNamingPolicy = null);
+    .AddJsonOptions(options => options.JsonSerializerOptions.PropertyNamingPolicy = null)
+    // La validación automática de [ApiController] responde en inglés ("One or more validation
+    // errors occurred."); se reemplaza por un { Message } en español, como el resto de la API.
+    .ConfigureApiBehaviorOptions(options => options.InvalidModelStateResponseFactory = context =>
+    {
+        // El nombre del parámetro del método (p. ej. "loginRequest") no le dice nada al usuario.
+        var parameterNames = context.ActionDescriptor.Parameters
+            .Select(parameter => parameter.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var fields = string.Join(", ", context.ModelState
+            .Where(entry => entry.Value?.Errors.Count > 0)
+            .Select(entry => entry.Key.TrimStart('$', '.'))
+            .Where(field => field.Length > 0 && !parameterNames.Contains(field))
+            .Distinct());
+        return new BadRequestObjectResult(new
+        {
+            Message = fields.Length == 0
+                ? "La solicitud no tiene un formato válido."
+                : $"Faltan datos o tienen un formato inválido: {fields}.",
+        });
+    });
 builder.Services.ConfigureHttpJsonOptions(options => options.SerializerOptions.PropertyNamingPolicy = null);
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<ApiExceptionHandler>();

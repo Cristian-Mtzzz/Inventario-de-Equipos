@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System.Security.Claims;
+using SistemaInventario.Api.Infrastructure;
 using SistemaInventario.Api.Models;
 using SistemaInventario.Api.Services;
 
@@ -21,18 +21,9 @@ public sealed class TicketsController(ITicketService ticketService) : Controller
     public async Task<ActionResult<IReadOnlyList<TicketDto>>> GetTickets(CancellationToken cancellationToken)
     {
         if (IsManager) return Ok(await ticketService.GetTickets(null, cancellationToken));
-        if (CurrentUserId() is not { } userId) return BadRequest(new { Message = "No se pudo identificar al técnico." });
+        if (User.GetUserId() is not { } userId) return BadRequest(new { Message = "No se pudo identificar al técnico." });
         return Ok(await ticketService.GetTickets(userId, cancellationToken));
     }
-
-    [HttpGet("employees")]
-    [Authorize(Roles = AppRoles.TicketManagers)]
-    public async Task<ActionResult<IReadOnlyList<TicketEmployeeDto>>> GetEmployees(
-        [FromQuery] int idArea,
-        CancellationToken cancellationToken) =>
-        idArea <= 0
-            ? BadRequest(new { Message = "Selecciona un departamento." })
-            : Ok(await ticketService.GetEmployeesByArea(idArea, cancellationToken));
 
     [HttpGet("technicians")]
     [Authorize(Roles = AppRoles.TicketManagers)]
@@ -55,7 +46,7 @@ public sealed class TicketsController(ITicketService ticketService) : Controller
         {
             return BadRequest(new { Message = message });
         }
-        if (CurrentUserId() is not { } userId) return BadRequest(new { Message = "No se pudo identificar al usuario." });
+        if (User.GetUserId() is not { } userId) return BadRequest(new { Message = "No se pudo identificar al usuario." });
 
         await ticketService.CreateTicket(ticket, userId, cancellationToken);
         return NoContent();
@@ -107,7 +98,7 @@ public sealed class TicketsController(ITicketService ticketService) : Controller
         {
             return BadRequest(new { Message = "Las observaciones no pueden superar 2000 caracteres." });
         }
-        if (CurrentUserId() is not { } userId) return BadRequest(new { Message = "No se pudo identificar al técnico." });
+        if (User.GetUserId() is not { } userId) return BadRequest(new { Message = "No se pudo identificar al técnico." });
 
         return await ticketService.FinishTicket(idTicket, finish, userId, IsManager, cancellationToken)
             ? NoContent()
@@ -129,10 +120,4 @@ public sealed class TicketsController(ITicketService ticketService) : Controller
         if (idTecnico <= 0) return "Selecciona el técnico que atenderá la solicitud.";
         return null;
     }
-
-    // ID del usuario autenticado (claim "sub" del JWT).
-    private int? CurrentUserId() =>
-        int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub"), out var userId)
-            ? userId
-            : null;
 }

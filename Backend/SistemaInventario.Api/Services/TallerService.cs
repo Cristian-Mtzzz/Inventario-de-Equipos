@@ -172,32 +172,6 @@ public sealed class TallerService(InventoryDbContext dbContext, IConfiguration c
             ("clienteRecibe", exit.ClienteRecibe.Trim()),
             ("fechaEntrega", exit.FechaEntrega), ("idReparacion", idMantenimiento)) > 0;
 
-    public async Task<bool> EditMaintenance(int idMantenimiento, UpdateMaintenanceDto maintenance, CancellationToken cancellationToken) =>
-        // Si se cambia el equipo también se refrescan sus datos copiados en la reparación,
-        // que son los que muestra la tabla del taller.
-        await Execute("""
-            UPDATE REPARACION
-            SET ID_EQUIPO = :idEquipo,
-                DICTAMEN = :dictamen,
-                TIPO_REPARACION = :tipoReparacion,
-                FECHA_INGRESO = :fechaIngreso,
-                DETALLE_REPARACION = :detalleReparacion,
-                FECHA_SALIDA = :fechaSalida,
-                CODIGO_INVENTARIO = NVL((SELECT d.CODIGO_INVENTARIO FROM DISPOSITIVOS d WHERE d.ID_EQUIPO = :idEquipo), CODIGO_INVENTARIO),
-                NO_SERIE = NVL((SELECT d.NO_SERIE FROM DISPOSITIVOS d WHERE d.ID_EQUIPO = :idEquipo), NO_SERIE),
-                MARCA = NVL((SELECT d.MARCA FROM DISPOSITIVOS d WHERE d.ID_EQUIPO = :idEquipo), MARCA),
-                MODELO = NVL((SELECT d.MODELO FROM DISPOSITIVOS d WHERE d.ID_EQUIPO = :idEquipo), MODELO),
-                TIPO_DISPOSITIVO = NVL((SELECT t.TIPO_DISPOSITIVO
-                                        FROM DISPOSITIVOS d
-                                        LEFT JOIN TIPOS_DISPOSITIVOS t ON t.ID_TIPO = d.ID_TIPO
-                                        WHERE d.ID_EQUIPO = :idEquipo), TIPO_DISPOSITIVO)
-            WHERE ID_REPARACION = :idReparacion
-            """, cancellationToken,
-            ("idEquipo", maintenance.IdEquipo), ("dictamen", maintenance.Dictamen),
-            ("tipoReparacion", maintenance.TipoReparacion), ("fechaIngreso", maintenance.FechaIngreso),
-            ("detalleReparacion", maintenance.DetalleReparacion ?? "PENDIENTE"),
-            ("fechaSalida", maintenance.FechaSalida), ("idReparacion", idMantenimiento)) > 0;
-
     public async Task<bool> DeleteMaintenance(int idMantenimiento, CancellationToken cancellationToken) =>
         await Execute("""
             DELETE FROM REPARACION

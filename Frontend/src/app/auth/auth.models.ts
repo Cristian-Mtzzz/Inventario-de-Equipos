@@ -8,6 +8,8 @@ export const USER_ROLES = [
   'TecnicoTaller',
   'AdminTaller',
   'AdminTicket',
+  // Cuenta del Control de permisos (sistema aparte con la misma base): aquí no tiene panel.
+  'Permisos',
 ] as const;
 
 export type UserRole = (typeof USER_ROLES)[number];

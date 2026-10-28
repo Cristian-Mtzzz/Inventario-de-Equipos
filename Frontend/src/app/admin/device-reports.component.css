@@ -23,12 +23,6 @@
   box-shadow: 0 24px 60px rgba(12, 38, 39, .25);
 }
 
-.device-report {
-  display: grid;
-  gap: 1.25rem;
-  color: #203238;
-}
-
 .report-header {
   display: flex;
   align-items: end;

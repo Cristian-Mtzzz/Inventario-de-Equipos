@@ -22,6 +22,5 @@ public interface IDeviceService
     Task CreateDevice(CreateDeviceDto device, CancellationToken cancellationToken);
     Task CreateDesktopCombo(CreateDesktopComboDto combo, CancellationToken cancellationToken);
     Task<bool> UpdateDevice(int idEquipo, CreateDeviceDto device, bool applyToCombo, CancellationToken cancellationToken);
-    Task<bool> UpdateDeviceByIdentifier(string? codigoInventario, string? noSerie, CreateDeviceDto device, CancellationToken cancellationToken);
     Task<bool> DeleteDevice(int idEquipo, CancellationToken cancellationToken);
 }

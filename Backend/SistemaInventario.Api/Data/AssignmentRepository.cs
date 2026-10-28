@@ -91,4 +91,33 @@ public abstract class AssignmentRepository(InventoryDbContext dbContext) : Oracl
 
         return (numeroPago, nombreAsignado);
     }
+
+    // Saca del combo la pieza que se asignó por separado: pasa a ser un dispositivo individual
+    // del tipo de su componente (CPU, Teclado, Monitor) y conserva su número de ingreso. Las
+    // demás piezas siguen en el combo con su asignación; si solo queda una, también se separa.
+    protected static async Task RemoveFromCombo(
+        DbConnection connection,
+        DbTransaction transaction,
+        int idEquipo,
+        CancellationToken cancellationToken)
+    {
+        var comboNumber = await GetScalar<string?>(connection, transaction,
+            "SELECT NCOMBO FROM DISPOSITIVOS WHERE ID_EQUIPO = :idEquipo", cancellationToken,
+            ("idEquipo", idEquipo));
+        if (string.IsNullOrWhiteSpace(comboNumber)) return;
+
+        await Execute(connection, transaction, """
+            UPDATE DISPOSITIVOS d
+            SET ID_TIPO = COALESCE(
+                    (SELECT MIN(t.ID_TIPO)
+                     FROM TIPOS_DISPOSITIVOS t
+                     WHERE UPPER(TRIM(t.TIPO_DISPOSITIVO)) = UPPER(TRIM(d.COMPONENTE))),
+                    d.ID_TIPO),
+                NCOMBO = NULL,
+                COMPONENTE = NULL
+            WHERE d.NCOMBO = :ncombo
+              AND (d.ID_EQUIPO = :idEquipo
+                   OR (SELECT COUNT(*) FROM DISPOSITIVOS s WHERE s.NCOMBO = :ncombo) <= 2)
+            """, cancellationToken, ("ncombo", comboNumber), ("idEquipo", idEquipo));
+    }
 }

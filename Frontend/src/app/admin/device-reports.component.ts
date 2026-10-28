@@ -1,7 +1,8 @@
 import { ChangeDetectorRef, Component, inject, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { catchError, finalize, forkJoin, from, map, mergeMap, of, switchMap, toArray } from 'rxjs';
-import { ReportColumn, addReportSheet, cellText, createReportWorkbook, downloadReportWorkbook, excelDate, generatedAt, reportFileName } from '../shared/excel-report';
+import { finalize, forkJoin, from, map, mergeMap, of, switchMap, toArray } from 'rxjs';
+import { ReportColumn, ReportDateRange, addReportSheet, cellText, createReportWorkbook, dateRangeLabel, downloadReportWorkbook, emptyReportDateRange, excelDate, generatedAt, isInDateRange, isInvalidDateRange, reportFileName } from '../shared/excel-report';
+import { UppercaseDirective } from '../shared/uppercase.directive';
 import { AdminService } from './admin.service';
 import { Area, Building, Device, DevicePageQuery, DeviceType, RegionalOption } from './admin.models';
 
@@ -18,7 +19,7 @@ type ReportType = 'all' | 'type' | 'brand' | 'state' | 'regional' | 'building' |
  */
 @Component({
   selector: 'app-device-reports',
-  imports: [FormsModule],
+  imports: [FormsModule, UppercaseDirective],
   templateUrl: './device-reports.component.html',
   styleUrl: './device-reports.component.css',
 })
@@ -31,7 +32,7 @@ export class DeviceReportsComponent {
   buildings: Building[] = [];
   areas: Area[] = [];
   reportType: ReportType = 'all';
-  searchTerm = '';
+  dateRange: ReportDateRange = emptyReportDateRange();
   brand = '';
   typeId: number | typeof COMBO_TYPE | null = null;
   readonly comboType = COMBO_TYPE;
@@ -103,7 +104,6 @@ export class DeviceReportsComponent {
   selectReportType(reportType: ReportType): void {
     // Cambiar el tipo descarta criterios anteriores para evitar exportar con filtros ocultos.
     this.reportType = reportType;
-    this.searchTerm = '';
     this.typeId = null;
     this.brand = '';
     this.state = '';
@@ -156,7 +156,7 @@ export class DeviceReportsComponent {
   }
 
   clearFilters(): void {
-    this.searchTerm = '';
+    this.dateRange = emptyReportDateRange();
     this.brand = '';
     this.typeId = null;
     this.state = '';
@@ -174,6 +174,10 @@ export class DeviceReportsComponent {
     // Aplica el criterio elegido, descarga todas las páginas en lotes de cuatro y genera un solo XLSX.
     this.errorMessage = '';
     this.message = '';
+    if (isInvalidDateRange(this.dateRange)) {
+      this.errorMessage = 'La fecha "desde" no puede ser posterior a la fecha "hasta".';
+      return;
+    }
     this.isExporting = true;
     this.changeDetector.markForCheck();
 
@@ -185,7 +189,6 @@ export class DeviceReportsComponent {
 
     this.adminService.getDevices(query).pipe(
       switchMap((firstPage) => {
-        this.totalMatchingDevices = firstPage.TotalCount;
         const pageCount = Math.ceil(firstPage.TotalCount / firstPage.PageSize);
         if (pageCount <= 1) return of(firstPage.Items);
 
@@ -196,7 +199,12 @@ export class DeviceReportsComponent {
           map((pages) => [firstPage, ...pages].flatMap((result) => result.Items)),
         );
       }),
-      switchMap((devices) => from(this.createWorkbook(devices))),
+      // El rango de fechas se aplica aquí: la API no filtra por fecha de asignación.
+      map((devices) => devices.filter((device) => isInDateRange(device.FechaAsignacion, this.dateRange))),
+      switchMap((devices) => {
+        this.totalMatchingDevices = devices.length;
+        return from(this.createWorkbook(devices));
+      }),
       finalize(() => {
         this.isExporting = false;
         this.changeDetector.markForCheck();
@@ -227,7 +235,7 @@ export class DeviceReportsComponent {
     return {
       Page: page,
       PageSize: REPORT_PAGE_SIZE,
-      SearchTerm: this.searchTerm.trim(),
+      SearchTerm: '',
       Brand: usesBrand ? this.brand.trim() : '',
       Model: '',
       TypeId: usesType && this.typeId !== COMBO_TYPE ? this.typeId : null,
@@ -245,9 +253,9 @@ export class DeviceReportsComponent {
     const columns: ReportColumn<Device>[] = [
       { header: 'No. ingreso / combo', width: 20, value: (device) => device.NumeroIngreso || device.NCombo || '-' },
       { header: 'Equipo', width: 26, value: (device) => (device.NombreTipo || '-') + (device.Componente ? ` · ${device.Componente}` : '') },
-      { header: 'Marca', width: 16, value: (device) => cellText(device.Marca) },
-      { header: 'Modelo', width: 20, value: (device) => cellText(device.Modelo) },
-      { header: 'Serie', width: 22, value: (device) => device.NoSerie },
+      { header: 'Marca', width: 16, value: (device) => cellText(device.Marca).toLocaleUpperCase('es') },
+      { header: 'Modelo', width: 20, value: (device) => cellText(device.Modelo).toLocaleUpperCase('es') },
+      { header: 'Serie', width: 22, value: (device) => cellText(device.NoSerie).toLocaleUpperCase('es') },
       { header: 'Inventario', width: 14, value: (device) => device.CodigoInventario },
       { header: 'Asignado a', width: 34, value: (device) => device.AsignadoA || 'Sin asignar' },
       { header: 'No. pago', width: 12, value: (device) => cellText(device.NumeroPagoAsignado) },
@@ -276,7 +284,7 @@ export class DeviceReportsComponent {
     const selectedState = this.state === 'ASIGNADO' ? 'Asignado'
       : this.state === 'DISPONIBLE' ? 'Disponible' : 'Todos';
     const filters: Array<[string, string]> = [['Tipo de reporte', this.reportTypeLabel()]];
-    if (this.searchTerm.trim()) filters.push(['Búsqueda', this.searchTerm.trim()]);
+    if (this.dateRange.desde || this.dateRange.hasta) filters.push(['Fecha de asignación', dateRangeLabel(this.dateRange)]);
     switch (this.reportType) {
       case 'type':
         filters.push(['Tipo de dispositivo', this.typeId === COMBO_TYPE ? 'Computadoras escritorio (combos)' : selectedType ?? 'Todos']);

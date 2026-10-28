@@ -55,14 +55,6 @@
     font-weight: 700;
 }
 
-.catalog-search-toolbar {
-    display: flex;
-    justify-content: flex-end;
-    width: 100%;
-    padding-bottom: .75rem;
-    border-bottom: 1px solid var(--catalog-line);
-}
-
 .catalog-search-button {
     display: inline-flex;
     align-items: center;
@@ -567,21 +559,6 @@ select {
 
     .modal-form {
         grid-template-columns: 1fr;
-    }
-
-    .catalog-level-heading {
-        align-items: flex-start;
-        flex-direction: column;
-    }
-
-    .catalog-level-heading label,
-    .catalog-level-heading select {
-        width: 100%;
-        max-width: none;
-    }
-
-    .catalog-level-actions {
-        width: 100%;
     }
 
     .catalog-wide,

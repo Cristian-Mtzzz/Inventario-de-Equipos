@@ -27,7 +27,8 @@ public sealed record DeviceDto(
     // Número del lote de ingreso con formato NNNNN-MM-AAAA (por ejemplo 00001-01-2026).
     string? NumeroIngreso);
 
-public sealed record PagedResult<T>(IReadOnlyList<T> Items, int TotalCount, int Page, int PageSize);
+// ComboCount: combos distintos entre los resultados (un combo puede tener 2 o 3 piezas).
+public sealed record PagedResult<T>(IReadOnlyList<T> Items, int TotalCount, int Page, int PageSize, int ComboCount = 0);
 
 public sealed record DeviceOptionDto(int IdEquipo, string CodigoInventario, string NoSerie, string Marca, string Modelo, string? NombreTipo);
 

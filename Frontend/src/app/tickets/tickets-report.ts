@@ -21,14 +21,16 @@ const supportTypeLabel = (value: string | null, empty = '-'): string =>
 
 const isOpen = (ticket: Ticket): boolean => ticket.Estado?.toUpperCase() === 'PENDIENTE';
 
-// Columna "Tiempo" de la tabla web: "46 min", "13 h 28 min" o "-" si sigue abierto.
-const elapsed = (ticket: Ticket): string => {
+// Columna "Tiempo" de la tabla web y del reporte: "46m", "13h, 28m", "1d, 22h, 20m" o "-" si
+// sigue abierto. Las unidades en cero se omiten.
+export const elapsed = (ticket: Ticket): string => {
   if (ticket.MinutosTranscurridos === null || ticket.MinutosTranscurridos === undefined) return '-';
   const minutes = Math.max(0, ticket.MinutosTranscurridos);
-  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(minutes / 1440);
+  const hours = Math.floor((minutes % 1440) / 60);
   const rest = minutes % 60;
-  if (hours === 0) return `${rest} min`;
-  return rest === 0 ? `${hours} h` : `${hours} h ${rest} min`;
+  const parts = [days && `${days}d`, hours && `${hours}h`, rest && `${rest}m`].filter(Boolean);
+  return parts.length ? parts.join(', ') : '0m';
 };
 
 // Columna "Tiempo activo" de la tabla web ("2 d 03:15:42"), calculada al momento de exportar.

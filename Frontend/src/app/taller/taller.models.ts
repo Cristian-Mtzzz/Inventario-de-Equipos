@@ -80,15 +80,6 @@ export interface MaintenanceExitRequest {
   FechaEntrega: string;
 }
 
-// Modelo completo usado por Admin para corregir una reparación.
-export interface MaintenanceEditRequest {
-  IdEquipo: number;
-  Dictamen: string;
-  TipoReparacion: string;
-  FechaIngreso: string;
-  DetalleReparacion: string;
-  FechaSalida: string | null;
-}
 // Usuario con rol de técnico de taller que se puede asignar a una reparación.
 export interface WorkshopTechnician {
   IdUsuario: number;

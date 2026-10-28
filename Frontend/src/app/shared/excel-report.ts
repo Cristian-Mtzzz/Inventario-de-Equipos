@@ -133,6 +133,41 @@ export async function downloadReportWorkbook(workbook: ExcelJS.Workbook, fileNam
   window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
+/** Rango de fechas de un reporte: valores yyyy-mm-dd de los campos de fecha; vacío = sin límite. */
+export interface ReportDateRange {
+  desde: string;
+  hasta: string;
+}
+
+export const emptyReportDateRange = (): ReportDateRange => ({ desde: '', hasta: '' });
+
+/** true si "desde" es posterior a "hasta". */
+export function isInvalidDateRange(range: ReportDateRange): boolean {
+  return !!range.desde && !!range.hasta && range.desde > range.hasta;
+}
+
+/** true si la fecha de la API cae en el rango (días completos). Sin rango entra todo; sin fecha, nada. */
+export function isInDateRange(value: string | null | undefined, range: ReportDateRange): boolean {
+  if (!range.desde && !range.hasta) return true;
+  const date = value ? new Date(value) : null;
+  if (!date || Number.isNaN(date.getTime())) return false;
+  if (range.desde && date < new Date(`${range.desde}T00:00:00`)) return false;
+  if (range.hasta && date > new Date(`${range.hasta}T23:59:59.999`)) return false;
+  return true;
+}
+
+/** Texto del rango para el subtítulo: "Del 01/10/26 al 27/10/26", "Desde el 01/10/26"... */
+export function dateRangeLabel(range: ReportDateRange, empty = 'Todas las fechas'): string {
+  const format = (value: string) => {
+    const [year, month, day] = value.split('-');
+    return `${day}/${month}/${year.slice(-2)}`;
+  };
+  if (range.desde && range.hasta) return `Del ${format(range.desde)} al ${format(range.hasta)}`;
+  if (range.desde) return `Desde el ${format(range.desde)}`;
+  if (range.hasta) return `Hasta el ${format(range.hasta)}`;
+  return empty;
+}
+
 /** Nombre de archivo con la fecha del día: reporte-<nombre>-AAAA-MM-DD.xlsx */
 export function reportFileName(name: string): string {
   const now = new Date();

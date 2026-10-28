@@ -45,11 +45,4 @@ public sealed class ReassignmentsController(IReassignmentService reassignmentSer
             return BadRequest(new { Message = exception.Message });
         }
     }
-
-    [HttpDelete("reassignments/{idReasignacion:int}")]
-    [Authorize(Policy = ModulePolicies.Reassignments)]
-    public async Task<IActionResult> DeleteReassignment(int idReasignacion, CancellationToken cancellationToken) =>
-        await reassignmentService.DeleteReassignment(idReasignacion, cancellationToken)
-            ? NoContent()
-            : NotFound(new { Message = "No se encontró la reasignación indicada." });
 }

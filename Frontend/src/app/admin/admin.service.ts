@@ -51,6 +51,7 @@ export class AdminService {
       TotalCount: result.TotalCount ?? 0,
       Page: result.Page ?? query.Page,
       PageSize: result.PageSize ?? 25,
+      ComboCount: result.ComboCount ?? 0,
     })));
   }
 
@@ -65,10 +66,6 @@ export class AdminService {
         AssignedDevices: (employee.AssignedDevices ?? []).map(withDeviceDefaults),
       }))),
     );
-  }
-
-  updateEmployee(currentNoPago: string, employee: UpdateEmployee): Observable<void> {
-    return this.httpClient.put<void>(`${API_ADMIN_URL}/employees/${encodeURIComponent(currentNoPago)}`, employee);
   }
 
   updateDirectoryEmployeeByKey(employeeKey: string, employee: UpdateEmployee): Observable<void> {
@@ -167,7 +164,6 @@ export class AdminService {
       .pipe(tap(() => this.clearDeviceTypesCache()));
   }
   createDirectoryEmployee(employee: SaveDirectoryEmployee): Observable<void> { return this.httpClient.post<void>(`${API_ADMIN_URL}/employees/directory`, employee); }
-  deleteDirectoryEmployee(noPago: string): Observable<void> { return this.httpClient.delete<void>(`${API_ADMIN_URL}/employees/directory/${encodeURIComponent(noPago)}`); }
   deleteDirectoryEmployeeByKey(employeeKey: string): Observable<void> {
     const params = new HttpParams().set('employeeKey', employeeKey);
     return this.httpClient.delete<void>(`${API_ADMIN_URL}/employees/directory/by-key`, { params });
@@ -236,22 +232,10 @@ export class AdminService {
   }
 
   // Persiste los cambios de un dispositivo existente. Si es pieza de un combo, applyToCombo
-  // reasigna las tres piezas; sin él solo cambia esta y el combo se separa si cambia su asignación.
+  // reasigna todas las piezas; sin él solo cambia esta y sale del combo si cambia su asignación.
   updateDevice(idEquipo: number, device: CreateDevice, applyToCombo = false): Observable<void> {
     const params = applyToCombo ? new HttpParams().set('applyToCombo', true) : undefined;
     return this.httpClient.put<void>(`${API_ADMIN_URL}/devices/${idEquipo}`, device, { params });
-  }
-
-  updateDeviceByIdentifier(codigoInventario: string, noSerie: string, idEquipo: number, device: CreateDevice): Observable<void> {
-    // Usa los identificadores originales para editar aunque código o serie cambien.
-    const params = new URLSearchParams({ codigoInventario, noSerie });
-    return this.httpClient.put<void>(`${API_ADMIN_URL}/devices/by-identifier?${params}`, device).pipe(
-      // Si los identificadores originales ya no existen (404) o la API no expone la
-      // ruta (405), se intenta actualizar por ID.
-      catchError((error) => error.status === 404 || error.status === 405
-        ? this.updateDevice(idEquipo, device)
-        : throwError(() => error)),
-    );
   }
 
   deleteDevice(idEquipo: number): Observable<void> {
@@ -267,10 +251,6 @@ export class AdminService {
   createReassignment(reassignment: CreateReassignment): Observable<void> {
     // Registra el cambio de responsable y permite nombre sin número de pago.
     return this.httpClient.post<void>(`${API_ADMIN_URL}/reassignments`, reassignment);
-  }
-
-  deleteReassignment(idReasignacion: number): Observable<void> {
-    return this.httpClient.delete<void>(`${API_ADMIN_URL}/reassignments/${idReasignacion}`);
   }
 
   getUsers(): Observable<AdminUser[]> {

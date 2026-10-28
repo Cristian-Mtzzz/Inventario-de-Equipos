@@ -1,9 +1,7 @@
-using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using SistemaInventario.Api.Infrastructure;
-using Microsoft.Extensions.Logging;
 using Oracle.ManagedDataAccess.Client;
+using SistemaInventario.Api.Infrastructure;
 using SistemaInventario.Api.Models;
 using SistemaInventario.Api.Services;
 
@@ -49,7 +47,7 @@ public sealed class AuthController(
             if (loginResponse is null)
             {
                 loginAttempts.RegisterFailure(loginRequest.UserName, limits);
-                return Unauthorized(new { Message = "Credenciales invalidas." });
+                return Unauthorized(new { Message = "Credenciales inválidas." });
             }
 
             loginAttempts.Reset(loginRequest.UserName);
@@ -68,8 +66,7 @@ public sealed class AuthController(
     [Authorize(Policy = "PasswordChange")]
     public async Task<ActionResult<ModuleAccessDto>> GetPermissions(CancellationToken cancellationToken)
     {
-        var userIdValue = User.FindFirstValue("sub") ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!int.TryParse(userIdValue, out var userId)) return Unauthorized();
+        if (User.GetUserId() is not { } userId) return Unauthorized();
         var modules = await modulePermissions.GetModules(userId, cancellationToken);
         var isSuperAdmin = modules.Contains(AppModules.SuperAdmin, StringComparer.OrdinalIgnoreCase);
         return Ok(new ModuleAccessDto(
@@ -82,8 +79,7 @@ public sealed class AuthController(
     // El token nuevo se arma con los datos actuales de USUARIOS, no con los del token anterior.
     public async Task<ActionResult> RefreshSession(CancellationToken cancellationToken)
     {
-        var userIdValue = User.FindFirstValue("sub") ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!int.TryParse(userIdValue, out var userId)) return Unauthorized();
+        if (User.GetUserId() is not { } userId) return Unauthorized();
 
         var token = await authService.RefreshToken(userId, cancellationToken);
         return token is null
@@ -97,12 +93,7 @@ public sealed class AuthController(
         ChangePasswordDto request,
         CancellationToken cancellationToken)
     {
-        var userIdValue = User.FindFirstValue("sub")
-            ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!int.TryParse(userIdValue, out var userId))
-        {
-            return Unauthorized();
-        }
+        if (User.GetUserId() is not { } userId) return Unauthorized();
 
         var changed = await authService.ChangeInitialPassword(userId, request, cancellationToken);
         return changed

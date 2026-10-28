@@ -10,6 +10,8 @@ public sealed class UserAdminService(InventoryDbContext dbContext) : OracleRepos
     // Contraseña con la que se crean o restablecen los usuarios locales; se pide cambiarla al entrar.
     private const string InitialPassword = "1234";
 
+    // Los usuarios del Control de permisos (rol 'Permisos') se crean en ese sistema, que comparte
+    // esta base: esta pantalla no los lista ni los puede editar, eliminar o restablecer.
     public async Task<IReadOnlyList<AdminUserDto>> GetUsers(CancellationToken cancellationToken)
     {
         var rows = await ReadList("""
@@ -17,6 +19,7 @@ public sealed class UserAdminService(InventoryDbContext dbContext) : OracleRepos
                    u.ESTADO, u.DOMINIOP, u.DOMINIO, u.ROL, u.CLAVE_SEGURA, p.MODULO
             FROM USUARIOS u
             LEFT JOIN USUARIO_MODULOS p ON p.ID_USUARIO = u.ID_USUARIO
+            WHERE NVL(u.ROL, '-') <> 'Permisos'
             ORDER BY u.ID_USUARIO, p.MODULO
             """, reader => (
                 IdUsuario: ReadInt(reader, "ID_USUARIO"),
@@ -79,6 +82,7 @@ public sealed class UserAdminService(InventoryDbContext dbContext) : OracleRepos
                     DOMINIO = :dominio,
                     ROL = :rol
                 WHERE ID_USUARIO = :idUsuario
+                  AND NVL(ROL, '-') <> 'Permisos'
                 """, cancellationToken,
                 ("usuario", user.Usuario.Trim()),
                 ("nombrePersona", user.NombrePersona.Trim()),
@@ -95,7 +99,7 @@ public sealed class UserAdminService(InventoryDbContext dbContext) : OracleRepos
         }, cancellationToken);
 
     public async Task<bool> DeleteUser(int idUsuario, CancellationToken cancellationToken) =>
-        await Execute("DELETE FROM USUARIOS WHERE ID_USUARIO = :idUsuario", cancellationToken,
+        await Execute("DELETE FROM USUARIOS WHERE ID_USUARIO = :idUsuario AND NVL(ROL, '-') <> 'Permisos'", cancellationToken,
             ("idUsuario", idUsuario)) > 0;
 
     public async Task<bool> ResetUserPassword(int idUsuario, CancellationToken cancellationToken) =>
@@ -105,6 +109,7 @@ public sealed class UserAdminService(InventoryDbContext dbContext) : OracleRepos
                 CLAVE_SEGURA = '0'
             WHERE ID_USUARIO = :idUsuario
               AND DOMINIO = 0
+              AND NVL(ROL, '-') <> 'Permisos'
             """, cancellationToken,
             ("passwordHash", PasswordHashing.Hash(InitialPassword)),
             ("idUsuario", idUsuario)) == 1;

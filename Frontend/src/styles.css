@@ -30,20 +30,6 @@ input {
     white-space: nowrap;
 }
 
-.table-brand-column {
-    width: 4.25rem;
-    min-width: 4.25rem;
-    max-width: 4.25rem;
-}
-
-.table-serial-column {
-    width: 14rem;
-    min-width: 14rem;
-    max-width: 14rem;
-    overflow-wrap: normal;
-    white-space: nowrap;
-}
-
 .combo-inventory-table {
     min-width: 1120px;
 }
@@ -222,53 +208,6 @@ input {
     transform: translateY(-1px);
 }
 
-.workshop-header-actions {
-    display: flex;
-    align-items: center;
-    gap: .75rem;
-}
-
-.admin-table-toolbar {
-    justify-self: stretch;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1.25rem;
-    width: 100%;
-    max-width: 100%;
-    padding: .35rem 0;
-    color: #344b4b;
-    background: transparent;
-    font-size: .82rem;
-    font-weight: 700;
-}
-
-.admin-page-size,
-.admin-table-search {
-    display: inline-flex;
-    align-items: center;
-    gap: .45rem;
-    white-space: nowrap;
-}
-
-.admin-page-size select {
-    width: 4.25rem;
-    padding: .4rem .45rem;
-    border-color: #c8d7d2;
-}
-
-.admin-table-search input {
-    width: 12rem;
-    padding: .45rem .6rem;
-    border-color: #c8d7d2;
-}
-
-.admin-shell .admin-form.compact .reassignment-submit {
-    grid-column: 1 / -1;
-    justify-self: end;
-    width: fit-content;
-}
-
 .admin-shell .devices-section-toolbar {
     display: flex;
     align-items: center;
@@ -318,150 +257,19 @@ input {
     margin-bottom: 0;
 }
 
-.admin-data-table-wrap {
-    overflow-x: auto;
-}
-
 .admin-shell .table-wrap,
 .inventory-shell .table-wrap,
-.workshop-shell .table-wrap,
-.admin-shell .admin-data-table-wrap {
+.workshop-shell .table-wrap {
     width: 100%;
     border: 1px solid #d5e1dd;
     border-radius: 6px;
     background: #fff;
 }
 
-.admin-data-table {
-    width: 100%;
-    border-collapse: separate;
-    border-spacing: 0;
-    color: #243a40;
-    font-size: .84rem;
-    table-layout: auto;
-}
-
-.admin-device-table {
-    min-width: 1320px;
-}
-
-.admin-reassignment-table {
-    min-width: 850px;
-}
-
-.admin-data-table th,
-.admin-data-table td {
-    padding: .7rem .75rem;
-    border-right: 1px solid #e2e9e6;
-    border-bottom: 1px solid #e2e9e6;
-    text-align: left;
-    vertical-align: middle;
-}
-
-.admin-data-table th {
-    color: #31504d;
-    background: #edf4f1;
-    font-size: .75rem;
-    font-weight: 800;
-    text-align: center;
-    text-transform: none;
-    letter-spacing: 0;
-    white-space: nowrap;
-}
-
-.admin-data-table tbody tr:nth-child(even) {
-    background: #f5f8f7;
-}
-
-.admin-data-table tbody tr:hover {
-    background: #e8f2ef;
-}
-
-.admin-data-table tbody tr:last-child td {
-    border-bottom: 0;
-}
-
-.admin-data-table td:last-child,
-.admin-data-table th:last-child {
-    border-right: 0;
-}
-
-.admin-sort {
-    display: inline-flex;
-    align-items: center;
-    gap: .45rem;
-    padding: 0;
-    border: 0;
-    color: inherit;
-    background: transparent;
-    cursor: pointer;
-    font: inherit;
-    font-weight: inherit;
-}
-
-.admin-sort span {
-    color: #829691;
-    font-size: .65rem;
-}
-
-.admin-table-pagination {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    color: #617573;
-    font-size: .8rem;
-}
-
-.admin-page-buttons {
-    display: flex;
-    flex-wrap: wrap;
-    gap: .25rem;
-}
-
-.admin-page-buttons button {
-    min-width: 2.15rem;
-    min-height: 2.15rem;
-    padding: .4rem .65rem;
-    border: 1px solid #cfdbd7;
-    border-radius: 4px;
-    color: #315c59;
-    background: #fff;
-    cursor: pointer;
-    font-size: .78rem;
-    font-weight: 700;
-}
-
-.admin-page-buttons button.active {
-    border-color: #276968;
-    color: #fff;
-    background: #276968;
-}
-
-.admin-page-buttons button:disabled {
-    cursor: not-allowed;
-    opacity: .42;
-}
-
 @media (max-width: 640px) {
-    .admin-table-toolbar {
-        flex-wrap: wrap;
-        gap: .65rem;
-        justify-self: stretch;
-        padding: .6rem;
-    }
-
-    .admin-table-search input {
-        width: min(11rem, 45vw);
-    }
 
     .admin-shell .filter-bar.user-filter-bar {
         grid-template-columns: minmax(0, 1fr);
-    }
-
-    .admin-table-pagination {
-        align-items: flex-start;
-        flex-direction: column;
     }
 }
 
@@ -497,7 +305,6 @@ button:focus-visible {
 .admin-shell.admin-red-theme .employee-search-controls button,
 .admin-shell.admin-red-theme .workshop-actions button:not(.secondary),
 .admin-shell.admin-red-theme .workshop-modal button[type='submit'],
-.admin-shell.admin-red-theme .form-actions button:not(.secondary):not(.danger),
 .admin-shell.admin-red-theme .report-actions button:not(.secondary),
 .admin-shell.admin-red-theme .import-actions .primary,
 .admin-shell.admin-red-theme .import-file-button {
@@ -513,7 +320,6 @@ button:focus-visible {
 .admin-shell.admin-red-theme .employee-search-controls button:hover:not(:disabled),
 .admin-shell.admin-red-theme .workshop-actions button:not(.secondary):hover:not(:disabled),
 .admin-shell.admin-red-theme .workshop-modal button[type='submit']:hover:not(:disabled),
-.admin-shell.admin-red-theme .form-actions button:not(.secondary):not(.danger):hover:not(:disabled),
 .admin-shell.admin-red-theme .report-actions button:not(.secondary):hover:not(:disabled),
 .admin-shell.admin-red-theme .import-actions .primary:hover:not(:disabled) {
     border-color: var(--admin-button-fill-hover) !important;
@@ -526,8 +332,6 @@ button:focus-visible {
 .admin-shell.admin-red-theme .catalog-search-button,
 .admin-shell.admin-red-theme .pagination button:not(.active):not(:hover),
 .admin-shell.admin-red-theme .catalog-page-buttons button:not(.active),
-.admin-shell.admin-red-theme .admin-page-buttons button:not(.active),
-.admin-shell.admin-red-theme .confirm-inline button,
 .admin-shell.admin-red-theme .catalog-field-actions .secondary,
 .admin-shell.admin-red-theme .catalog-row-actions .secondary,
 .admin-shell.admin-red-theme .report-actions button.secondary {
@@ -604,24 +408,6 @@ button:focus-visible {
     overflow-y: auto;
 }
 
-.user-edit-modal .modal-form.user-editor-form {
-    grid-template-columns: minmax(0, 1.1fr) minmax(290px, .9fr);
-    align-items: start;
-    gap: 1rem;
-}
-
-.user-edit-modal .user-editor-fields {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    align-content: start;
-    gap: .85rem;
-    min-width: 0;
-}
-
-.user-edit-modal .user-editor-fields .user-field {
-    min-width: 0;
-}
-
 .user-edit-modal .user-module-access {
     display: grid;
     grid-column: 2;
@@ -673,8 +459,7 @@ button:focus-visible {
     overflow-wrap: anywhere;
 }
 
-.user-edit-modal .user-superadmin-option,
-.user-edit-modal .user-access-note {
+.user-edit-modal .user-superadmin-option {
     grid-column: 1 / -1;
 }
 
@@ -684,16 +469,7 @@ button:focus-visible {
     padding-top: .65rem;
 }
 
-.user-edit-modal .user-access-note {
-    margin: 0;
-    color: #718080;
-    font-size: .72rem;
-}
-
 @media (max-width: 620px) {
-    .user-edit-modal .modal-form.user-editor-form {
-        grid-template-columns: minmax(0, 1fr);
-    }
 
     .user-edit-modal .user-module-access {
         grid-column: 1;
@@ -702,297 +478,13 @@ button:focus-visible {
 }
 
 @media (max-width: 460px) {
-    .user-edit-modal .user-editor-fields,
     .user-edit-modal .user-module-access {
         grid-template-columns: minmax(0, 1fr);
     }
 
-    .user-edit-modal .user-superadmin-option,
-    .user-edit-modal .user-access-note {
+    .user-edit-modal .user-superadmin-option {
         grid-column: 1;
     }
-}
-
-.catalog-management .location-filter {
-    display: grid;
-    grid-template-columns: minmax(0, 22rem) minmax(0, 1fr);
-    align-items: end;
-    justify-content: space-between;
-    gap: 1rem;
-    width: 100%;
-    color: #294649;
-    font-size: .8rem;
-    font-weight: 700;
-}
-
-.catalog-management .location-filter-select {
-    display: grid;
-    gap: .35rem;
-    min-width: 0;
-}
-
-.catalog-management .location-filter-actions {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: .35rem;
-    min-width: 0;
-}
-
-.catalog-management .location-clear-selection {
-    min-height: 44px;
-    padding: .55rem .8rem;
-    border: 1px solid #b9d1ca;
-    border-radius: 5px;
-    color: #276968;
-    background: #fff;
-    cursor: pointer;
-    font-weight: 700;
-    white-space: nowrap;
-}
-
-.catalog-management .location-clear-selection:hover:not(:disabled) {
-    background: #e8f2ee;
-}
-
-.catalog-management .location-clear-selection:disabled {
-    cursor: not-allowed;
-    opacity: .5;
-}
-
-.catalog-management .catalog-regional-action {
-    justify-self: end;
-}
-
-.catalog-management .location-catalogs {
-    display: grid;
-    gap: 1.4rem;
-}
-
-.catalog-management .location-section {
-    display: grid;
-    gap: .65rem;
-    min-width: 0;
-    padding-top: 1rem;
-    border-top: 1px solid var(--catalog-line);
-}
-
-.catalog-management .location-section-heading {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-}
-
-.catalog-management .location-section-heading h2 {
-    margin: 0;
-    color: #18383b;
-    font-size: 1.05rem;
-}
-
-.catalog-management .location-section-heading p {
-    margin: .2rem 0 0;
-    color: #718080;
-    font-size: .78rem;
-}
-
-.catalog-management .location-section .table-wrap {
-    min-width: 0;
-}
-
-.catalog-management .location-selector {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    gap: .65rem;
-    width: 100%;
-    max-width: none;
-}
-
-.catalog-management .location-selector select {
-    min-height: 2.7rem;
-}
-
-.catalog-management .location-selector .catalog-row-actions {
-    flex-wrap: nowrap;
-}
-
-.catalog-management .location-empty {
-    margin: 0;
-    color: #718080;
-    font-size: .82rem;
-}
-
-.catalog-management .location-section .selected-row td {
-    background: #e8f2ef;
-}
-
-.catalog-management .location-select-button {
-    white-space: nowrap;
-}
-
-@media (max-width: 640px) {
-    .catalog-management .location-section-heading {
-        align-items: flex-start;
-        flex-direction: column;
-    }
-
-    .catalog-management .location-selector {
-        grid-template-columns: minmax(0, 1fr);
-    }
-
-    .catalog-management .location-selector .catalog-row-actions {
-        flex-wrap: wrap;
-    }
-}
-
-.location-search-backdrop {
-    position: fixed;
-    z-index: 90;
-    inset: 0;
-    display: grid;
-    place-items: center;
-    padding: 1.25rem;
-    background: rgba(12, 38, 39, .52);
-}
-
-.location-search-dialog {
-    display: flex;
-    flex-direction: column;
-    width: min(900px, 100%);
-    max-height: min(88dvh, 850px);
-    overflow: hidden;
-    padding: 1.5rem;
-    border: 1px solid #d8e4e0;
-    border-radius: 8px;
-    background: #fff;
-    box-shadow: 0 24px 60px rgba(12, 38, 39, .3);
-}
-
-.location-search-heading {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 1rem;
-    margin-bottom: 1.25rem;
-}
-
-.location-search-heading h2 {
-    margin: 0;
-    color: #18383b;
-    font-size: 1.35rem;
-}
-
-.location-search-close {
-    width: 34px;
-    height: 34px;
-    border: 1px solid #d8e4e0;
-    border-radius: 5px;
-    color: #617573;
-    background: #fff;
-    cursor: pointer;
-    font-size: 1.35rem;
-}
-
-.location-search-form label {
-    display: block;
-    margin-bottom: .4rem;
-    color: #294649;
-    font-size: .78rem;
-    font-weight: 700;
-}
-
-.location-search-controls {
-    display: flex;
-    gap: .6rem;
-}
-
-.location-search-controls input {
-    flex: 1;
-    min-width: 0;
-    padding: .75rem .85rem;
-    border: 1px solid #d7e2df;
-    border-radius: 5px;
-}
-
-.location-search-controls button {
-    padding: .7rem 1rem;
-    border: 0;
-    border-radius: 5px;
-    color: #fff;
-    background: #276968;
-    cursor: pointer;
-    font-weight: 700;
-}
-
-.location-search-message {
-    margin: .8rem 0 0;
-    color: #718080;
-    font-size: .83rem;
-}
-
-.location-search-message.error {
-    color: #9b3f38;
-}
-
-.location-search-results {
-    display: grid;
-    gap: .55rem;
-    min-height: 0;
-    overflow-y: auto;
-    margin-top: 1rem;
-}
-
-.location-search-result {
-    display: grid;
-    gap: .2rem;
-    padding: .8rem .9rem;
-    border: 1px solid #d8e4e0;
-    border-radius: 5px;
-    color: #203238;
-    background: #fbfdfc;
-    cursor: pointer;
-    text-align: left;
-}
-
-.location-search-result:hover {
-    border-color: #9ebeb5;
-    background: #edf4f2;
-}
-
-.location-result-type {
-    color: #397b78;
-    font-size: .68rem;
-    font-weight: 700;
-    text-transform: uppercase;
-}
-
-.location-search-result strong {
-    color: #18383b;
-    font-size: .9rem;
-}
-
-.location-search-result small {
-    color: #718080;
-    font-size: .76rem;
-}
-
-.location-search-trigger {
-    display: grid;
-    place-items: center;
-    width: 44px;
-    height: 44px;
-    padding: 0;
-    border: 1px solid #b9d1ca;
-    border-radius: 5px;
-    color: #276968;
-    background: #fff;
-    cursor: pointer;
-    font-size: 1.35rem;
-}
-
-.location-search-trigger:hover {
-    background: #e8f2ee;
 }
 
 .searchable-select {
@@ -1110,29 +602,6 @@ button:focus-visible {
     padding: .7rem .75rem;
     color: #718080;
     font-size: .82rem;
-}
-
-@media (max-width: 560px) {
-    .catalog-management .location-filter {
-        grid-template-columns: minmax(0, 1fr);
-        gap: .65rem;
-    }
-
-    .catalog-management .location-filter-actions {
-        justify-self: end;
-    }
-
-    .location-search-backdrop {
-        padding: .65rem;
-    }
-
-    .location-search-dialog {
-        padding: 1rem;
-    }
-
-    .location-search-controls {
-        flex-direction: column;
-    }
 }
 /* ------------------------------------------------------------------
    Estructura común de los paneles (Admin, Inventario y Taller):
@@ -1346,7 +815,7 @@ button:focus-visible {
 }
 
 /* Filtros: mismos campos redondeados en todas las barras de búsqueda. */
-:is(.admin-shell, .inventory-shell, .workshop-shell) :is(.filter-bar, .report-filter-grid, .catalog-selector-grid, .location-filter, .admin-table-toolbar) :is(input, select, .searchable-select-input) {
+:is(.admin-shell, .inventory-shell, .workshop-shell) :is(.filter-bar, .report-filter-grid, .catalog-selector-grid) :is(input, select, .searchable-select-input) {
     min-height: 2.65rem;
     border: 1px solid #d3dfdb;
     border-radius: var(--ui-radius);
@@ -1355,11 +824,11 @@ button:focus-visible {
     transition: border-color .15s ease, box-shadow .15s ease;
 }
 
-:is(.admin-shell, .inventory-shell, .workshop-shell) :is(.filter-bar, .report-filter-grid, .catalog-selector-grid, .location-filter, .admin-table-toolbar) :is(input, select, .searchable-select-input):hover:not(:disabled) {
+:is(.admin-shell, .inventory-shell, .workshop-shell) :is(.filter-bar, .report-filter-grid, .catalog-selector-grid) :is(input, select, .searchable-select-input):hover:not(:disabled) {
     border-color: #b9d1ca;
 }
 
-:is(.admin-shell, .inventory-shell, .workshop-shell) :is(.filter-bar, .report-filter-grid, .catalog-selector-grid, .location-filter, .admin-table-toolbar) :is(input, select, .searchable-select-input):focus {
+:is(.admin-shell, .inventory-shell, .workshop-shell) :is(.filter-bar, .report-filter-grid, .catalog-selector-grid) :is(input, select, .searchable-select-input):focus {
     border-color: #397b78;
     box-shadow: 0 0 0 3px rgba(57, 123, 120, .14);
 }
@@ -1372,18 +841,14 @@ button:focus-visible {
     .import-file-button,
     .primary,
     .modal-danger
-),
-:is(.admin-shell, .inventory-shell, .workshop-shell) :is(
+), :is(.admin-shell, .inventory-shell, .workshop-shell) :is(
     .admin-form,
     .inventory-form,
     .modal-actions,
-    .form-actions,
     .workshop-actions,
     .import-actions,
-    .location-search-controls,
     .employee-search-controls
-) button:not(.secondary):not(.danger):not(.searchable-select-toggle),
-:is(.admin-shell, .inventory-shell, .workshop-shell) .workshop-modal button[type='submit'] {
+) button:not(.secondary):not(.danger):not(.searchable-select-toggle), :is(.admin-shell, .inventory-shell, .workshop-shell) .workshop-modal button[type='submit'] {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -1402,30 +867,26 @@ button:focus-visible {
     .import-file-button,
     .primary,
     .modal-danger
-):hover:not(:disabled),
-:is(.admin-shell, .inventory-shell, .workshop-shell) :is(
+):hover:not(:disabled), :is(.admin-shell, .inventory-shell, .workshop-shell) :is(
     .admin-form,
     .inventory-form,
     .modal-actions,
-    .form-actions,
     .workshop-actions,
     .import-actions,
-    .location-search-controls,
     .employee-search-controls
-) button:not(.secondary):not(.danger):not(.searchable-select-toggle):hover:not(:disabled),
-:is(.admin-shell, .inventory-shell, .workshop-shell) .workshop-modal button[type='submit']:hover:not(:disabled) {
+) button:not(.secondary):not(.danger):not(.searchable-select-toggle):hover:not(:disabled), :is(.admin-shell, .inventory-shell, .workshop-shell) .workshop-modal button[type='submit']:hover:not(:disabled) {
     box-shadow: 0 2px 4px rgba(16, 40, 42, .1), 0 8px 20px rgba(39, 105, 104, .2);
     transform: translateY(-1px);
 }
 
 /* Botones secundarios y de peligro fuera de las tablas: contorno suave. */
-:is(.admin-shell, .inventory-shell, .workshop-shell) button:is(.secondary, .danger, .logout-button, .catalog-search-button, .location-clear-selection, .location-search-trigger) {
+:is(.admin-shell, .inventory-shell, .workshop-shell) button:is(.secondary, .danger, .logout-button, .catalog-search-button) {
     border-radius: var(--ui-radius) !important;
     font-weight: 600;
     box-shadow: 0 1px 2px rgba(16, 40, 42, .06);
 }
 
-:is(.admin-shell, .inventory-shell, .workshop-shell) button:is(.secondary, .catalog-search-button, .location-clear-selection, .location-search-trigger):hover:not(:disabled) {
+:is(.admin-shell, .inventory-shell, .workshop-shell) button:is(.secondary, .catalog-search-button):hover:not(:disabled) {
     border-color: #8fb5ab;
     box-shadow: 0 3px 10px rgba(39, 105, 104, .12);
 }
@@ -1451,18 +912,17 @@ button:focus-visible {
 }
 
 /* Paginación y botón de refrescar con la misma forma redondeada. */
-:is(.admin-shell, .inventory-shell, .workshop-shell) :is(.pagination, .admin-page-buttons, .catalog-page-buttons) button,
-.refresh-button {
+:is(.admin-shell, .inventory-shell, .workshop-shell) :is(.pagination, .catalog-page-buttons) button, .refresh-button {
     border-radius: var(--ui-radius) !important;
     font-weight: 600;
 }
 
-:is(.admin-shell, .inventory-shell, .workshop-shell) :is(.pagination, .admin-page-buttons, .catalog-page-buttons) button:hover:not(:disabled):not(.active) {
+:is(.admin-shell, .inventory-shell, .workshop-shell) :is(.pagination, .catalog-page-buttons) button:hover:not(:disabled):not(.active) {
     border-color: #8fb5ab;
 }
 
 /* Botón de cierre de los diálogos. */
-:is(.admin-shell, .inventory-shell, .workshop-shell) :is(.report-close, .location-search-close) {
+:is(.admin-shell, .inventory-shell, .workshop-shell) .report-close {
     border-radius: var(--ui-radius);
 }
 
@@ -1616,4 +1076,17 @@ button:focus-visible {
     .device-create-lookup {
         grid-column: 1 / -1;
     }
+}
+
+/* Campos obligatorios sin llenar al intentar guardar (directiva appHighlightInvalid).
+   Las listas con buscador ocultan el <select>: se sombrea su campo de búsqueda.
+   El empleado de un ticket se elige con un botón: se sombrea el botón cuando el campo oculto
+   que lo sigue está vacío. En la valoración (radios) se sombrean las opciones. */
+form.show-invalid :is(input:not([type=radio]), select, textarea).ng-invalid:not(:disabled),
+form.show-invalid .searchable-select:has(> select.ng-invalid:not(:disabled)) .searchable-select-input,
+form.show-invalid app-employee-lookup:has(+ input.ng-invalid) .employee-lookup-trigger,
+form.show-invalid .rating-option:has(> input.ng-invalid) {
+    border-color: #e57373 !important;
+    background-color: #fff6f6 !important;
+    box-shadow: 0 0 0 3px rgba(229, 115, 115, .12) !important;
 }

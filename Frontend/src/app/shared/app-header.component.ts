@@ -15,6 +15,7 @@ const ROLE_LABELS: Record<UserRole, string> = {
   RecepcionTaller: 'Recepción de taller',
   TecnicoTaller: 'Técnico de taller',
   AdminTicket: 'Administrador de tickets',
+  Permisos: 'Control de permisos',
 };
 
 @Component({
@@ -30,6 +31,7 @@ export class AppHeaderComponent {
 
   // Nombre del panel o módulo que se muestra junto al nombre del sistema.
   readonly moduleName = input.required<string>();
+  readonly systemName = input('Gestión de Equipos');
   readonly refresh = output<void>();
   readonly logout = output<void>();
 
@@ -48,4 +50,5 @@ export class AppHeaderComponent {
     .slice(0, 2)
     .map((part) => part.charAt(0).toUpperCase())
     .join(''));
+
 }

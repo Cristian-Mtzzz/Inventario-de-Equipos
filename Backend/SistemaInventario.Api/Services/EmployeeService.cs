@@ -224,31 +224,6 @@ public sealed class EmployeeService(InventoryDbContext dbContext) : OracleReposi
                 ("noPago", numeroPago), ("employeeKey", employeeKey)) == 1;
         }, cancellationToken);
 
-    // Se edita por No. de pago solo si identifica a un único empleado; con duplicados se
-    // cambiarían todos a la vez, así que se pide hacerlo desde el directorio.
-    public Task<bool> UpdateEmployee(
-        string noPagoActual,
-        UpdateEmployeeDto employee,
-        CancellationToken cancellationToken) =>
-        InTransaction(async (connection, transaction) =>
-        {
-            var employeeKey = await SingleEmployeeKeyByPaymentNumber(connection, transaction, noPagoActual, cancellationToken);
-            if (employeeKey is null) return false;
-            await EnsurePaymentNumberIsFree(connection, transaction, NullIfBlank(employee.NoPago), employeeKey, cancellationToken);
-
-            return await Execute(connection, transaction, """
-                UPDATE EMPLEADOS_IHSS
-                SET NPAGO = COALESCE(:noPagoNuevo, NPAGO),
-                    NOMBRE_EMPLEADO = :nombreCompleto,
-                    DEPARTAMENTO_IHSS_ID = :idArea
-                WHERE ROWID = CHARTOROWID(:employeeKey)
-                """, cancellationToken,
-                ("noPagoNuevo", NullIfBlank(employee.NoPago)),
-                ("nombreCompleto", employee.NombreCompleto.Trim()),
-                ("idArea", employee.IdArea),
-                ("employeeKey", employeeKey)) == 1;
-        }, cancellationToken);
-
     public Task CreateDirectoryEmployee(SaveDirectoryEmployeeDto employee, CancellationToken cancellationToken) =>
         InTransaction(async (connection, transaction) =>
         {
@@ -265,16 +240,7 @@ public sealed class EmployeeService(InventoryDbContext dbContext) : OracleReposi
                 ("idArea", employee.IdArea));
         }, cancellationToken);
 
-    // Igual que al editar: con un No. de pago repetido se borrarían todos los que lo comparten.
-    public Task<bool> DeleteDirectoryEmployee(string noPago, CancellationToken cancellationToken) =>
-        InTransaction(async (connection, transaction) =>
-        {
-            var employeeKey = await SingleEmployeeKeyByPaymentNumber(connection, transaction, noPago, cancellationToken);
-            return employeeKey is not null && await Execute(connection, transaction,
-                "DELETE FROM EMPLEADOS_IHSS WHERE ROWID = CHARTOROWID(:employeeKey)", cancellationToken,
-                ("employeeKey", employeeKey)) == 1;
-        }, cancellationToken);
-
+    // El empleado se identifica por su clave de fila (ROWID): el No. de pago puede faltar o repetirse.
     public Task<bool> UpdateDirectoryEmployeeByKey(
         string employeeKey,
         UpdateEmployeeDto employee,
@@ -324,28 +290,6 @@ public sealed class EmployeeService(InventoryDbContext dbContext) : OracleReposi
         {
             throw new ArgumentException($"El No. de pago {noPago} ya es de {takenBy}.");
         }
-    }
-
-    // Clave (ROWID) del único empleado con ese No. de pago; null si no hay ninguno.
-    private static async Task<string?> SingleEmployeeKeyByPaymentNumber(
-        DbConnection connection,
-        DbTransaction transaction,
-        string noPago,
-        CancellationToken cancellationToken)
-    {
-        var matches = await GetScalar<int>(connection, transaction,
-            "SELECT COUNT(*) FROM EMPLEADOS_IHSS WHERE TRIM(NPAGO) = TRIM(:noPago)", cancellationToken,
-            ("noPago", noPago.Trim()));
-        if (matches > 1)
-        {
-            throw new ArgumentException(
-                $"Hay {matches} empleados con el No. de pago {noPago.Trim()}. Corrígelo desde la lista de empleados, eligiendo a cada uno.");
-        }
-        return matches == 0
-            ? null
-            : await GetScalar<string?>(connection, transaction,
-                "SELECT ROWIDTOCHAR(ROWID) FROM EMPLEADOS_IHSS WHERE TRIM(NPAGO) = TRIM(:noPago)", cancellationToken,
-                ("noPago", noPago.Trim()));
     }
 
     private static string? NullIfBlank(string? value) =>

@@ -50,11 +50,6 @@ h1 {
     background: #fcece9;
 }
 
-.loading {
-    color: #718080;
-    font-size: .85rem;
-}
-
 .admin-section {
     display: grid;
     gap: .9rem;
@@ -303,29 +298,6 @@ table .danger {
     opacity: .45;
 }
 
-.confirm-inline {
-    display: inline-flex;
-    align-items: center;
-    gap: .3rem;
-    margin-left: .4rem;
-    color: #9b3f38;
-    font-size: .7rem;
-}
-
-.confirm-inline button {
-    padding: .3rem .45rem;
-    border: 1px solid #b9d1ca;
-    border-radius: 3px;
-    color: #276968;
-    background: #fff;
-    cursor: pointer;
-    font-size: .7rem;
-}
-
-.confirm-inline button:hover {
-    background: #dcecd8;
-}
-
 @media (max-width: 760px) {
     .admin-form,
     .admin-form.compact {
@@ -366,6 +338,11 @@ table .danger {
     border-radius: 10px;
     background: #fff;
     box-shadow: 0 24px 60px rgba(12, 38, 39, .25);
+}
+
+/* Ventana de reporte con solo el rango de fechas. */
+.report-range-modal {
+    width: min(480px, 100%);
 }
 
 .user-edit-modal {
