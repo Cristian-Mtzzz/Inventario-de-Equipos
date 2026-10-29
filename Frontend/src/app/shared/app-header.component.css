@@ -50,7 +50,7 @@
     border-radius: 10px;
 }
 
-/* Con imagen, el espacio toma el ancho del logo horizontal (600x192) manteniendo su proporción. */
+/* Con imagen, el espacio toma el ancho del logo recortado (634x309) manteniendo su proporción. */
 .brand-logo:not(.brand-logo-placeholder) {
     width: auto;
     height: auto;
@@ -58,13 +58,15 @@
     border-radius: 0;
 }
 
-/* La imagen fija su propio alto (sin recortes) y el ancho sale de su proporción. */
+/* La imagen fija su propio alto (56px, unos 115px de ancho) y el ancho sale de su proporción.
+   El filtro aclara el dorado y le pone un contorno oscuro fino para separarlo del fondo. */
 .brand-logo img {
     display: block;
     width: auto;
-    height: 2.6rem;
-    max-width: min(10rem, 40vw);
+    height: 56px;
+    max-width: min(8rem, 40vw);
     object-fit: contain;
+    filter: brightness(1.15) saturate(1.1) drop-shadow(0 0 1px rgba(0, 0, 0, .55));
 }
 
 .brand-logo-placeholder {
@@ -195,6 +197,10 @@
 
     .brand-name {
         font-size: .95rem;
+    }
+
+    .brand-logo img {
+        height: 42px;
     }
 
     .header-actions {

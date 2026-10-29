@@ -5,7 +5,8 @@ import { UserRole } from '../auth/auth.models';
 
 // Ruta del logo institucional dentro de la carpeta public/ (por ejemplo 'logo-ihss.png').
 // Mientras sea null se muestra un espacio reservado con el mismo tamaño.
-const LOGO_SRC: string | null = 'logo.png';
+// Se usa la versión recortada (sin márgenes transparentes) para que el logo se vea más grande.
+const LOGO_SRC: string | null = 'logo-login.png';
 
 const ROLE_LABELS: Record<UserRole, string> = {
   Admin: 'Administrador general',
