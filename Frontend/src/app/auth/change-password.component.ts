@@ -34,7 +34,7 @@ export class ChangePasswordComponent {
     const { currentPassword, newPassword, confirmPassword } = this.form.getRawValue();
     if (this.form.invalid || newPassword !== confirmPassword) {
       this.form.markAllAsTouched();
-      if (newPassword !== confirmPassword) this.errorMessage.set('Las contrasenas nuevas no coinciden.');
+      if (newPassword !== confirmPassword) this.errorMessage.set('Las contraseñas nuevas no coinciden.');
       return;
     }
 
@@ -42,7 +42,7 @@ export class ChangePasswordComponent {
     this.isLoading.set(true);
     this.authService.changeInitialPassword(currentPassword, newPassword).pipe(
       catchError((error: HttpErrorResponse) => {
-        this.errorMessage.set(error.error?.Message ?? 'No se pudo actualizar la contrasena.');
+        this.errorMessage.set(error.error?.Message ?? 'No se pudo actualizar la contraseña.');
         return EMPTY;
       }),
       finalize(() => this.isLoading.set(false)),

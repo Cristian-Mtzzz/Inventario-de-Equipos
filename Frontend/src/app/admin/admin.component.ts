@@ -2,13 +2,15 @@ import { ChangeDetectionStrategy, ChangeDetectorRef, Component, DestroyRef, View
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { DigitsOnlyDirective } from '../shared/digits-only.directive';
+import { UppercaseDirective } from '../shared/uppercase.directive';
+import { HighlightInvalidDirective, RequiredIdDirective } from '../shared/required-fields.directive';
 import { EmployeeLookupComponent, EmployeeLookupResult, findEmployeeIndex } from '../shared/employee-lookup.component';
-import { ReportColumn, addReportSheet, cellText, createReportWorkbook, downloadReportWorkbook, excelDate, generatedAt, reportFileName } from '../shared/excel-report';
-import { PagePipe, TablePageSizeComponent, TablePaginatorComponent } from '../shared/table-paginator';
+import { ReportColumn, ReportDateRange, addReportSheet, cellText, createReportWorkbook, dateRangeLabel, downloadReportWorkbook, emptyReportDateRange, excelDate, generatedAt, isInDateRange, reportFileName, requiredDateRangeNotice, dateRangeError } from '../shared/excel-report';
+import { PagePipe, TablePageSizeComponent, TablePaginatorComponent, clampPage } from '../shared/table-paginator';
 import { Router } from '@angular/router';
-import type ExcelJS from 'exceljs';
 import { SearchableSelectDirective } from '../shared/searchable-select.directive';
-import { ApiError, apiErrorMessage } from '../shared/api-response';
+import { apiErrorMessage } from '../shared/api-response';
+import { memoizeLast } from '../shared/memo';
 import { finalize, forkJoin, retry, timeout } from 'rxjs';
 import { AuthService } from '../auth/auth.service';
 import { AppModules } from '../auth/app-modules';
@@ -29,6 +31,14 @@ type AdminSection = 'devices' | 'reassignments' | 'users' | 'workshop' | 'catalo
 // Opción del filtro de tipo que muestra la vista agrupada de combos de escritorio.
 const COMBO_FILTER = 'COMBOS';
 
+const emptyDevice = (): CreateDevice => ({
+  CodigoInventario: '', NoSerie: '', Marca: '', Modelo: '', IdTipo: null,
+  Estado: 'DISPONIBLE', NumeroPagoAsignado: null, NombreAsignado: null, IdArea: null,
+});
+
+const emptyReassignment = (): CreateReassignment =>
+  ({ IdEquipo: 0, NoPagoNuevo: null, NombreNuevo: '', Motivo: '', IdEdificio: 0, IdArea: 0 });
+
 // Módulo que habilita cada sección del panel.
 const SECTION_MODULES: Record<AdminSection, string> = {
   devices: AppModules.Devices,
@@ -42,7 +52,7 @@ const SECTION_MODULES: Record<AdminSection, string> = {
 
 @Component({
   selector: 'app-admin',
-  imports: [DatePipe, FormsModule, SearchableSelectDirective, TallerComponent, DeviceReportsComponent, EmployeeSearchDialogComponent, CatalogManagementComponent, UserManagementComponent, EmployeeManagementComponent, TicketsComponent, AppHeaderComponent, DeviceImportComponent, PagePipe, TablePageSizeComponent, TablePaginatorComponent, DigitsOnlyDirective, EmployeeLookupComponent],
+  imports: [DatePipe, FormsModule, SearchableSelectDirective, TallerComponent, DeviceReportsComponent, EmployeeSearchDialogComponent, CatalogManagementComponent, UserManagementComponent, EmployeeManagementComponent, TicketsComponent, AppHeaderComponent, DeviceImportComponent, PagePipe, TablePageSizeComponent, TablePaginatorComponent, DigitsOnlyDirective, UppercaseDirective, HighlightInvalidDirective, RequiredIdDirective, EmployeeLookupComponent],
   templateUrl: './admin.component.html',
   styleUrl: './admin.component.css',
   // Angular 22 usa OnPush por defecto; varias respuestas HTTP de este panel actualizan la vista
@@ -61,9 +71,14 @@ export class AdminComponent {
   private readonly changeDetector = inject(ChangeDetectorRef);
   activeSection: AdminSection = 'devices';
   isDeviceReportsOpen = false;
+  // Ventana del reporte de reasignaciones: rango de fecha del cambio.
+  isReassignmentReportOpen = false;
+  isExportingReassignments = false;
+  reassignmentReportRange: ReportDateRange = emptyReportDateRange();
   isDeviceImportOpen = false;
   devices: Device[] = [];
   totalDeviceCount = 0;
+  totalComboCount = 0;
   reassignments: Reassignment[] = [];
   areas: Area[] = [];
   employeesForDeviceArea: EmployeeOption[] = [];
@@ -88,34 +103,29 @@ export class AdminComponent {
   newDesktopCombo: CreateDesktopCombo = this.createEmptyDesktopCombo();
   editingDeviceId: number | null = null;
   editingDeviceNCombo = '';
-  // Al editar una pieza de combo: true reasigna las tres piezas; false separa el combo.
+  // Al editar una pieza de combo: true reasigna todas las piezas; false saca solo esta pieza del combo.
   applyEditToCombo = false;
   // Botón "Asignar" de un equipo disponible: el diálogo de edición deja los datos del equipo
   // en solo lectura y solo pide la ubicación y el empleado.
   isAssignMode = false;
-  editingCodigoInventario = '';
-  editingNoSerie = '';
   isEditDialogOpen = false;
   isCreateDeviceDialogOpen = false;
   deviceBatchCount = 1;
   deviceBatchCurrent = 1;
   batchSuccessMessage = '';
+  // Equipo que espera confirmación para eliminarse; mientras no es null se muestra el modal.
   pendingDeviceId: number | null = null;
-  pendingReassignmentId: number | null = null;
-  isDeleteDialogOpen = false;
   message = '';
   errorMessage = '';
-  isLoading = false;
   isLoadingDevices = false;
-  readonly pageSizeOptions = [10, 25, 50, 100];
-  devicePageSize = 25;
+  // Refrescar en curso en Dispositivos o Reasignaciones: la tabla muestra "Cargando..." mientras
+  // llegan los datos, igual que en Taller, para que se note que se actualizó.
+  isRefreshing = false;
+  private readonly devicePageSize = 25;
   currentPage = 1;
   reassignmentPageSize = 10;
   reassignmentCurrentPage = 1;
   reassignmentSearchTerm = '';
-  reassignmentSortColumn = '';
-  reassignmentSortDirection: 'asc' | 'desc' = 'asc';
-  showAdminMenu = false;
   searchTerm = '';
   selectedBrand = '';
   selectedModel = '';
@@ -132,13 +142,12 @@ export class AdminComponent {
   @ViewChild(TallerComponent) workshopComponent?: TallerComponent;
   @ViewChild(UserManagementComponent) userManagement?: UserManagementComponent;
   @ViewChild(CatalogManagementComponent) catalogManagement?: CatalogManagementComponent;
+  @ViewChild(EmployeeManagementComponent) employeeManagement?: EmployeeManagementComponent;
+  @ViewChild(TicketsComponent) ticketsComponent?: TicketsComponent;
 
   // Estado inicial para la creación de un nuevo dispositivo o reasignación.
-  newDevice: CreateDevice = {
-    CodigoInventario: '', NoSerie: '', Marca: '', Modelo: '', IdTipo: null,
-    Estado: 'DISPONIBLE', NumeroPagoAsignado: null, NombreAsignado: null, IdArea: null,
-  };
-  newReassignment: CreateReassignment = { IdEquipo: 0, NoPagoNuevo: null, NombreNuevo: '', Motivo: '', IdEdificio: 0, IdArea: 0 };
+  newDevice: CreateDevice = emptyDevice();
+  newReassignment: CreateReassignment = emptyReassignment();
   reassignmentRegionalId: number | null = null;
   reassignmentBuildingId = 0;
   reassignmentAreas: Area[] = [];
@@ -146,6 +155,8 @@ export class AdminComponent {
   selectedReassignmentEmployeeIndex: number | null = null;
   isLoadingReassignmentEmployees = false;
   isSubmittingReassignment = false;
+  // Alta o edición de dispositivo en curso: bloquea el botón para no enviar dos veces con doble clic.
+  isSavingDevice = false;
   private reassignmentEmployeeRequestId = 0;
   selectedInventoryCode = '';
   private deviceOptionSearchTimer: ReturnType<typeof setTimeout> | null = null;
@@ -158,10 +169,6 @@ export class AdminComponent {
       if (this.deviceFilterTimer) clearTimeout(this.deviceFilterTimer);
       if (this.deviceOptionSearchTimer) clearTimeout(this.deviceOptionSearchTimer);
     });
-  }
-
-  canAccessModule(module: string): boolean {
-    return this.authService.hasModule(module);
   }
 
   canAccessAdminSection(section: AdminSection): boolean {
@@ -183,9 +190,6 @@ export class AdminComponent {
     const sections: AdminSection[] = ['devices', 'reassignments', 'workshop', 'users', 'catalogs', 'employees', 'tickets'];
     return sections.find((section) => this.canAccessAdminSection(section)) ?? 'devices';
   }
-
-  // Métodos auxiliares para el filtrado y paginación de dispositivos y usuarios.
-  get filteredDevices(): Device[] { return this.devices; }
 
   get hasDeviceQuery(): boolean {
     return this.searchTerm.trim().length > 0
@@ -209,8 +213,12 @@ export class AdminComponent {
   }
 
   get comboGroups(): { NCombo: string; Devices: Device[] }[] {
+    return this.groupCombos(this.devices);
+  }
+
+  private readonly groupCombos = memoizeLast((devices: Device[]) => {
     const groups = new Map<string, Device[]>();
-    for (const device of this.devices) {
+    for (const device of devices) {
       if (!device.NCombo) continue;
       const group = groups.get(device.NCombo) ?? [];
       group.push(device);
@@ -223,72 +231,23 @@ export class AdminComponent {
         (componentOrder[first.Componente?.toUpperCase() ?? ''] ?? 3)
         - (componentOrder[second.Componente?.toUpperCase() ?? ''] ?? 3)),
     }));
-  }
-
-  get totalComboCount(): number {
-    return Math.ceil(this.totalDeviceCount / 3);
-  }
-
-  get deviceVisiblePages(): number[] {
-    const firstPage = Math.max(1, this.currentPage - 2);
-    const lastPage = Math.min(this.totalPages, firstPage + 4);
-    return Array.from({ length: lastPage - firstPage + 1 }, (_, index) => firstPage + index);
-  }
-
-  get deviceFirstRow(): number {
-    return this.totalDeviceCount === 0 ? 0 : (this.currentPage - 1) * this.effectiveDevicePageSize + 1;
-  }
-
-  get deviceLastRow(): number {
-    return Math.min(this.currentPage * this.effectiveDevicePageSize, this.totalDeviceCount);
-  }
-  // Fin de los métodos para la paginación de dispositivos.
-  get pagedDevices(): Device[] {
-    return this.devices;
-  }
+  });
 
   get filteredReassignments(): Reassignment[] {
-    // Busca por inventario y/o nombre (o No. de pago) del responsable anterior o actual;
-    // con varias palabras, cada una debe aparecer en alguno de esos datos ("4110935 juan").
-    const terms = this.reassignmentSearchTerm.trim().toLocaleLowerCase().split(/s+/).filter(Boolean);
-    const filtered = terms.length > 0
-      ? this.reassignments.filter((item) => {
-        const text = [item.CodigoInventario, item.NombreAnterior, item.NombreNuevo, item.NoPagoAnterior, item.NoPagoNuevo]
-          .map((value) => String(value ?? '').toLocaleLowerCase()).join(' ');
-        return terms.every((term) => text.includes(term));
-      })
-      : [...this.reassignments];
-    if (!this.reassignmentSortColumn) return filtered;
-    return filtered.sort((first, second) => {
-      const firstValue = String(first[this.reassignmentSortColumn as keyof Reassignment] ?? '').toLocaleLowerCase();
-      const secondValue = String(second[this.reassignmentSortColumn as keyof Reassignment] ?? '').toLocaleLowerCase();
-      const comparison = firstValue.localeCompare(secondValue, undefined, { numeric: true });
-      return this.reassignmentSortDirection === 'asc' ? comparison : -comparison;
+    return this.filterReassignments(this.reassignments, this.reassignmentSearchTerm);
+  }
+
+  // Busca por inventario y/o nombre (o No. de pago) del responsable anterior o actual;
+  // con varias palabras, cada una debe aparecer en alguno de esos datos ("4110935 juan").
+  private readonly filterReassignments = memoizeLast((reassignments: Reassignment[], searchTerm: string) => {
+    const terms = searchTerm.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
+    if (terms.length === 0) return reassignments;
+    return reassignments.filter((item) => {
+      const text = [item.CodigoInventario, item.NombreAnterior, item.NombreNuevo, item.NoPagoAnterior, item.NoPagoNuevo]
+        .map((value) => String(value ?? '').toLocaleLowerCase()).join(' ');
+      return terms.every((term) => text.includes(term));
     });
-  }
-
-  get pagedReassignments(): Reassignment[] {
-    const start = (this.reassignmentCurrentPage - 1) * this.reassignmentPageSize;
-    return this.filteredReassignments.slice(start, start + this.reassignmentPageSize);
-  }
-
-  get reassignmentTotalPages(): number {
-    return Math.max(1, Math.ceil(this.filteredReassignments.length / this.reassignmentPageSize));
-  }
-
-  get reassignmentVisiblePages(): number[] {
-    const firstPage = Math.max(1, this.reassignmentCurrentPage - 2);
-    const lastPage = Math.min(this.reassignmentTotalPages, firstPage + 4);
-    return Array.from({ length: lastPage - firstPage + 1 }, (_, index) => firstPage + index);
-  }
-
-  get reassignmentFirstRow(): number {
-    return this.filteredReassignments.length === 0 ? 0 : (this.reassignmentCurrentPage - 1) * this.reassignmentPageSize + 1;
-  }
-
-  get reassignmentLastRow(): number {
-    return Math.min(this.reassignmentCurrentPage * this.reassignmentPageSize, this.filteredReassignments.length);
-  }
+  });
 
   get regionalOptions(): { IdRegional: number; NombreRegional: string }[] {
     const regions = new Map<number, string>();
@@ -339,9 +298,15 @@ export class AdminComponent {
   refreshPanel(): void {
     this.adminService.clearCatalogCaches();
     this.clearMessages();
+    // Empleados y Tickets no tienen botón propio: se recargan desde aquí. No se hace en
+    // loadData porque esa también corre al cambiar de pestaña y recargaría la lista cada vez.
     if (this.activeSection === 'catalogs') this.catalogManagement?.loadCatalogs();
-    else this.loadData();
-    this.message = 'Datos actualizados.';
+    else if (this.activeSection === 'employees') this.employeeManagement?.reload();
+    else if (this.activeSection === 'tickets') this.ticketsComponent?.refreshPanel();
+    else {
+      this.isRefreshing = this.activeSection === 'devices' || this.activeSection === 'reassignments';
+      this.loadData();
+    }
   }
 
   refreshEmployeeOptions(): void {
@@ -352,11 +317,14 @@ export class AdminComponent {
     // Carga únicamente los datos de la sección activa para evitar peticiones innecesarias.
     this.errorMessage = '';
     if (this.activeSection === 'devices') {
-      this.isLoading = false;
       forkJoin({
         deviceTypes: this.adminService.getDeviceTypes(),
         buildings: this.adminService.getBuildings(),
-      }).subscribe({
+      }).pipe(finalize(() => {
+        // Sin búsqueda no se pide la tabla: el refresco termina con los filtros.
+        if (!this.hasDeviceQuery) this.isRefreshing = false;
+        this.changeDetector.markForCheck();
+      })).subscribe({
         next: (data) => {
           const typesById = new Map<number, DeviceType>();
           data.deviceTypes.forEach((type) => {
@@ -382,52 +350,41 @@ export class AdminComponent {
       return;
     }
 
-    this.isLoading = true;
-
     if (this.activeSection === 'workshop') {
       this.workshopComponent?.loadData();
-      this.isLoading = false;
       return;
     }
 
-    if (this.activeSection === 'catalogs') {
-      this.isLoading = false;
-      return;
-    }
+    // Catálogos, empleados y tickets cargan sus propios datos.
+    if (this.activeSection !== 'reassignments') return;
 
-    // Única sección restante: reasignaciones.
-    this.adminService.getReassignments().pipe(retry({ count: 3, delay: 1000 })).subscribe({
+    this.adminService.getReassignments().pipe(
+      retry({ count: 3, delay: 1000 }),
+      finalize(() => { this.isRefreshing = false; this.changeDetector.markForCheck(); }),
+    ).subscribe({
       next: (items) => {
         this.reassignments = items;
-        this.reassignmentCurrentPage = Math.min(this.reassignmentCurrentPage, this.reassignmentTotalPages);
-        this.isLoading = false;
+        this.reassignmentCurrentPage = clampPage(this.reassignmentCurrentPage, this.filteredReassignments.length, this.reassignmentPageSize);
         // Angular 22 usa OnPush por defecto: hay que avisar que la vista cambió al llegar la respuesta.
         this.changeDetector.markForCheck();
       },
       error: (error) => {
-        this.errorMessage = this.getErrorMessage(error, 'No se pudieron cargar las reasignaciones.');
-        this.isLoading = false;
+        this.errorMessage = apiErrorMessage(error, 'No se pudieron cargar las reasignaciones.');
         this.changeDetector.markForCheck();
       },
     });
   }
 
-      // Cambia la sección activa del panel administrativo y dispara la recarga de datos si es necesario.
   selectSection(section: AdminSection): void {
     // Cambia de sección, limpia mensajes y dispara su recarga.
     if (!this.canAccessAdminSection(section)) return;
     this.activeSection = section;
+    this.isRefreshing = false;
     if (section === 'reassignments') this.reassignmentCurrentPage = 1;
-    this.message = '';
-    this.errorMessage = '';
+    this.clearMessages();
     // La sección Usuarios conserva su lista y se recarga sola si la primera carga falló.
     if (section === 'users') return;
     this.loadData();
-  }
-
-  toggleAdminMenu(): void {
-    // Abre o cierra el menú auxiliar del encabezado administrativo.
-    this.showAdminMenu = !this.showAdminMenu;
   }
 
   logout(): void {
@@ -449,36 +406,9 @@ export class AdminComponent {
     this.loadDevicePage();
   }
 
-  updateDevicePageSize(value: number): void {
-    this.devicePageSize = Number(value);
-    this.currentPage = 1;
-    this.loadDevicePage();
-  }
-
   updateReassignmentSearch(value: string): void {
     this.reassignmentSearchTerm = value;
     this.reassignmentCurrentPage = 1;
-  }
-
-  updateReassignmentPageSize(value: number): void {
-    this.reassignmentPageSize = Number(value);
-    this.reassignmentCurrentPage = 1;
-  }
-
-  goToReassignmentPage(page: number): void {
-    this.reassignmentCurrentPage = Math.min(Math.max(page, 1), this.reassignmentTotalPages);
-  }
-
-  sortReassignmentsBy(column: string): void {
-    this.reassignmentSortDirection = this.reassignmentSortColumn === column && this.reassignmentSortDirection === 'asc'
-      ? 'desc' : 'asc';
-    this.reassignmentSortColumn = column;
-    this.reassignmentCurrentPage = 1;
-  }
-
-  reassignmentSortIndicator(column: string): string {
-    return this.reassignmentSortColumn !== column ? '↕'
-      : this.reassignmentSortDirection === 'asc' ? '▲' : '▼';
   }
 
   // Los selectores buscan de inmediato; el texto libre espera a que el usuario deje de
@@ -561,6 +491,7 @@ export class AdminComponent {
       finalize(() => {
         if (requestId === this.deviceRequestId) {
           this.isLoadingDevices = false;
+          this.isRefreshing = false;
           this.changeDetector.markForCheck();
         }
       }),
@@ -569,12 +500,13 @@ export class AdminComponent {
         if (requestId !== this.deviceRequestId) return;
         this.devices = result.Items;
         this.totalDeviceCount = result.TotalCount;
+        this.totalComboCount = result.ComboCount;
         this.currentPage = result.Page;
         this.changeDetector.markForCheck();
       },
       error: (error) => {
         if (requestId === this.deviceRequestId) {
-          this.errorMessage = this.getErrorMessage(error, 'No se pudieron cargar los dispositivos.');
+          this.errorMessage = apiErrorMessage(error, 'No se pudieron cargar los dispositivos.');
           this.changeDetector.markForCheck();
         }
       },
@@ -585,6 +517,7 @@ export class AdminComponent {
     this.deviceRequestId++;
     this.devices = [];
     this.totalDeviceCount = 0;
+    this.totalComboCount = 0;
     this.currentPage = 1;
     this.isLoadingDevices = false;
     this.changeDetector.markForCheck();
@@ -651,10 +584,7 @@ export class AdminComponent {
     this.newReassignment.IdEquipo = 0;
     this.deviceOptions = [];
     const searchTerm = this.deviceOptionSearch.trim();
-    if (searchTerm.length < 2) {
-      this.deviceOptions = [];
-      return;
-    }
+    if (searchTerm.length < 2) return;
     this.deviceOptionSearchTimer = setTimeout(() => {
       this.deviceOptionSearchTimer = null;
       this.adminService.searchDeviceOptions(searchTerm).subscribe({
@@ -734,10 +664,6 @@ export class AdminComponent {
     this.newDevice.NombreAsignado = employee?.NombreCompleto ?? null;
   }
 
-  onInventoryCodeInput(target: { CodigoInventario: string }): void {
-    target.CodigoInventario = (target.CodigoInventario || '').replace(/\D/g, '').slice(0, 7);
-  }
-
   handleDeviceTypeChange(idTipo: number | null): void {
     this.newDevice.IdTipo = idTipo;
     if (this.isDesktopComboSelected) {
@@ -753,16 +679,6 @@ export class AdminComponent {
         this.newDevice.NombreAsignado = match.NombreCompleto;
       }
     }
-  }
-
-  // "Nombre asignado" se escribe o se elige de la lista del área; si coincide con un empleado del
-  // catálogo queda seleccionado y se completa su No. de pago (si lo tiene).
-  onDeviceEmployeeNameChange(): void {
-    const name = this.newDevice.NombreAsignado?.trim().toUpperCase();
-    const index = name ? this.employeesForDeviceArea.findIndex(e => e.NombreCompleto.trim().toUpperCase() === name) : -1;
-    this.selectedEmployeeIndex = index >= 0 ? index : null;
-    const match = index >= 0 ? this.employeesForDeviceArea[index] : undefined;
-    if (match?.NoPago) this.newDevice.NumeroPagoAsignado = match.NoPago;
   }
 
   onReassignmentPaymentChange(): void {
@@ -809,22 +725,17 @@ export class AdminComponent {
   }
 
   openDeviceCreateDialog(): void {
-    this.newDevice = { CodigoInventario: '', NoSerie: '', Marca: '', Modelo: '', IdTipo: null, Estado: 'DISPONIBLE', NumeroPagoAsignado: null, NombreAsignado: null, IdArea: null };
-    this.newDesktopCombo = this.createEmptyDesktopCombo();
-    this.selectedBuildingId = null;
-    this.selectedRegionId = null;
-    this.areas = [];
-    this.deviceBatchCount = 1;
-    this.deviceBatchCurrent = 1;
-    this.batchSuccessMessage = '';
-    this.clearDeviceEmployeeSelection();
-    this.errorMessage = '';
+    this.resetDeviceCreateForm();
     this.isCreateDeviceDialogOpen = true;
   }
 
   closeDeviceCreateDialog(): void {
     this.isCreateDeviceDialogOpen = false;
-    this.newDevice = { CodigoInventario: '', NoSerie: '', Marca: '', Modelo: '', IdTipo: null, Estado: 'DISPONIBLE', NumeroPagoAsignado: null, NombreAsignado: null, IdArea: null };
+    this.resetDeviceCreateForm();
+  }
+
+  private resetDeviceCreateForm(): void {
+    this.newDevice = emptyDevice();
     this.newDesktopCombo = this.createEmptyDesktopCombo();
     this.selectedBuildingId = null;
     this.selectedRegionId = null;
@@ -852,13 +763,15 @@ export class AdminComponent {
       this.errorMessage = 'Indica el empleado asignado o selecciónalo de la lista.';
       return;
     }
+    if (this.isSavingDevice) return;
     const device = this.normalizeDevice(this.newDevice);
     const isNew = this.editingDeviceId === null;
     const request = isNew
       ? this.adminService.createDevice(device)
       : this.adminService.updateDevice(this.editingDeviceId!, device);
 
-    request.subscribe({
+    this.isSavingDevice = true;
+    request.pipe(finalize(() => { this.isSavingDevice = false; this.changeDetector.markForCheck(); })).subscribe({
       next: () => {
         this.loadData();
         if (isNew && this.deviceBatchCount > 1 && this.deviceBatchCurrent < this.deviceBatchCount) {
@@ -934,13 +847,15 @@ export class AdminComponent {
       NombreAsignado: this.newDevice.NombreAsignado?.trim() || null,
       IdArea: this.newDevice.Estado === 'DISPONIBLE' ? null : this.newDevice.IdArea,
     };
-    this.adminService.createDesktopCombo(combo).subscribe({
+    if (this.isSavingDevice) return;
+    this.isSavingDevice = true;
+    this.adminService.createDesktopCombo(combo).pipe(finalize(() => { this.isSavingDevice = false; this.changeDetector.markForCheck(); })).subscribe({
       next: () => {
         this.loadData();
         this.closeDeviceCreateDialog();
         this.message = 'Combo de computadora de escritorio agregado correctamente.';
       },
-      error: (error) => this.errorMessage = this.getErrorMessage(error, 'No se pudo agregar el combo de computadora.'),
+      error: (error) => this.errorMessage = apiErrorMessage(error, 'No se pudo agregar el combo de computadora.'),
     });
   }
 
@@ -950,8 +865,6 @@ export class AdminComponent {
     this.editingDeviceId = device.IdEquipo;
     this.editingDeviceNCombo = device.NCombo ?? '';
     this.applyEditToCombo = false;
-    this.editingCodigoInventario = device.CodigoInventario;
-    this.editingNoSerie = device.NoSerie;
     this.selectedBuildingId = device.Estado === 'DISPONIBLE' ? null : device.IdEdificio;
     this.selectedRegionId = device.Estado === 'DISPONIBLE' ? null : device.IdRegional;
     this.areas = [];
@@ -1024,13 +937,11 @@ export class AdminComponent {
     this.employeeCatalogError = '';
     this.editingDeviceId = null;
     this.editingDeviceNCombo = '';
-    this.editingCodigoInventario = '';
-    this.editingNoSerie = '';
     this.selectedBuildingId = null;
     this.selectedRegionId = null;
     this.areas = [];
     this.isEditDialogOpen = false;
-    this.newDevice = { CodigoInventario: '', NoSerie: '', Marca: '', Modelo: '', IdTipo: null, Estado: 'DISPONIBLE', NumeroPagoAsignado: null, NombreAsignado: null, IdArea: null };
+    this.newDevice = emptyDevice();
   }
 
   saveEditedDevice(): void {
@@ -1046,14 +957,18 @@ export class AdminComponent {
         return;
       }
     }
+    if (this.isSavingDevice) return;
     const applyToCombo = this.editingDeviceNCombo !== '' && this.applyEditToCombo;
-    this.adminService.updateDevice(this.editingDeviceId, this.normalizeDevice(this.newDevice), applyToCombo).subscribe({
+    this.isSavingDevice = true;
+    this.adminService.updateDevice(this.editingDeviceId, this.normalizeDevice(this.newDevice), applyToCombo).pipe(
+      finalize(() => { this.isSavingDevice = false; this.changeDetector.markForCheck(); }),
+    ).subscribe({
       next: () => {
         this.message = this.isAssignMode ? 'Dispositivo asignado correctamente.' : 'Dispositivo actualizado correctamente.';
         this.cancelEdit();
         this.loadData();
       },
-      error: (error) => this.errorMessage = this.getErrorMessage(error, 'No se pudo actualizar el dispositivo.'),
+      error: (error) => this.errorMessage = apiErrorMessage(error, 'No se pudo actualizar el dispositivo.'),
     });
   }
 
@@ -1064,7 +979,6 @@ export class AdminComponent {
       ...device,
       NumeroPagoAsignado: numeroPago,
       NombreAsignado: nombreAsignado,
-      Estado: device.Estado,
       IdArea: device.Estado === 'DISPONIBLE' ? null : device.IdArea,
     };
   }
@@ -1085,7 +999,7 @@ export class AdminComponent {
     };
   }
 
-  // Normaliza los datos del dispositivo antes de enviarlos al servidor.
+  // Inventario, serie, marca, modelo y tipo son obligatorios.
   private isDeviceComplete(device: CreateDevice): boolean {
     return Boolean(
       device.CodigoInventario.trim()
@@ -1099,8 +1013,6 @@ export class AdminComponent {
   askRemoveDevice(idEquipo: number): void {
     // Guarda el equipo pendiente para que el HTML abra el modal de confirmación.
     this.pendingDeviceId = idEquipo;
-    this.pendingReassignmentId = null;
-    this.isDeleteDialogOpen = true;
   }
 
   confirmRemoveDevice(): void {
@@ -1108,67 +1020,57 @@ export class AdminComponent {
     if (this.pendingDeviceId === null) return;
     const idEquipo = this.pendingDeviceId;
     this.pendingDeviceId = null;
-    this.isDeleteDialogOpen = false;
     this.adminService.deleteDevice(idEquipo).subscribe({
       next: () => { this.message = 'Dispositivo eliminado.'; this.loadData(); },
-      error: (error) => this.errorMessage = this.getErrorMessage(error, 'No se pudo quitar el dispositivo.'),
+      error: (error) => this.errorMessage = apiErrorMessage(error, 'No se pudo quitar el dispositivo.'),
     });
   }
-  // Métodos para manejar la eliminación de dispositivos, reasignaciones y usuarios.
-  // Incluye la apertura de confirmación y la ejecución de las acciones correspondientes.
+
   cancelRemoveDevice(): void {
     this.pendingDeviceId = null;
-    this.isDeleteDialogOpen = false;
   }
 
-  // Métodos para manejar la eliminación de reasignaciones.
-  askRemoveReassignment(idReasignacion: number): void {
-    this.pendingDeviceId = null;
-    this.pendingReassignmentId = idReasignacion;
-    this.isDeleteDialogOpen = true;
+  openReassignmentReport(): void {
+    this.clearMessages();
+    this.isReassignmentReportOpen = true;
   }
 
-  // Confirma la eliminación de una reasignación.
-  confirmRemoveReassignment(): void {
-    if (this.pendingReassignmentId === null) return;
-    const idReasignacion = this.pendingReassignmentId;
-    this.pendingReassignmentId = null;
-    this.isDeleteDialogOpen = false;
-    this.adminService.deleteReassignment(idReasignacion).subscribe({
-      next: () => { this.message = 'Reasignación eliminada.'; this.loadData(); },
-      error: (error) => this.errorMessage = this.getErrorMessage(error, 'No se pudo eliminar la reasignación.'),
-    });
+  // Igual que el reporte de Permisos: sin el rango completo no se puede exportar.
+  get reassignmentReportNotice(): string {
+    return requiredDateRangeNotice(this.reassignmentReportRange);
   }
 
-  // Cancela la eliminación de una reasignación.
-  cancelRemoveReassignment(): void {
-    this.pendingReassignmentId = null;
-    this.isDeleteDialogOpen = false;
+  get reassignmentReportRangeError(): string {
+    return dateRangeError(this.reassignmentReportRange);
   }
 
-  // Cancela la eliminación pendiente, ya sea de un dispositivo o de una reasignación.
-  cancelPendingDelete(): void {
-    if (this.pendingDeviceId !== null) this.cancelRemoveDevice();
-    else this.cancelRemoveReassignment();
+  // Conteo previo con el historial ya cargado en pantalla; al exportar se vuelve a pedir.
+  get reassignmentReportCount(): number {
+    return this.reassignments.filter((item) => isInDateRange(item.FechaCambio, this.reassignmentReportRange)).length;
   }
 
-  // Confirma la eliminación pendiente, ya sea de un dispositivo o de una reasignación.
-  confirmPendingDelete(): void {
-    if (this.pendingDeviceId !== null) this.confirmRemoveDevice();
-    else this.confirmRemoveReassignment();
-  }
-
+  // Exporta las reasignaciones cuya fecha de cambio cae en el rango elegido.
   exportReassignmentReport(): void {
-    this.message = '';
-    this.errorMessage = '';
-    this.adminService.getReassignments().subscribe({
-      next: async (reassignments) => {
+    this.clearMessages();
+    if (this.reassignmentReportNotice) {
+      this.errorMessage = this.reassignmentReportNotice;
+      return;
+    }
+    this.isExportingReassignments = true;
+    this.adminService.getReassignments().pipe(finalize(() => {
+      this.isExportingReassignments = false;
+      this.changeDetector.markForCheck();
+    })).subscribe({
+      next: async (all) => {
+        const reassignments = all.filter((item) => isInDateRange(item.FechaCambio, this.reassignmentReportRange));
         try {
           await this.createReassignmentWorkbook(reassignments);
+          this.isReassignmentReportOpen = false;
           this.message = `Reporte de reasignaciones exportado: ${reassignments.length} registros.`;
         } catch {
           this.errorMessage = 'No se pudo exportar el reporte de reasignaciones.';
         }
+        this.changeDetector.markForCheck();
       },
       error: () => this.errorMessage = 'No se pudo cargar el historial de reasignaciones para exportar.',
     });
@@ -1179,9 +1081,9 @@ export class AdminComponent {
     const workbook = await createReportWorkbook('Reporte de reasignaciones');
     const columns: ReportColumn<Reassignment>[] = [
       { header: 'Equipo', width: 24, value: (item) => cellText(item.NombreTipo) },
-      { header: 'Marca', width: 16, value: (item) => cellText(item.Marca) },
-      { header: 'Modelo', width: 20, value: (item) => cellText(item.Modelo) },
-      { header: 'Serie', width: 22, value: (item) => cellText(item.NoSerie) },
+      { header: 'Marca', width: 16, value: (item) => cellText(item.Marca).toLocaleUpperCase('es') },
+      { header: 'Modelo', width: 20, value: (item) => cellText(item.Modelo).toLocaleUpperCase('es') },
+      { header: 'Serie', width: 22, value: (item) => cellText(item.NoSerie).toLocaleUpperCase('es') },
       { header: 'Inventario', width: 14, value: (item) => item.CodigoInventario || this.getInventoryCode(item.IdEquipo) },
       { header: 'Resp. anterior', width: 34, value: (item) => item.NombreAnterior || item.NoPagoAnterior || 'Sin asignar' },
       { header: 'Resp. actual', width: 34, value: (item) => item.NombreNuevo || item.NoPagoNuevo || '-' },
@@ -1195,7 +1097,7 @@ export class AdminComponent {
     addReportSheet(workbook, {
       sheetName: 'Reasignaciones',
       title: 'REPORTE DE REASIGNACIONES',
-      subtitle: `${reassignments.length} reasignaciones · ${generatedAt()}`,
+      subtitle: `${reassignments.length} reasignaciones · ${dateRangeLabel(this.reassignmentReportRange)} · ${generatedAt()}`,
       tableName: 'ReporteReasignaciones',
       columns,
       rows: reassignments,
@@ -1228,7 +1130,7 @@ export class AdminComponent {
     ).subscribe({
       next: () => {
         this.message = 'Reasignación registrada correctamente.';
-        this.newReassignment = { IdEquipo: 0, NoPagoNuevo: null, NombreNuevo: '', Motivo: '', IdEdificio: 0, IdArea: 0 };
+        this.newReassignment = emptyReassignment();
         this.reassignmentBuildingId = 0;
         this.reassignmentRegionalId = null;
         this.reassignmentAreas = [];
@@ -1239,7 +1141,7 @@ export class AdminComponent {
         this.deviceOptions = [];
         this.loadData();
       },
-      error: (error) => this.errorMessage = this.getErrorMessage(error, 'No se pudo registrar la reasignación.'),
+      error: (error) => this.errorMessage = apiErrorMessage(error, 'No se pudo registrar la reasignación.'),
     });
   }
 
@@ -1378,15 +1280,5 @@ export class AdminComponent {
   private clearMessages(): void {
     this.message = '';
     this.errorMessage = '';
-  }
-  // Muestra un mensaje de error si la carga de datos falla.
-  private showLoadError(): void {
-    this.errorMessage = 'No se pudo cargar esta sección. Verifica que el backend esté iniciado.';
-    this.isLoading = false;
-    this.isLoadingDevices = false;
-  }
-  // Obtiene el mensaje de error a mostrar, usando un valor de respaldo si no se encuentra un mensaje específico.
-  private getErrorMessage(error: ApiError, fallback: string): string {
-    return apiErrorMessage(error, fallback);
   }
 }

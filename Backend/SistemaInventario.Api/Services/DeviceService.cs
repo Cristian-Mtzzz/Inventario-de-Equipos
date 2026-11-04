@@ -110,6 +110,7 @@ public sealed class DeviceService(InventoryDbContext dbContext) : AssignmentRepo
                            COALESCE(a.REGIONA_ID, b.REGIONA_ID) AS ID_REGIONAL,
                            r.DESCRIPCION AS NOMBRE_REGIONAL,
                            COUNT(*) OVER() AS TOTAL_COUNT,
+                           COUNT(DISTINCT d.NCOMBO) OVER() AS TOTAL_COMBOS,
                            ROW_NUMBER() OVER (ORDER BY {orderSql}) AS ROW_NUM
                     {fromSql}
                     {whereSql}
@@ -126,7 +127,7 @@ public sealed class DeviceService(InventoryDbContext dbContext) : AssignmentRepo
             var connection = DbContext.Database.GetDbConnection();
 
             // Lee una página y devuelve los dispositivos junto con el total de registros encontrados.
-            async Task<(List<DeviceDto> Items, int TotalCount)> ReadPage(int page)
+            async Task<(List<DeviceDto> Items, int TotalCount, int ComboCount)> ReadPage(int page)
             {
                 var startRow = (page - 1) * pageSize;
                 var pageParameters = parameters
@@ -137,20 +138,22 @@ public sealed class DeviceService(InventoryDbContext dbContext) : AssignmentRepo
                 await using var reader = await command.ExecuteReaderAsync(cancellationToken);
                 var items = new List<DeviceDto>(pageSize);
                 var totalCount = 0;
+                var comboCount = 0;
                 while (await reader.ReadAsync(cancellationToken))
                 {
                     if (items.Count == 0)
                     {
                         totalCount = ReadInt(reader, "TOTAL_COUNT");
+                        comboCount = ReadInt(reader, "TOTAL_COMBOS");
                     }
                     items.Add(ReadDevice(reader));
                 }
-                return (items, totalCount);
+                return (items, totalCount, comboCount);
             }
 
             // Si la página solicitada quedó fuera de rango, se ajusta a la última disponible.
             var page = Math.Max(1, requestedPage);
-            var (items, totalCount) = await ReadPage(page);
+            var (items, totalCount, comboCount) = await ReadPage(page);
             if (items.Count == 0 && requestedPage > 1)
             {
                 totalCount = await GetScalar<int>(connection, null,
@@ -159,10 +162,10 @@ public sealed class DeviceService(InventoryDbContext dbContext) : AssignmentRepo
                 page = Math.Clamp(requestedPage, 1, lastPage);
                 if (page != requestedPage)
                 {
-                    (items, _) = await ReadPage(page);
+                    (items, _, comboCount) = await ReadPage(page);
                 }
             }
-            return new PagedResult<DeviceDto>(items, totalCount, page, pageSize);
+            return new PagedResult<DeviceDto>(items, totalCount, page, pageSize, comboCount);
         }
         finally
         {
@@ -299,13 +302,14 @@ public sealed class DeviceService(InventoryDbContext dbContext) : AssignmentRepo
         }, cancellationToken);
 
     // applyToCombo: si el equipo es pieza de un combo, la asignación se aplica a las tres piezas.
-    // Si no, solo cambia este equipo y, cuando su asignación cambia, el combo se separa en
-    // dispositivos individuales (cada pieza conserva su propia asignación).
+    // Si no, solo cambia este equipo y, cuando su asignación cambia, sale del combo; las otras
+    // piezas siguen juntas con la asignación que tenían.
     public Task<bool> UpdateDevice(int idEquipo, CreateDeviceDto device, bool applyToCombo, CancellationToken cancellationToken) =>
         InTransaction(async (connection, transaction) =>
         {
             var assignment = await ResolveAssignment(connection, transaction, device, cancellationToken);
             var newArea = assignment.IsAvailable ? null : device.IdArea;
+            await EnsureEditedInventoryCodeIsFree(connection, transaction, idEquipo, device.CodigoInventario, cancellationToken);
 
             var comboNumber = await GetScalar<string?>(connection, transaction,
                 "SELECT NCOMBO FROM DISPOSITIVOS WHERE ID_EQUIPO = :idEquipo", cancellationToken,
@@ -320,10 +324,11 @@ public sealed class DeviceService(InventoryDbContext dbContext) : AssignmentRepo
             foreach (var previous in previousAssignments)
             {
                 var wasAssigned = string.Equals(previous.Estado, "ASIGNADO", StringComparison.OrdinalIgnoreCase);
+                // Igual que en AssignmentChanged: espacios o mayúsculas distintas no son otro responsable.
                 if (!assignment.IsAvailable
                     && (!wasAssigned
-                        || previous.Pago != assignment.NumeroPago
-                        || previous.Nombre != assignment.NombreAsignado))
+                        || Clean(previous.Pago) != Clean(assignment.NumeroPago)
+                        || !Clean(previous.Nombre).Equals(Clean(assignment.NombreAsignado), StringComparison.OrdinalIgnoreCase)))
                 {
                     await Execute(connection, transaction, """
                         INSERT INTO REASIGNACIONES
@@ -375,7 +380,7 @@ public sealed class DeviceService(InventoryDbContext dbContext) : AssignmentRepo
             }
             else if (isComboPart && current != default && AssignmentChanged(current, assignment, newArea))
             {
-                await SplitCombo(connection, transaction, comboNumber!, cancellationToken);
+                await RemoveFromCombo(connection, transaction, idEquipo, cancellationToken);
             }
 
             return updated > 0;
@@ -386,69 +391,13 @@ public sealed class DeviceService(InventoryDbContext dbContext) : AssignmentRepo
         (bool IsAvailable, string Estado, string? NumeroPago, string? NombreAsignado) assignment,
         int? newArea)
     {
-        static string Clean(string? value) => value?.Trim() ?? string.Empty;
         return !Clean(previous.Estado).Equals(Clean(assignment.Estado), StringComparison.OrdinalIgnoreCase)
             || Clean(previous.Pago) != Clean(assignment.NumeroPago)
             || !Clean(previous.Nombre).Equals(Clean(assignment.NombreAsignado), StringComparison.OrdinalIgnoreCase)
             || previous.IdArea != newArea;
     }
 
-    // Disuelve un combo: sus piezas pasan a ser dispositivos individuales del tipo de su
-    // componente (CPU, Teclado, Monitor) y conservan su número de ingreso y su asignación.
-    private static Task<int> SplitCombo(
-        DbConnection connection,
-        DbTransaction transaction,
-        string comboNumber,
-        CancellationToken cancellationToken) =>
-        Execute(connection, transaction, """
-            UPDATE DISPOSITIVOS d
-            SET ID_TIPO = COALESCE(
-                    (SELECT MIN(t.ID_TIPO)
-                     FROM TIPOS_DISPOSITIVOS t
-                     WHERE UPPER(TRIM(t.TIPO_DISPOSITIVO)) = UPPER(TRIM(d.COMPONENTE))),
-                    d.ID_TIPO),
-                NCOMBO = NULL,
-                COMPONENTE = NULL
-            WHERE d.NCOMBO = :ncombo
-            """, cancellationToken, ("ncombo", comboNumber));
-
-    public Task<bool> UpdateDeviceByIdentifier(
-        string? codigoInventario,
-        string? noSerie,
-        CreateDeviceDto device,
-        CancellationToken cancellationToken)
-    {
-        var identifier = !string.IsNullOrWhiteSpace(codigoInventario) ? codigoInventario.Trim() : noSerie?.Trim();
-        var identifierColumn = !string.IsNullOrWhiteSpace(codigoInventario) ? "CODIGO_INVENTARIO" : "NO_SERIE";
-        if (string.IsNullOrWhiteSpace(identifier))
-        {
-            throw new ArgumentException("Debe indicar el código de inventario o el número de serie.");
-        }
-
-        return InTransaction(async (connection, transaction) =>
-        {
-            var assignment = await ResolveAssignment(connection, transaction, device, cancellationToken);
-            var updated = await Execute(connection, transaction, $"""
-                UPDATE DISPOSITIVOS
-                SET CODIGO_INVENTARIO = :codigo,
-                    NO_SERIE = :serie,
-                    MARCA = :marca,
-                    MODELO = :modelo,
-                    ID_TIPO = :tipo,
-                    ESTADO = :estado,
-                    NUMERO_PAGO_ASIGNADO = :pago,
-                    NOMBRE_ASIGNADO = :nombre,
-                    ID_AREA = :area
-                WHERE {identifierColumn} = :identifier
-                """, cancellationToken,
-                ("codigo", device.CodigoInventario), ("serie", device.NoSerie),
-                ("marca", device.Marca), ("modelo", device.Modelo), ("tipo", device.IdTipo),
-                ("estado", assignment.Estado), ("pago", assignment.NumeroPago), ("nombre", assignment.NombreAsignado),
-                ("area", assignment.IsAvailable ? null : device.IdArea),
-                ("identifier", identifier));
-            return updated > 0;
-        }, cancellationToken);
-    }
+    private static string Clean(string? value) => value?.Trim() ?? string.Empty;
 
     public Task<bool> DeleteDevice(int idEquipo, CancellationToken cancellationToken) =>
         InTransaction(async (connection, transaction) =>
@@ -505,6 +454,32 @@ public sealed class DeviceService(InventoryDbContext dbContext) : AssignmentRepo
             {
                 throw new InvalidOperationException($"El inventario {code} ya está registrado.");
             }
+        }
+    }
+
+    // Al editar solo se valida si el código cambió: así un equipo que ya compartía código con
+    // otro (datos anteriores a la validación) se puede seguir editando sin tocar su inventario.
+    private static async Task EnsureEditedInventoryCodeIsFree(
+        DbConnection connection,
+        DbTransaction transaction,
+        int idEquipo,
+        string inventoryCode,
+        CancellationToken cancellationToken)
+    {
+        var code = inventoryCode.Trim();
+        var currentCode = await GetScalar<string?>(connection, transaction,
+            "SELECT TRIM(CODIGO_INVENTARIO) FROM DISPOSITIVOS WHERE ID_EQUIPO = :idEquipo", cancellationToken,
+            ("idEquipo", idEquipo));
+        if (string.Equals(currentCode, code, StringComparison.OrdinalIgnoreCase)) return;
+
+        if (await Exists(connection, transaction, """
+            SELECT 1
+            FROM DISPOSITIVOS
+            WHERE UPPER(TRIM(CODIGO_INVENTARIO)) = UPPER(:codigo)
+              AND ID_EQUIPO <> :idEquipo
+            """, cancellationToken, ("codigo", code), ("idEquipo", idEquipo)))
+        {
+            throw new InvalidOperationException($"El inventario {code} ya está registrado.");
         }
     }
 

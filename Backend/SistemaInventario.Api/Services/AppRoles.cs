@@ -11,6 +11,8 @@ public static class AppRoles
     public const string RecepcionTaller = "RecepcionTaller";
     public const string TecnicoTaller = "TecnicoTaller";
     public const string AdminTicket = "AdminTicket";
+    // "Técnico": atiende solo tickets, sin módulo de taller. TecnicoTaller ("Técnico Taller") hace ambos.
+    public const string TecnicoTicket = "TecnicoTicket";
 
     // Combinaciones usadas en [Authorize(Roles = ...)].
     public const string WorkshopManagers = Admin + "," + AdminTaller + "," + Taller;
@@ -21,19 +23,25 @@ public static class AppRoles
     // filtrar al empleado que solicita el soporte.
     public const string CatalogViewers = DeviceViewers + "," + RecepcionTaller + "," + AdminTicket;
 
-    // Roles del módulo de tickets: el admin crea y asigna, y quien atiende es el mismo
-    // técnico de taller, que trabaja en Taller y en Tickets.
+    // Roles del módulo de tickets: el admin crea y asigna; atienden el técnico de taller (que
+    // trabaja en Taller y en Tickets) y el técnico que solo atiende tickets.
     public const string TicketManagers = Admin + "," + AdminTicket;
-    public const string TicketUsers = TicketManagers + "," + TecnicoTaller;
+    public const string TicketUsers = TicketManagers + "," + TecnicoTaller + "," + TecnicoTicket;
+
+    // Cuenta del Control de permisos, que es un sistema aparte con la misma base de datos. En el
+    // inventario no tiene panel (entra a "sin acceso") y la pantalla de Usuarios no la lista ni la
+    // puede asignar: no está en All.
+    public const string Permisos = "Permisos";
 
     public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
-        Admin, UsuarioComun, Taller, AdminTaller, RecepcionTaller, TecnicoTaller, AdminTicket,
+        Admin, UsuarioComun, Taller, AdminTaller, RecepcionTaller, TecnicoTaller, AdminTicket, TecnicoTicket,
     };
 
-    // El administrador de tickets solo trabaja en ese módulo.
+    // El administrador de tickets y el técnico de tickets solo trabajan en ese módulo.
     public static bool IsTicketRole(string role) =>
-        role.Equals(AdminTicket, StringComparison.OrdinalIgnoreCase);
+        role.Equals(AdminTicket, StringComparison.OrdinalIgnoreCase)
+        || role.Equals(TecnicoTicket, StringComparison.OrdinalIgnoreCase);
 
     // Roles de taller que solo pueden tener el módulo TALLER.
     public static bool IsRestrictedWorkshopRole(string role) =>

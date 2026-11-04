@@ -77,7 +77,8 @@
             },
             "development": {
               "buildTarget": "SistemaInventario:build:development",
-              "proxyConfig": "proxy.conf.json"
+              "proxyConfig": "proxy.conf.json",
+              "allowedHosts": [".devtunnels.ms"]
             }
           },
           "defaultConfiguration": "development"

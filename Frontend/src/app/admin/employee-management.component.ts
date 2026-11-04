@@ -4,6 +4,7 @@ import { finalize } from 'rxjs';
 import { DigitsOnlyDirective } from '../shared/digits-only.directive';
 import { PagePipe, TablePageSizeComponent, TablePaginatorComponent } from '../shared/table-paginator';
 import { apiErrorMessage } from '../shared/api-response';
+import { memoizeLast } from '../shared/memo';
 import { AdminService } from './admin.service';
 import { EmployeeRosterRow } from './admin.models';
 
@@ -51,15 +52,19 @@ export class EmployeeManagementComponent {
   }
 
   get filteredEmployees(): EmployeeRosterRow[] {
-    const term = this.searchTerm.trim().toUpperCase();
-    if (!term) return this.employees;
-    return this.employees.filter((employee) =>
+    return this.filterEmployees(this.employees, this.searchTerm);
+  }
+
+  private readonly filterEmployees = memoizeLast((employees: EmployeeRosterRow[], searchTerm: string) => {
+    const term = searchTerm.trim().toUpperCase();
+    if (!term) return employees;
+    return employees.filter((employee) =>
       employee.NombreCompleto.toUpperCase().includes(term)
       || (employee.NoPago ?? '').toUpperCase().includes(term)
       || (employee.Departamento ?? '').toUpperCase().includes(term)
       || (employee.Edificio ?? '').toUpperCase().includes(term)
       || (employee.Region ?? '').toUpperCase().includes(term));
-  }
+  });
 
   display(value: string | null): string {
     return value?.trim() ? value : '-';
@@ -84,6 +89,9 @@ export class EmployeeManagementComponent {
 
   reload(): void {
     this.isLoading = true;
+    // Avisa a la vista para que la tabla muestre "Cargando..." también cuando la recarga la pide el
+    // panel (por ejemplo, su botón Refrescar); si no, solo se redibuja al llegar los datos.
+    this.changeDetector.markForCheck();
     this.clearMessages();
     this.adminService.getEmployeeRoster().pipe(
       finalize(() => { this.isLoading = false; this.changeDetector.markForCheck(); })
@@ -117,7 +125,9 @@ export class EmployeeManagementComponent {
       finalize(() => { this.savingKey = null; this.changeDetector.markForCheck(); })
     ).subscribe({
       next: () => {
-        employee.NoPago = typed || null;
+        // Se reemplaza la lista (no la fila en sitio) para que el filtro en caché se recalcule.
+        this.employees = this.employees.map((row) =>
+          row.EmployeeKey === employee.EmployeeKey ? { ...row, NoPago: typed || null } : row);
         this.drafts.delete(employee.EmployeeKey);
         this.message = typed
           ? `No. de pago ${typed} asignado a ${employee.NombreCompleto}.`

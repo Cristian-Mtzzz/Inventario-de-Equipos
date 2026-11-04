@@ -53,7 +53,7 @@ export const routes: Routes = [
 	{
 		path: 'tickets',
 		canActivate: [authGuard],
-		data: { role: ['AdminTicket', 'TecnicoTaller'], modules: [AppModules.Tickets] },
+		data: { role: ['AdminTicket', 'TecnicoTaller', 'TecnicoTicket'], modules: [AppModules.Tickets] },
 		loadComponent: () => import('./tickets/tickets.component').then((module) => module.TicketsComponent),
 	},
 	{

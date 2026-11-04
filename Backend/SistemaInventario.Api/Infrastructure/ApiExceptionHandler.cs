@@ -9,7 +9,6 @@ namespace SistemaInventario.Api.Infrastructure;
 public sealed class ApiExceptionHandler(ILogger<ApiExceptionHandler> logger) : IExceptionHandler
 {
     // Códigos ORA/ODP.NET que indican que la base de datos no está disponible.
-    // Códigos ORA/ODP.NET que indican que la base de datos no está disponible.
     private static readonly HashSet<int> UnavailableOracleErrors =
     [
         1033, 1034, 1089, 3113, 3114, 3135, 12170, 12514, 12528, 12537, 12541, 12543, 12545, 50000,
@@ -20,8 +19,10 @@ public sealed class ApiExceptionHandler(ILogger<ApiExceptionHandler> logger) : I
         Exception exception,
         CancellationToken cancellationToken)
     {
-        // El cliente canceló la solicitud: no hay a quién responder.
-        if (exception is OperationCanceledException && httpContext.RequestAborted.IsCancellationRequested)
+        // El cliente canceló la solicitud: no hay a quién responder. Si la cancelación llegó a
+        // mitad de una consulta, Oracle la reporta como ORA-01013 en lugar de OperationCanceledException.
+        if (exception is OperationCanceledException or OracleException { Number: 1013 }
+            && httpContext.RequestAborted.IsCancellationRequested)
         {
             return true;
         }
@@ -69,6 +70,9 @@ public sealed class ApiExceptionHandler(ILogger<ApiExceptionHandler> logger) : I
             (StatusCodes.Status409Conflict, "Otro usuario está modificando estos datos. Intenta de nuevo en unos segundos."),
         OracleException oracle when UnavailableOracleErrors.Contains(oracle.Number) =>
             (StatusCodes.Status503ServiceUnavailable, "La base de datos no está disponible temporalmente."),
+        // Acceso negado con un motivo para el usuario.
+        UnauthorizedAccessException denied =>
+            (StatusCodes.Status403Forbidden, denied.Message),
         // Solo la ArgumentException base: la lanzan los servicios con un mensaje para el usuario.
         ArgumentException argument when argument.GetType() == typeof(ArgumentException) =>
             (StatusCodes.Status400BadRequest, argument.Message),

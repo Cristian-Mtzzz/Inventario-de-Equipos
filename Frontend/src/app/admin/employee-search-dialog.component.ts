@@ -1,4 +1,4 @@
-import { Component, Input, Output, output, signal } from '@angular/core';
+import { Component, Input, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { AdminService } from './admin.service';

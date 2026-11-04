@@ -161,14 +161,3 @@
     border-color: #276968;
     background: #e8f2ee;
 }
-
-/* Rango de fechas del reporte: Desde y Hasta en la misma fila. */
-.report-date-range {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: .75rem;
-}
-
-.report-date-range label {
-    display: block;
-}

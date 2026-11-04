@@ -47,7 +47,7 @@ export class AuthComponent {
       catchError((error: HttpErrorResponse) => {
         // 429: demasiados intentos fallidos; la API indica cuánto esperar.
         this.errorMessage.set(error.status === 401
-          ? 'El usuario o la contrasena no son correctos.'
+          ? 'El usuario o la contraseña no son correctos.'
           : error.status === 429
             ? apiErrorMessage(error, 'Demasiados intentos fallidos. Espera unos minutos e intenta de nuevo.')
             : 'No fue posible conectar con el servicio. Intenta nuevamente.');

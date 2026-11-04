@@ -4,7 +4,7 @@ import { PagePipe, TablePageSizeComponent, TablePaginatorComponent } from '../sh
 import { finalize, retry } from 'rxjs';
 import { AuthService } from '../auth/auth.service';
 import { AppModules } from '../auth/app-modules';
-import { ApiError, apiErrorMessage } from '../shared/api-response';
+import { apiErrorMessage } from '../shared/api-response';
 import { AdminService } from './admin.service';
 import { AdminUser, CreateAdminUser } from './admin.models';
 
@@ -102,6 +102,9 @@ export class UserManagementComponent {
 
     this.usersRequestInFlight = true;
     this.isLoadingUsers = true;
+    // Avisa a la vista para que la tabla muestre "Cargando..." también cuando la recarga la pide el
+    // panel (por ejemplo, su botón Refrescar); si no, solo se redibuja al llegar los datos.
+    this.changeDetector.markForCheck();
     this.adminService.getUsers().pipe(
       retry({ count: 3, delay: 1000 }),
       finalize(() => {
@@ -117,7 +120,7 @@ export class UserManagementComponent {
       },
       error: (error) => {
         this.usersLoaded = false;
-        this.errorMessage = this.getErrorMessage(error, 'No se pudieron cargar los usuarios.');
+        this.errorMessage = apiErrorMessage(error, 'No se pudieron cargar los usuarios.');
         this.changeDetector.markForCheck();
       },
     });
@@ -134,7 +137,7 @@ export class UserManagementComponent {
 
   // Roles de tickets: su módulo lo fija el rol, no las casillas.
   isTicketRole(role: string): boolean {
-    return role === 'AdminTicket';
+    return role === 'AdminTicket' || role === 'TecnicoTicket';
   }
 
   // Los roles con módulo fijo no permiten marcar módulos a mano.
@@ -226,7 +229,7 @@ export class UserManagementComponent {
     this.pendingUserId = null;
     this.adminService.deleteUser(idUsuario).subscribe({
       next: () => { this.message = 'Usuario eliminado.'; this.reload(); },
-      error: (error) => this.errorMessage = this.getErrorMessage(error, 'No se pudo quitar el usuario.'),
+      error: (error) => this.errorMessage = apiErrorMessage(error, 'No se pudo quitar el usuario.'),
     });
   }
 
@@ -249,7 +252,7 @@ export class UserManagementComponent {
         this.cancelPasswordReset();
         this.reload();
       },
-      error: (error) => this.errorMessage = this.getErrorMessage(error, 'No se pudo restablecer la contraseña.'),
+      error: (error) => this.errorMessage = apiErrorMessage(error, 'No se pudo restablecer la contraseña.'),
     });
   }
 
@@ -275,7 +278,7 @@ export class UserManagementComponent {
         this.changeDetector.markForCheck();
       },
       error: (error) => {
-        this.errorMessage = this.getErrorMessage(error, 'No se pudo agregar el usuario.');
+        this.errorMessage = apiErrorMessage(error, 'No se pudo agregar el usuario.');
         this.changeDetector.markForCheck();
       },
     });
@@ -301,7 +304,7 @@ export class UserManagementComponent {
         this.changeDetector.markForCheck();
       },
       error: (error) => {
-        this.errorMessage = this.getErrorMessage(error, 'No se pudo actualizar el usuario.');
+        this.errorMessage = apiErrorMessage(error, 'No se pudo actualizar el usuario.');
         this.changeDetector.markForCheck();
       },
     });
@@ -326,9 +329,5 @@ export class UserManagementComponent {
   private clearMessages(): void {
     this.message = '';
     this.errorMessage = '';
-  }
-
-  private getErrorMessage(error: ApiError, fallback: string): string {
-    return apiErrorMessage(error, fallback);
   }
 }

@@ -104,7 +104,7 @@ describe('parseDeviceImport', () => {
     expect(fileErrors).toEqual([]);
     expect(items[0].rows[0]).toEqual({
       rowNumber: 4, comboNo: '', equipo: 'Cámara Web', equipoKey: 'CAMARAWEB',
-      marca: 'Logitech', modelo: 'C920', serie: 'HGCSMC4', inventario: '4126461',
+      marca: 'LOGITECH', modelo: 'C920', serie: 'HGCSMC4', inventario: '4126461',
     });
   });
 

@@ -3,7 +3,7 @@ import { Injectable } from '@angular/core';
 import { Observable, map } from 'rxjs';
 import { apiUrl } from '../api-url';
 import { toPascalCase } from '../shared/api-response';
-import { Maintenance, MaintenanceAssessmentRequest, MaintenanceEditRequest, MaintenanceEntryRequest, MaintenanceExitRequest, ReceptionDefaults, ReceptionEntryRequest, WorkshopDevice, WorkshopTechnician } from './taller.models';
+import { Maintenance, MaintenanceAssessmentRequest, MaintenanceEntryRequest, MaintenanceExitRequest, ReceptionDefaults, ReceptionEntryRequest, WorkshopDevice, WorkshopTechnician } from './taller.models';
 
 const API_TALLER_URL = apiUrl('taller');
 
@@ -37,10 +37,6 @@ export class TallerService {
   }
   updateAssessment(idMantenimiento: number, assessment: MaintenanceAssessmentRequest): Observable<void> {
     return this.httpClient.put<void>(`${API_TALLER_URL}/maintenances/${idMantenimiento}/assessment`, assessment);
-  }
-  // Edita la información de una reparación existente.
-  editMaintenance(idMantenimiento: number, maintenance: MaintenanceEditRequest): Observable<void> {
-    return this.httpClient.put<void>(`${API_TALLER_URL}/maintenances/${idMantenimiento}/edit`, maintenance);
   }
   // Quién recibe (usuario en sesión) y técnico asignado por defecto para el formulario de recepción.
   getReceptionDefaults(): Observable<ReceptionDefaults> {

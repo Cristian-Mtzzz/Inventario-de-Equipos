@@ -1,9 +1,7 @@
-using System.Data;
-using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.EntityFrameworkCore;
 using Oracle.ManagedDataAccess.Client;
 using SistemaInventario.Api.Data;
+using SistemaInventario.Api.Infrastructure;
 
 namespace SistemaInventario.Api.Services;
 
@@ -56,8 +54,11 @@ public interface IModulePermissionService
     Task<int> GetSuperAdminCount(CancellationToken cancellationToken);
 }
 
-public sealed class ModulePermissionService(InventoryDbContext dbContext) : IModulePermissionService
+public sealed class ModulePermissionService(InventoryDbContext dbContext) : OracleRepository(dbContext), IModulePermissionService
 {
+    // ORA-00942: la tabla USUARIO_MODULOS todavía no existe; se trata como "sin módulos".
+    private const int TableNotFound = 942;
+
     // El servicio es Scoped: la caché vive solo durante una solicitud HTTP. Evita repetir
     // la consulta cuando un endpoint evalúa varias políticas, sin retrasar cambios de permisos.
     private readonly Dictionary<int, IReadOnlyList<string>> modulesByUser = [];
@@ -72,39 +73,23 @@ public sealed class ModulePermissionService(InventoryDbContext dbContext) : IMod
 
     private async Task<IReadOnlyList<string>> LoadModules(int userId, CancellationToken cancellationToken)
     {
-        await dbContext.Database.OpenConnectionAsync(cancellationToken);
         try
         {
-            await using var command = dbContext.Database.GetDbConnection().CreateCommand();
             // A los módulos guardados se suman los que implica el rol, para que un permiso
             // que depende del rol valga aunque el usuario se haya creado antes de existir
             // ese módulo y nadie lo haya vuelto a guardar.
-            command.CommandText = """
+            var modules = await ReadList("""
                 SELECT MODULO FROM USUARIO_MODULOS WHERE ID_USUARIO = :userId
                 UNION
                 SELECT :impliedModule FROM USUARIOS
-                WHERE ID_USUARIO = :userIdRole AND ROL = :impliedRole
-                """;
-            if (command is OracleCommand oracleCommand) oracleCommand.BindByName = true;
-            AddUserId(command, userId);
-            AddUserId(command, userId, "userIdRole");
-            AddText(command, "impliedModule", AppModules.Tickets);
-            AddText(command, "impliedRole", AppRoles.TecnicoTaller);
-            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-            var modules = new List<string>();
-            while (await reader.ReadAsync(cancellationToken))
-            {
-                if (!reader.IsDBNull(0)) modules.Add(reader.GetString(0));
-            }
-            return modules;
+                WHERE ID_USUARIO = :userId AND ROL = :impliedRole
+                """, reader => ReadNullableString(reader, "MODULO"), cancellationToken,
+                ("userId", userId), ("impliedModule", AppModules.Tickets), ("impliedRole", AppRoles.TecnicoTaller));
+            return modules.OfType<string>().ToList();
         }
-        catch (OracleException ex) when (ex.Number == 942)
+        catch (OracleException ex) when (ex.Number == TableNotFound)
         {
-            return Array.Empty<string>();
-        }
-        finally
-        {
-            await dbContext.Database.CloseConnectionAsync();
+            return [];
         }
     }
 
@@ -120,44 +105,16 @@ public sealed class ModulePermissionService(InventoryDbContext dbContext) : IMod
 
     public async Task<int> GetSuperAdminCount(CancellationToken cancellationToken)
     {
-        await dbContext.Database.OpenConnectionAsync(cancellationToken);
         try
         {
-            await using var command = dbContext.Database.GetDbConnection().CreateCommand();
-            command.CommandText = "SELECT COUNT(*) FROM USUARIO_MODULOS WHERE MODULO = :module";
-            var parameter = command.CreateParameter();
-            parameter.ParameterName = "module";
-            parameter.DbType = DbType.String;
-            parameter.Value = AppModules.SuperAdmin;
-            command.Parameters.Add(parameter);
-            return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken));
+            var counts = await ReadList("SELECT COUNT(*) AS TOTAL FROM USUARIO_MODULOS WHERE MODULO = :module",
+                reader => ReadInt(reader, "TOTAL"), cancellationToken, ("module", AppModules.SuperAdmin));
+            return counts[0];
         }
-        catch (OracleException ex) when (ex.Number == 942)
+        catch (OracleException ex) when (ex.Number == TableNotFound)
         {
             return 0;
         }
-        finally
-        {
-            await dbContext.Database.CloseConnectionAsync();
-        }
-    }
-
-    private static void AddUserId(System.Data.Common.DbCommand command, int userId, string name = "userId")
-    {
-        var parameter = command.CreateParameter();
-        parameter.ParameterName = name;
-        parameter.DbType = DbType.Int32;
-        parameter.Value = userId;
-        command.Parameters.Add(parameter);
-    }
-
-    private static void AddText(System.Data.Common.DbCommand command, string name, string value)
-    {
-        var parameter = command.CreateParameter();
-        parameter.ParameterName = name;
-        parameter.DbType = DbType.String;
-        parameter.Value = value;
-        command.Parameters.Add(parameter);
     }
 }
 
@@ -168,9 +125,7 @@ public sealed class ModuleAccessAuthorizationHandler(IModulePermissionService pe
         AuthorizationHandlerContext context,
         ModuleAccessRequirement requirement)
     {
-        var userIdValue = context.User.FindFirstValue("sub")
-            ?? context.User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (int.TryParse(userIdValue, out var userId)
+        if (context.User.GetUserId() is { } userId
             && await permissions.HasAnyModule(userId, requirement.Modules, CancellationToken.None))
         {
             context.Succeed(requirement);

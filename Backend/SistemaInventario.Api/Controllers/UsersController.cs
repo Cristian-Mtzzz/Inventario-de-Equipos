@@ -1,7 +1,7 @@
-using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Oracle.ManagedDataAccess.Client;
+using SistemaInventario.Api.Infrastructure;
 using SistemaInventario.Api.Models;
 using SistemaInventario.Api.Services;
 
@@ -148,7 +148,7 @@ public sealed class UsersController(
             .Contains(AppModules.SuperAdmin, StringComparer.OrdinalIgnoreCase);
 
     private async Task<bool> CurrentUserIsSuperAdmin(CancellationToken cancellationToken) =>
-        int.TryParse(User.FindFirstValue("sub") ?? User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId)
+        User.GetUserId() is { } userId
         && await IsSuperAdmin(userId, cancellationToken);
 
     // Solo se aceptan los módulos asignables; ADMIN_TOTAL se otorga con IsSuperAdmin, no en la lista.

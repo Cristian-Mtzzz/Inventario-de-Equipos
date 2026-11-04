@@ -25,10 +25,6 @@ export class AuthService {
   // Nombre a mostrar en el aviso de bienvenida; se limpia solo tras un login reciente.
   readonly welcomeName = signal<string | null>(null);
   readonly moduleAccess = signal<ModuleAccess>({ Modules: [], IsSuperAdmin: false });
-  readonly isAuthenticated$: Observable<boolean> = new Observable((subscriber) => {
-    subscriber.next(this.hasValidToken());
-    return this.currentUser$.subscribe((user) => subscriber.next(user !== null));
-  });
 
   constructor(private readonly httpClient: HttpClient, private readonly router: Router) {
     localStorage.removeItem(AUTH_USER_KEY);
@@ -113,6 +109,8 @@ export class AuthService {
   }
 
   defaultRoute(): string {
+    // Las cuentas del Control de permisos (sistema aparte) no tienen panel en el inventario.
+    if (this.hasRole(['Permisos'])) return '/sin-acceso';
     const access = this.moduleAccess();
     const hasAdminModule = access.IsSuperAdmin || access.Modules.some((module) => [
       'DISPOSITIVOS', 'REASIGNACIONES', 'TALLER', 'USUARIOS', 'MANTENIMIENTO', 'EMPLEADOS', 'TICKETS',
@@ -131,6 +129,7 @@ export class AuthService {
       case 'TecnicoTaller': return '/taller/tecnico';
       case 'AdminTaller': return '/taller';
       case 'AdminTicket': return '/tickets';
+      case 'TecnicoTicket': return '/tickets';
       default: return '/sin-acceso';
     }
   }
@@ -150,10 +149,6 @@ export class AuthService {
   hasModule(module: string): boolean {
     const access = this.moduleAccess();
     return access.IsSuperAdmin || access.Modules.includes(module);
-  }
-
-  hasAnyModule(modules: string[]): boolean {
-    return this.moduleAccess().IsSuperAdmin || modules.some((module) => this.moduleAccess().Modules.includes(module));
   }
 
   // Obtiene el token JWT almacenado en la sesión local.
@@ -247,10 +242,6 @@ export class AuthService {
       Modules: [],
       IsSuperAdmin: false,
     };
-  }
-  // Verifica si el token almacenado es válido y si hay un usuario actual.
-  private hasValidToken(): boolean {
-    return this.getToken() !== null && this.currentUserSubject.value !== null;
   }
 
   private scheduleInactivityExpiry(lastActivity: number): void {

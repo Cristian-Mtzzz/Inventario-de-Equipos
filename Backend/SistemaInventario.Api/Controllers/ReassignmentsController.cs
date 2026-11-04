@@ -26,6 +26,12 @@ public sealed class ReassignmentsController(IReassignmentService reassignmentSer
             return BadRequest(new { Message = "Selecciona el equipo, edificio y departamento de la reasignación." });
         }
 
+        // El formulario ya lo exige; aquí se valida también para no guardar historial sin motivo.
+        if (string.IsNullOrWhiteSpace(reassignment.Motivo))
+        {
+            return BadRequest(new { Message = "Escribe el motivo de la reasignación." });
+        }
+
         if (!string.IsNullOrWhiteSpace(reassignment.NoPagoNuevo))
         {
             var pago = reassignment.NoPagoNuevo.Trim();
@@ -45,11 +51,4 @@ public sealed class ReassignmentsController(IReassignmentService reassignmentSer
             return BadRequest(new { Message = exception.Message });
         }
     }
-
-    [HttpDelete("reassignments/{idReasignacion:int}")]
-    [Authorize(Policy = ModulePolicies.Reassignments)]
-    public async Task<IActionResult> DeleteReassignment(int idReasignacion, CancellationToken cancellationToken) =>
-        await reassignmentService.DeleteReassignment(idReasignacion, cancellationToken)
-            ? NoContent()
-            : NotFound(new { Message = "No se encontró la reasignación indicada." });
 }

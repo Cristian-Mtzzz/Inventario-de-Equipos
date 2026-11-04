@@ -17,6 +17,7 @@
         <label class="report-field report-type-field">
           <span>Tipo de reporte</span>
           <select [ngModel]="reportType" (ngModelChange)="selectReportType($event)" name="reportType" required>
+            <option value="">Selecciona el tipo de reporte</option>
             <option value="all">Todos los dispositivos</option>
             <option value="type">Por tipo de dispositivo</option>
             <option value="brand">Por marca</option>
@@ -27,10 +28,15 @@
           </select>
         </label>
 
-        <label class="report-field report-search-field">
-          <span>Buscar</span>
-          <input type="search" [(ngModel)]="searchTerm" name="reportSearch"
-            placeholder="Código de inventario o número de serie" />
+        <!-- Los dispositivos no guardan fecha de registro: el rango se aplica a la fecha de asignación. -->
+        <label class="report-field">
+          <span>Asignados desde</span>
+          <input type="date" [(ngModel)]="dateRange.desde" name="reportFrom" required />
+        </label>
+
+        <label class="report-field">
+          <span>Asignados hasta</span>
+          <input type="date" [(ngModel)]="dateRange.hasta" name="reportTo" required />
         </label>
 
         @if (reportType === 'type') {
@@ -49,7 +55,7 @@
         @if (reportType === 'brand') {
         <label class="report-field">
           <span>Marca</span>
-          <input type="text" [(ngModel)]="brand" name="reportBrand" placeholder="Escribe la marca" required />
+          <input appUppercase type="text" [(ngModel)]="brand" name="reportBrand" placeholder="Escribe la marca" required />
         </label>
         }
 
@@ -102,7 +108,9 @@
         }
       </div>
 
-      @if (totalMatchingDevices !== null) {
+      @if (dateRangeError) {
+      <p class="field-hint" aria-live="polite">{{ dateRangeError }}</p>
+      } @else if (!exportNotice && totalMatchingDevices !== null) {
       <p class="report-count">{{ totalMatchingDevices }} dispositivos coinciden con este reporte</p>
       }
 

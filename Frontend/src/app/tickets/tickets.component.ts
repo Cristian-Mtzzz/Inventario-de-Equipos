@@ -8,12 +8,15 @@ import { AuthService } from '../auth/auth.service';
 import { AppHeaderComponent } from '../shared/app-header.component';
 import { ModuleTabsComponent } from '../shared/module-tabs.component';
 import { apiErrorMessage } from '../shared/api-response';
+import { memoizeLast } from '../shared/memo';
 import { DigitsOnlyDirective } from '../shared/digits-only.directive';
+import { HighlightInvalidDirective, RequiredIdDirective } from '../shared/required-fields.directive';
 import { EmployeeLookupComponent, EmployeeLookupResult } from '../shared/employee-lookup.component';
 import { PagePipe, TablePageSizeComponent, TablePaginatorComponent } from '../shared/table-paginator';
 import { CreateTicketRequest, FinishTicketRequest, TICKET_SUPPORT_TYPES, Ticket, TicketAlertThresholds, TicketSupportType, TicketTechnician } from './tickets.models';
 import { TicketsService } from './tickets.service';
-import { TicketReportFilters, emptyTicketReportFilters, exportTicketsReport, filterTicketsForReport } from './tickets-report';
+import { TicketReportFilters, elapsed, emptyTicketReportFilters, exportTicketsReport, filterTicketsForReport } from './tickets-report';
+import { dateRangeError, requiredDateRangeNotice } from '../shared/excel-report';
 
 type TicketWindow = 'none' | 'create' | 'reassign' | 'finish' | 'report';
 
@@ -32,7 +35,7 @@ const emptyFinish = (): FinishTicketRequest => ({ NoPago: '', Observaciones: '',
 
 @Component({
   selector: 'app-tickets',
-  imports: [DatePipe, FormsModule, AppHeaderComponent, ModuleTabsComponent, DigitsOnlyDirective, EmployeeLookupComponent, PagePipe, TablePageSizeComponent, TablePaginatorComponent],
+  imports: [DatePipe, FormsModule, AppHeaderComponent, ModuleTabsComponent, DigitsOnlyDirective, HighlightInvalidDirective, RequiredIdDirective, EmployeeLookupComponent, PagePipe, TablePageSizeComponent, TablePaginatorComponent],
   templateUrl: './tickets.component.html',
   // Reusa los estilos del taller para que el módulo se vea igual que el resto del sistema;
   // tickets.component.css solo agrega lo propio de esta pantalla.
@@ -115,20 +118,26 @@ export class TicketsComponent {
   }
 
   get isTicketManager(): boolean { return this.authService.hasRole(['Admin', 'AdminTicket']); }
-  get isTechnician(): boolean { return this.authService.hasRole(['TecnicoTaller']) && !this.isTicketManager; }
+  get isTechnician(): boolean { return this.authService.hasRole(['TecnicoTaller', 'TecnicoTicket']) && !this.isTicketManager; }
 
 
+  // El reloj de cada segundo vuelve a pintar la tabla; el filtro solo se recalcula si cambian
+  // los tickets o el texto buscado.
   get filteredTickets(): Ticket[] {
-    const term = this.searchTerm.trim().toUpperCase();
-    if (!term) return this.tickets;
-    return this.tickets.filter((ticket) =>
+    return this.filterTickets(this.tickets, this.searchTerm);
+  }
+
+  private readonly filterTickets = memoizeLast((tickets: Ticket[], searchTerm: string) => {
+    const term = searchTerm.trim().toUpperCase();
+    if (!term) return tickets;
+    return tickets.filter((ticket) =>
       ticket.Empleado.toUpperCase().includes(term)
       || ticket.Detalle.toUpperCase().includes(term)
       || (ticket.Tecnico ?? '').toUpperCase().includes(term)
       || (ticket.Departamento ?? '').toUpperCase().includes(term)
       || this.supportTypeLabel(ticket.TipoSoporte).toUpperCase().includes(term)
       || String(ticket.IdTicket).includes(term));
-  }
+  });
 
   display(value: string | null): string { return value?.trim() ? value : '-'; }
 
@@ -174,14 +183,9 @@ export class TicketsComponent {
     return 'late';
   }
 
-  // Duración del servicio en un formato corto: "1 h 25 min".
+  // Duración del servicio en un formato corto: "1d, 22h, 20m".
   elapsed(ticket: Ticket): string {
-    if (ticket.MinutosTranscurridos === null) return '-';
-    const minutes = Math.max(0, ticket.MinutosTranscurridos);
-    const hours = Math.floor(minutes / 60);
-    const rest = minutes % 60;
-    if (hours === 0) return `${rest} min`;
-    return rest === 0 ? `${hours} h` : `${hours} h ${rest} min`;
+    return elapsed(ticket);
   }
 
   updateSearch(term: string): void {
@@ -191,6 +195,9 @@ export class TicketsComponent {
 
   loadTickets(): void {
     this.isLoading = true;
+    // Avisa a la vista para que la tabla muestre "Cargando..." también cuando la recarga la pide el
+    // panel (por ejemplo, su botón Refrescar); si no, solo se redibuja al llegar los datos.
+    this.changeDetector.markForCheck();
     this.ticketsService.getTickets().pipe(
       finalize(() => { this.isLoading = false; this.changeDetector.markForCheck(); })
     ).subscribe({
@@ -292,6 +299,15 @@ export class TicketsComponent {
     return filterTicketsForReport(this.tickets, this.reportFilters).length;
   }
 
+  // Igual que el reporte de Permisos: sin el rango completo no se puede exportar.
+  get reportNotice(): string {
+    return requiredDateRangeNotice(this.reportFilters);
+  }
+
+  get reportRangeError(): string {
+    return dateRangeError(this.reportFilters);
+  }
+
   openReportWindow(): void {
     if (!this.isTicketManager) return;
     this.clearMessages();
@@ -303,8 +319,8 @@ export class TicketsComponent {
   async exportReport(): Promise<void> {
     if (!this.isTicketManager) return;
     this.clearMessages();
-    if (this.reportFilters.desde && this.reportFilters.hasta && this.reportFilters.desde > this.reportFilters.hasta) {
-      this.errorMessage = 'La fecha "desde" no puede ser posterior a la fecha "hasta".';
+    if (this.reportNotice) {
+      this.errorMessage = this.reportNotice;
       return;
     }
     this.isExporting = true;

@@ -31,6 +31,8 @@ export interface PagedResult<T> {
   TotalCount: number;
   Page: number;
   PageSize: number;
+  // Combos distintos entre los resultados (un combo puede tener 2 o 3 piezas).
+  ComboCount: number;
 }
 
 export interface DevicePageQuery {

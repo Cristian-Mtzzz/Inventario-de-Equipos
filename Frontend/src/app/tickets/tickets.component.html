@@ -53,7 +53,7 @@
           </tr>
         </thead>
         <tbody>
-          @if (isLoading && tickets.length === 0) {
+          @if (isLoading) {
           <tr><td colspan="16" class="empty">Cargando tickets...</td></tr>
           } @else if (filteredTickets.length === 0) {
           <tr><td colspan="16" class="empty">Todavía no hay tickets registrados.</td></tr>
@@ -112,7 +112,7 @@
         </div>
         <button type="button" class="modal-close" aria-label="Cerrar ventana" (click)="closeWindow()">×</button>
       </div>
-      <form (ngSubmit)="saveTicket()">
+      <form appHighlightInvalid (ngSubmit)="saveTicket()">
         @if (errorMessage) { <p class="feedback error" role="alert">{{ errorMessage }}</p> }
 
         <h3 class="form-section-title">Datos del usuario</h3>
@@ -120,6 +120,8 @@
         <!-- Tras elegir, el botón muestra el nombre del empleado; al pulsarlo se puede cambiar. -->
         <label>Nombre del empleado</label>
         <app-employee-lookup [label]="selectedEmployee?.NombreCompleto ?? 'Buscar empleado'" (selected)="selectEmployee($event)" />
+        <!-- El empleado se elige con el botón; este campo oculto lo hace obligatorio para el sombreado en rojo. -->
+        <input type="hidden" appRequiredId [ngModel]="form.IdEmpleado" name="ticketEmployee" />
 
         <label for="ticket-regional">Regional</label>
         <input id="ticket-regional" type="text" class="readonly-field" readonly tabindex="-1"
@@ -151,7 +153,7 @@
 
         <h3 class="form-section-title">Asignación</h3>
         <label for="ticket-technician">Técnico</label>
-        <select id="ticket-technician" [(ngModel)]="form.IdTecnico" name="ticketTechnician" required>
+        <select appRequiredId id="ticket-technician" [(ngModel)]="form.IdTecnico" name="ticketTechnician" required>
           <option [ngValue]="0">Selecciona un técnico</option>
           @for (technician of technicians; track technician.IdUsuario) {
           <option [ngValue]="technician.IdUsuario">{{ technician.Nombre }}</option>
@@ -185,10 +187,10 @@
         </div>
         <button type="button" class="modal-close" aria-label="Cerrar ventana" (click)="closeWindow()">×</button>
       </div>
-      <form (ngSubmit)="saveReassignment()">
+      <form appHighlightInvalid (ngSubmit)="saveReassignment()">
         @if (errorMessage) { <p class="feedback error" role="alert">{{ errorMessage }}</p> }
         <label for="reassign-technician">Técnico</label>
-        <select id="reassign-technician" [(ngModel)]="reassignTechnicianId" name="reassignTechnician" required>
+        <select appRequiredId id="reassign-technician" [(ngModel)]="reassignTechnicianId" name="reassignTechnician" required>
           <option [ngValue]="0">Selecciona un técnico</option>
           @for (technician of technicians; track technician.IdUsuario) {
           <option [ngValue]="technician.IdUsuario">{{ technician.Nombre }}</option>
@@ -219,7 +221,7 @@
         </div>
         <button type="button" class="modal-close" aria-label="Cerrar ventana" (click)="closeWindow()">×</button>
       </div>
-      <form (ngSubmit)="saveFinish()">
+      <form appHighlightInvalid (ngSubmit)="saveFinish()">
         @if (errorMessage) { <p class="feedback error" role="alert">{{ errorMessage }}</p> }
         <label for="finish-observations">Observaciones del soporte</label>
         <textarea id="finish-observations" [(ngModel)]="finish.Observaciones" name="finishObservations" rows="4"
@@ -228,11 +230,11 @@
         <fieldset class="finish-rating">
           <legend>Valoración de la ayuda</legend>
           <label class="rating-option" [class.selected]="finish.Valoracion === 'BUENO'">
-            <input type="radio" name="finishRating" value="BUENO" [(ngModel)]="finish.Valoracion" />
+            <input type="radio" name="finishRating" value="BUENO" [(ngModel)]="finish.Valoracion" required />
             <span>Bueno</span>
           </label>
           <label class="rating-option" [class.selected]="finish.Valoracion === 'MALO'">
-            <input type="radio" name="finishRating" value="MALO" [(ngModel)]="finish.Valoracion" />
+            <input type="radio" name="finishRating" value="MALO" [(ngModel)]="finish.Valoracion" required />
             <span>Malo</span>
           </label>
         </fieldset>
@@ -258,7 +260,6 @@
         <div>
           <p class="eyebrow">REPORTE</p>
           <h2 id="ticket-report-title">Exportar reporte de tickets</h2>
-          <p class="modal-subtitle">Excel con el detalle de los tickets y una hoja de resumen por tipo de soporte y técnico.</p>
         </div>
         <button type="button" class="modal-close" aria-label="Cerrar ventana" (click)="closeWindow()">×</button>
       </div>
@@ -267,11 +268,11 @@
         <div class="report-date-range">
           <div>
             <label for="report-from">Desde</label>
-            <input id="report-from" type="date" [(ngModel)]="reportFilters.desde" name="reportFrom" />
+            <input id="report-from" type="date" [(ngModel)]="reportFilters.desde" name="reportFrom" required />
           </div>
           <div>
             <label for="report-to">Hasta</label>
-            <input id="report-to" type="date" [(ngModel)]="reportFilters.hasta" name="reportTo" />
+            <input id="report-to" type="date" [(ngModel)]="reportFilters.hasta" name="reportTo" required />
           </div>
         </div>
 
@@ -296,8 +297,12 @@
           }
         </select>
 
+        @if (!reportNotice) {
         <p class="field-hint">{{ reportCount }} ticket(s) cumplen los filtros.</p>
-        <button type="submit" [disabled]="isExporting">{{ isExporting ? 'Generando...' : 'Exportar a Excel' }}</button>
+        } @else if (reportRangeError) {
+        <p class="field-hint" aria-live="polite">{{ reportRangeError }}</p>
+        }
+        <button type="submit" [disabled]="isExporting || !!reportNotice">{{ isExporting ? 'Generando...' : 'Exportar a Excel' }}</button>
       </form>
     </section>
   </div>

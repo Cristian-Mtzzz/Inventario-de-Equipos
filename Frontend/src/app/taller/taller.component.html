@@ -22,7 +22,7 @@
       </div>
       <div class="workshop-actions-group">
         <app-table-page-size [(page)]="maintenancePage" [(pageSize)]="maintenancePageSize" />
-        @if (isWorkshopAdmin) { <button type="button" class="secondary" (click)="exportWorkshopReport()" [disabled]="isSaving">Exportar reporte</button> }
+        @if (isWorkshopAdmin) { <button type="button" class="secondary" (click)="openReportWindow()" [disabled]="isSaving">Exportar reporte</button> }
         @if (canReceive) { <button type="button" (click)="openReceptionWindow()" [disabled]="isSaving">Registrar recepción</button> }
       </div>
     </div>
@@ -32,7 +32,7 @@
         <thead>
           <tr>
             <th>Memo</th>
-            <th>Área</th>
+            <th>Departamento</th>
             <th>Equipo</th>
             <th>Marca</th>
             <th>Inventario</th>
@@ -77,7 +77,9 @@
             <td>{{ item.FechaEntrega ? (item.FechaEntrega | date:'dd/MM/yy h:mm a') : '-' }}</td>
             <td>
               @if (canWorkOnRepairs && (!isTechnicianOnly || isAssignedToMe(item))) {
-              @if (isTechnicianOnly && hasAssessment(item)) { <span class="closed">Trabajo finalizado</span> }
+              @if (!isOpenMaintenance(item)) { <button type="button" class="secondary" (click)="openAssessmentWindow(item)"
+                [disabled]="isSaving">Ver dictamen</button> }
+              @else if (isTechnicianOnly && hasAssessment(item)) { <span class="closed">Trabajo finalizado</span> }
               @else { <button type="button" class="secondary" (click)="openAssessmentWindow(item)"
                 [disabled]="isSaving">Dictamen</button> }
               }
@@ -114,7 +116,7 @@
         @if (!isReceptionOnly) { <button type="button" class="modal-close" aria-label="Cerrar recepción"
           (click)="closeWindow()">×</button> }
       </div>
-      <form class="paper-form" (ngSubmit)="saveReception()">
+      <form appHighlightInvalid class="paper-form" (ngSubmit)="saveReception()">
         @if (message) { <p class="feedback success" role="status">{{ message }}</p> }
         @if (errorMessage) { <p class="feedback error" role="alert">{{ errorMessage }}</p> }
         <h3 class="form-section-title">Datos de recepción</h3>
@@ -139,7 +141,7 @@
         </div>
         <div class="form-field">
           <label for="reception-building">Edificio de origen</label>
-          <select id="reception-building" [ngModel]="reception.IdEdificio"
+          <select appRequiredId id="reception-building" [ngModel]="reception.IdEdificio"
             (ngModelChange)="selectReceptionBuilding($event)" name="receptionBuilding"
             [disabled]="selectedReceptionRegionalId === null" required>
             <option [ngValue]="0">Selecciona edificio</option>
@@ -162,34 +164,41 @@
         <!-- Quien recibe (usuario en sesión) y el técnico asignado siempre son los mismos,
           así que el servidor los guarda solos y el formulario ya no los muestra. -->
         <h3 class="form-section-title">Datos del equipo</h3>
+        <!-- Los campos se habilitan uno tras otro a medida que se llena el anterior; el departamento
+          de origen es opcional, así que el equipo se habilita con el edificio. -->
         <div class="form-field">
           <label for="reception-type">Equipo</label>
-          <select id="reception-type" [(ngModel)]="reception.TipoDispositivo" name="receptionType" required>
+          <select id="reception-type" [(ngModel)]="reception.TipoDispositivo" name="receptionType" required
+            [disabled]="reception.IdEdificio <= 0">
             <option value="">Selecciona un tipo</option>
             @for (type of deviceTypes; track type.IdTipo) { <option [value]="type.NombreTipo">{{ type.NombreTipo }}</option> }
           </select>
         </div>
         <div class="form-field">
           <label for="reception-brand">Marca</label>
-          <input id="reception-brand" type="text" [(ngModel)]="reception.Marca" name="receptionBrand" placeholder="Ej. DELL" maxlength="100" required />
+          <input appUppercase id="reception-brand" type="text" [(ngModel)]="reception.Marca" name="receptionBrand" placeholder="Ej. DELL" maxlength="100" required
+            [disabled]="!reception.TipoDispositivo" />
         </div>
         <div class="form-field">
           <label for="reception-model">Modelo</label>
-          <input id="reception-model" type="text" [(ngModel)]="reception.Modelo" name="receptionModel" placeholder="Ej. Pro Slim" maxlength="100" required />
+          <input appUppercase id="reception-model" type="text" [(ngModel)]="reception.Modelo" name="receptionModel" placeholder="Ej. Pro Slim" maxlength="100" required
+            [disabled]="!reception.Marca.trim()" />
         </div>
         <div class="form-field">
           <label for="reception-serial">Serie</label>
-          <input id="reception-serial" type="text" [(ngModel)]="reception.NoSerie" name="receptionSerial" maxlength="100" required />
+          <input appUppercase id="reception-serial" type="text" [(ngModel)]="reception.NoSerie" name="receptionSerial" maxlength="100" required
+            [disabled]="!reception.Modelo.trim()" />
         </div>
         <div class="form-field">
           <label for="reception-inventory">Inventario</label>
           <input appDigitsOnly id="reception-inventory" type="text" [(ngModel)]="reception.CodigoInventario" name="receptionInventory"
-            placeholder="Ej. 4102532" maxlength="7" pattern="[0-9]*" required />
+            placeholder="Ej. 4102532" maxlength="7" pattern="[0-9]*" required
+            [disabled]="!reception.NoSerie.trim()" />
         </div>
         <div class="form-field form-field-wide">
           <label for="reception-description">Descripción del equipo</label>
           <textarea id="reception-description" [(ngModel)]="reception.DescripcionEquipo" name="receptionDescription"
-            rows="3" maxlength="2000" required></textarea>
+            rows="3" maxlength="2000" required [disabled]="!reception.CodigoInventario.trim()"></textarea>
         </div>
         <button class="form-field-wide" type="submit" [disabled]="isSaving">{{ isSaving ? 'Guardando...' : 'Guardar recepción' }}</button>
       </form>
@@ -208,10 +217,10 @@
           <h2 id="entry-title">Registrar ingreso</h2>
         </div><button type="button" class="modal-close" aria-label="Cerrar ventana" (click)="closeWindow()">×</button>
       </div>
-      <form (ngSubmit)="saveEntry()">
+      <form appHighlightInvalid (ngSubmit)="saveEntry()">
         @if (errorMessage) { <p class="feedback error" role="alert">{{ errorMessage }}</p> }
         <label for="entry-device">Equipo</label>
-        <select id="entry-device" [(ngModel)]="entry.IdEquipo" name="entryDevice" required>
+        <select appRequiredId id="entry-device" [(ngModel)]="entry.IdEquipo" name="entryDevice" required>
           <option [ngValue]="0">Selecciona un equipo</option>
           @for (device of devices; track device.IdEquipo) { <option [ngValue]="device.IdEquipo">{{
             getDeviceLabel(device) }}</option> }
@@ -243,7 +252,7 @@
             selectedMaintenance.Modelo }}</p>
         </div><button type="button" class="modal-close" aria-label="Cerrar ventana" (click)="closeWindow()">×</button>
       </div>
-      <form (ngSubmit)="saveExit()">
+      <form appHighlightInvalid (ngSubmit)="saveExit()">
         @if (errorMessage) { <p class="feedback error" role="alert">{{ errorMessage }}</p> }
         <label for="exit-functional">Equipo funcional</label>
         <select id="exit-functional" [(ngModel)]="exit.EquipoFuncional" name="exitFunctional" required>
@@ -270,30 +279,39 @@
       <div class="modal-heading">
         <div>
           <p class="eyebrow">DICTAMEN TÉCNICO</p>
-          <h2 id="assessment-title">Dictamen</h2>
+          <h2 id="assessment-title">{{ assessmentReadOnly ? 'Dictamen (solo lectura)' : 'Dictamen' }}</h2>
           <p class="modal-subtitle">{{ selectedMaintenance.CodigoInventario }} · {{ selectedMaintenance.Marca }} {{
             selectedMaintenance.Modelo }}</p>
         </div><button type="button" class="modal-close" aria-label="Cerrar ventana" (click)="closeWindow()">×</button>
       </div>
-      <form (ngSubmit)="saveAssessment()">
+      <form appHighlightInvalid (ngSubmit)="saveAssessment()">
         @if (errorMessage) { <p class="feedback error" role="alert">{{ errorMessage }}</p> }
+        @if (assessmentReadOnly) {
+        <p class="feedback">La reparación ya tiene la salida registrada: el dictamen queda como constancia y no se puede modificar.</p>
+        }
         <!-- Quien hace el dictamen (técnico asignado o admin de taller) indica si el equipo está en garantía. -->
         <label for="assessment-warranty">Equipo en garantía</label>
-        <select id="assessment-warranty" [(ngModel)]="assessment.EquipoEnGarantia" name="assessmentWarranty" required>
+        <select id="assessment-warranty" [(ngModel)]="assessment.EquipoEnGarantia" name="assessmentWarranty" required
+          [disabled]="assessmentReadOnly">
           <option value="">Selecciona una opción</option>
           <option value="SI">Sí</option>
           <option value="NO">No</option>
         </select>
         <label for="assessment-diagnosis">Diagnóstico</label>
         <textarea id="assessment-diagnosis" [(ngModel)]="assessment.Dictamen" name="assessmentDiagnosis" rows="4"
-          maxlength="2000" required></textarea>
+          maxlength="2000" required [disabled]="assessmentReadOnly"></textarea>
         <label for="assessment-parts">Sustitución de piezas</label>
         <textarea id="assessment-parts" [(ngModel)]="assessment.PiezasSustituidas" name="assessmentParts" rows="3"
-          maxlength="2000"></textarea>
+          maxlength="2000" placeholder="Si no se cambió ninguna, escribe &quot;Ninguna&quot;" required
+          [disabled]="assessmentReadOnly"></textarea>
         <label for="assessment-observations">Observaciones</label>
         <textarea id="assessment-observations" [(ngModel)]="assessment.Observaciones" name="assessmentObservations"
-          rows="3" maxlength="2000"></textarea>
+          rows="3" maxlength="2000" required [disabled]="assessmentReadOnly"></textarea>
+        @if (assessmentReadOnly) {
+        <button type="button" class="secondary" (click)="closeWindow()">Cerrar</button>
+        } @else {
         <button type="submit" [disabled]="isSaving">{{ isSaving ? 'Guardando...' : 'Guardar dictamen' }}</button>
+        }
       </form>
     </section>
   </div>
@@ -311,7 +329,7 @@
             selectedMaintenance.Modelo }}</p>
         </div><button type="button" class="modal-close" aria-label="Cerrar ventana" (click)="closeWindow()">×</button>
       </div>
-      <form (ngSubmit)="saveAssignment()">
+      <form appHighlightInvalid (ngSubmit)="saveAssignment()">
         @if (errorMessage) { <p class="feedback error" role="alert">{{ errorMessage }}</p> }
         <p class="modal-subtitle">Técnico actual: <strong>{{ selectedMaintenance.Tecnico || 'Sin asignar' }}</strong></p>
         <p class="modal-subtitle">Equipo en garantía: <strong>{{ warrantyLabel(selectedMaintenance.EquipoEnGarantia) }}</strong></p>
@@ -326,6 +344,48 @@
         </select>
         <button type="submit" [disabled]="isSaving || selectedTechnicianId === null">
           {{ isSaving ? 'Asignando...' : 'Asignar' }}</button>
+      </form>
+    </section>
+  </div>
+  }
+
+  <!-- Exportación a Excel: rango de fecha de ingreso y tipo de equipo. -->
+  @if (activeWindow === 'report' && isWorkshopAdmin) {
+  <div class="modal-backdrop" role="presentation">
+    <section class="workshop-modal" role="dialog" aria-modal="true" aria-labelledby="workshop-report-title"
+      (click)="$event.stopPropagation()">
+      <div class="modal-heading">
+        <div>
+          <p class="eyebrow">REPORTE</p>
+          <h2 id="workshop-report-title">Exportar reporte del taller</h2>
+        </div>
+        <button type="button" class="modal-close" aria-label="Cerrar ventana" (click)="closeWindow()">×</button>
+      </div>
+      <form (ngSubmit)="exportWorkshopReport()">
+        @if (errorMessage) { <p class="feedback error" role="alert">{{ errorMessage }}</p> }
+        <div class="report-date-range">
+          <div>
+            <label for="workshop-report-from">Ingreso desde</label>
+            <input id="workshop-report-from" type="date" [(ngModel)]="reportDateRange.desde" name="reportFrom" required />
+          </div>
+          <div>
+            <label for="workshop-report-to">Ingreso hasta</label>
+            <input id="workshop-report-to" type="date" [(ngModel)]="reportDateRange.hasta" name="reportTo" required />
+          </div>
+        </div>
+
+        <label for="workshop-report-type">Tipo de dispositivo</label>
+        <select id="workshop-report-type" [(ngModel)]="reportDeviceType" name="reportDeviceType">
+          <option value="">Todos</option>
+          @for (type of reportDeviceTypes; track type) { <option [value]="type">{{ type }}</option> }
+        </select>
+
+        @if (!reportNotice) {
+        <p class="field-hint">{{ reportCount }} reparación(es) cumplen los filtros.</p>
+        } @else if (reportRangeError) {
+        <p class="field-hint" aria-live="polite">{{ reportRangeError }}</p>
+        }
+        <button type="submit" [disabled]="isSaving || !!reportNotice">{{ isSaving ? 'Generando...' : 'Exportar a Excel' }}</button>
       </form>
     </section>
   </div>

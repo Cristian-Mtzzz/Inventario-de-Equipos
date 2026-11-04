@@ -1,9 +1,9 @@
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable, map } from 'rxjs';
 import { apiUrl } from '../api-url';
 import { toPascalCase } from '../shared/api-response';
-import { CreateTicketRequest, FinishTicketRequest, Ticket, TicketAlertThresholds, TicketEmployee, TicketTechnician } from './tickets.models';
+import { CreateTicketRequest, FinishTicketRequest, Ticket, TicketAlertThresholds, TicketTechnician } from './tickets.models';
 
 const API_TICKETS_URL = apiUrl('tickets');
 
@@ -15,12 +15,6 @@ export class TicketsService {
   // El backend decide el alcance: el técnico recibe solo sus tickets y el admin todos.
   getTickets(): Observable<Ticket[]> {
     return this.httpClient.get<unknown>(API_TICKETS_URL).pipe(map((body) => toPascalCase<Ticket[]>(body)));
-  }
-
-  getEmployees(idArea: number): Observable<TicketEmployee[]> {
-    const params = new HttpParams().set('idArea', idArea);
-    return this.httpClient.get<unknown>(`${API_TICKETS_URL}/employees`, { params })
-      .pipe(map((body) => toPascalCase<TicketEmployee[]>(body)));
   }
 
   // Umbrales de color del ticket pendiente; vienen de la base para poder ajustarlos.

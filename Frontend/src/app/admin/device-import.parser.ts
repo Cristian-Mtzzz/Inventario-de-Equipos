@@ -145,9 +145,10 @@ export function parseDeviceImport(rows: string[][]): ImportParseResult {
       comboNo: cell(values ?? [], 'NO'),
       equipo,
       equipoKey: normalizeKey(equipo),
-      marca: cell(values ?? [], 'MARCA'),
-      modelo: cell(values ?? [], 'MODELO'),
-      serie: cell(values ?? [], 'SERIE'),
+      // Marca, modelo y serie se guardan en mayúsculas, igual que al escribirlos en los formularios.
+      marca: cell(values ?? [], 'MARCA').toLocaleUpperCase('es'),
+      modelo: cell(values ?? [], 'MODELO').toLocaleUpperCase('es'),
+      serie: cell(values ?? [], 'SERIE').toLocaleUpperCase('es'),
       inventario: cell(values ?? [], 'INVENTARIO'),
     };
     if (!hasData(row)) return;

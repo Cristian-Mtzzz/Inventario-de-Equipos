@@ -12,7 +12,7 @@ Sistema web para administrar el inventario de equipos de cómputo de una institu
 
 | Módulo | Para qué sirve |
 | --- | --- |
-| **Dispositivos** | Alta, edición y baja de equipos; asignación a empleados, individual o como combo de escritorio (CPU, monitor y teclado); carga masiva desde Excel. |
+| **Dispositivos** | Carga, edición y descarga de equipos; asignación a empleados, individual o como combo de escritorio (CPU, monitor y teclado); carga masiva desde Excel. |
 | **Reasignaciones** | Cambio de responsable de un equipo con su motivo e historial de movimientos. |
 | **Taller** | Recepción de equipos para reparación, asignación de técnico, dictamen, piezas sustituidas y entrega. |
 | **Tickets** | Solicitudes de soporte: creación, asignación a un técnico, seguimiento por tiempo de espera y cierre con valoración. |

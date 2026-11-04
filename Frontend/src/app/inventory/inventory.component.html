@@ -20,7 +20,7 @@
     <!-- Formulario, tabla y paginación de dispositivos. -->
     @if (activeSection === 'devices') {
     <section class="inventory-section">
-        <form class="inventory-form" (ngSubmit)="addDevice()">
+        <form appHighlightInvalid class="inventory-form" (ngSubmit)="addDevice()">
             <h2>
                 Agregar dispositivo
                 @if (deviceBatchCount > 1) {
@@ -52,10 +52,10 @@
                 <p class="feedback success" style="grid-column: 1 / -1; margin-bottom: 0.5rem;" role="status">{{ batchSuccessMessage }}</p>
             }
 
-            <input [(ngModel)]="newDevice.Marca" name="marca" placeholder="Marca" required />
-            <input [(ngModel)]="newDevice.Modelo" name="modelo" placeholder="Modelo" required />
-            <input [(ngModel)]="newDevice.NoSerie" name="serie" placeholder="SERIE" required />
-            <input appDigitsOnly [(ngModel)]="newDevice.CodigoInventario" (input)="onInventoryCodeInput(newDevice)" name="codigo" placeholder="INVENTARIO" maxlength="7" pattern="[0-9]*" required />
+            <input appUppercase [(ngModel)]="newDevice.Marca" name="marca" placeholder="Marca" required />
+            <input appUppercase [(ngModel)]="newDevice.Modelo" name="modelo" placeholder="Modelo" required />
+            <input appUppercase [(ngModel)]="newDevice.NoSerie" name="serie" placeholder="SERIE" required />
+            <input appDigitsOnly [(ngModel)]="newDevice.CodigoInventario" name="codigo" placeholder="INVENTARIO" maxlength="7" pattern="[0-9]*" required />
 
             <select [(ngModel)]="newDevice.Estado" (ngModelChange)="handleDeviceStateChange($event)" name="estado"
                 required>
@@ -100,7 +100,7 @@
             }
             @if (employeeCatalogError) { <p class="feedback error" role="alert">{{ employeeCatalogError }}</p> }
 
-            <button type="submit">
+            <button type="submit" [disabled]="isSavingDevice">
                 {{ deviceBatchCount > 1 && deviceBatchCurrent < deviceBatchCount ? 'Guardar y siguiente (' + deviceBatchCurrent + '/' + deviceBatchCount + ')' : 'Agregar dispositivo' }}
             </button>
         </form>
@@ -163,7 +163,11 @@
 
                 <tbody>
                     <!-- Filas de la tabla de inventario -->
-                    @if (filteredDevices.length === 0) {
+                    @if (isRefreshing) {
+                    <tr>
+                        <td colspan="11" class="empty">Cargando dispositivos...</td>
+                    </tr>
+                    } @else if (filteredDevices.length === 0) {
                     <tr>
                         <td colspan="11">No se encontraron equipos con los filtros actuales.</td>
                     </tr>
@@ -202,7 +206,7 @@
     <!-- Registro y consulta de reasignaciones. -->
     @if (activeSection === 'reassignments') {
     <section class="inventory-section">
-        <form class="inventory-form compact" novalidate (ngSubmit)="addReassignment()">
+        <form appHighlightInvalid class="inventory-form compact" novalidate (ngSubmit)="addReassignment()">
             <h2>Registrar reasignación</h2>
             <input [(ngModel)]="deviceOptionSearch" (ngModelChange)="searchDeviceOptions()" name="deviceOptionSearch" placeholder="INVENTARIO, SERIE o modelo del equipo" />
             <select [ngModel]="selectedInventoryCode" (ngModelChange)="selectDevice($event)" name="equipo" required>
@@ -226,7 +230,7 @@
                 </div>
                 <div>
                     <label for="inventory-reassignment-building">Edificio</label>
-                    <select id="inventory-reassignment-building" [ngModel]="reassignmentBuildingId"
+                    <select appRequiredId id="inventory-reassignment-building" [ngModel]="reassignmentBuildingId"
                         (ngModelChange)="selectReassignmentBuilding($event)" name="reassignmentBuilding"
                         [disabled]="reassignmentRegionalId === null" required>
                         <option [ngValue]="0">Selecciona un edificio</option>
@@ -237,7 +241,7 @@
                 </div>
                 <div>
                     <label for="inventory-reassignment-area">Área</label>
-                    <select id="inventory-reassignment-area" [ngModel]="newReassignment.IdArea"
+                    <select appRequiredId id="inventory-reassignment-area" [ngModel]="newReassignment.IdArea"
                         (ngModelChange)="selectReassignmentArea($event)" name="reassignmentArea"
                         [disabled]="reassignmentBuildingId <= 0 || isLoadingAreas" required>
                         <option [ngValue]="0">{{ isLoadingAreas ? 'Cargando áreas...' : 'Selecciona un área' }}</option>
@@ -295,7 +299,8 @@
                         <th>ACCIÓN</th>
                     </tr>
                 </thead>
-                <tbody>@for (item of filteredReassignments | page: reassignmentPage : reassignmentPageSize; track item.IdReasignacion) { <tr>
+                <tbody>@if (isRefreshing) { <tr><td colspan="11" class="empty">Cargando reasignaciones...</td></tr> } @else {
+                    @for (item of filteredReassignments | page: reassignmentPage : reassignmentPageSize; track item.IdReasignacion) { <tr>
                         <td>{{ item.NombreTipo || '-' }}</td>
                         <td>{{ item.Marca || '-' }}</td>
                         <td>{{ item.Modelo || '-' }}</td>
@@ -310,7 +315,7 @@
                             (click)="selectDeviceForReassignmentFromItem(item)">Reasignar</button></td>
                     </tr> } @empty { <tr>
                         <td colspan="11">{{ reassignmentSearchTerm.trim() ? 'No hay reasignaciones que coincidan con la búsqueda.' : 'Todavía no hay reasignaciones registradas.' }}</td>
-                    </tr> }</tbody>
+                    </tr> } }</tbody>
             </table>
         </div>
         <app-table-paginator [total]="filteredReassignments.length" [(page)]="reassignmentPage" [pageSize]="reassignmentPageSize" label="Paginación de reasignaciones" />
@@ -328,7 +333,7 @@
                     <h2 id="inventory-edit-title">Editar dispositivo</h2>
                 </div><button type="button" class="modal-close" (click)="cancelEdit()">×</button>
             </div>
-            <form class="modal-form" (ngSubmit)="saveEditedDevice()">
+            <form appHighlightInvalid class="modal-form" (ngSubmit)="saveEditedDevice()">
                 <!-- Mismos encabezados que Agregar y orden Equipo, Marca, Modelo, Serie, Inventario. -->
                 <label class="form-field-label">Equipo
                     <select [(ngModel)]="newDevice.IdTipo" name="editTipo" required>
@@ -337,16 +342,16 @@
                     </select>
                 </label>
                 <label class="form-field-label">Marca
-                    <input [(ngModel)]="newDevice.Marca" name="editMarca" placeholder="Marca" required />
+                    <input appUppercase [(ngModel)]="newDevice.Marca" name="editMarca" placeholder="Marca" required />
                 </label>
                 <label class="form-field-label">Modelo
-                    <input [(ngModel)]="newDevice.Modelo" name="editModelo" placeholder="Modelo" required />
+                    <input appUppercase [(ngModel)]="newDevice.Modelo" name="editModelo" placeholder="Modelo" required />
                 </label>
                 <label class="form-field-label">Serie
-                    <input [(ngModel)]="newDevice.NoSerie" name="editSerie" placeholder="Serie" required />
+                    <input appUppercase [(ngModel)]="newDevice.NoSerie" name="editSerie" placeholder="Serie" required />
                 </label>
                 <label class="form-field-label">Inventario
-                    <input appDigitsOnly [(ngModel)]="newDevice.CodigoInventario" (input)="onInventoryCodeInput(newDevice)" name="editCodigo" placeholder="Inventario" maxlength="7" pattern="[0-9]*"
+                    <input appDigitsOnly [(ngModel)]="newDevice.CodigoInventario" name="editCodigo" placeholder="Inventario" maxlength="7" pattern="[0-9]*"
                         required />
                 </label>
                 <label class="form-field-label">Estado
@@ -384,7 +389,7 @@
                     </select>
                 </label>
                 <div class="modal-actions"><button type="button" class="secondary"
-                        (click)="cancelEdit()">Cancelar</button><button type="submit">Guardar cambios</button></div>
+                        (click)="cancelEdit()">Cancelar</button><button type="submit" [disabled]="isSavingDevice">Guardar cambios</button></div>
             </form>
         </section>
     </div>

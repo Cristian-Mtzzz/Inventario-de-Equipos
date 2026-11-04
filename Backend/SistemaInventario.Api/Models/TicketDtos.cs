@@ -24,9 +24,6 @@ public sealed record TicketDto(
     // APLICATIVO, REDES o HARDWARE; nulo en los tickets creados antes de pedir el tipo.
     string? TipoSoporte);
 
-/// <summary>Empleado que se puede atender, ya filtrado por departamento.</summary>
-public sealed record TicketEmployeeDto(int IdEmpleado, string NombreCompleto, bool TieneNoPago);
-
 /// <summary>Usuario con rol de técnico de tickets al que se le puede asignar trabajo.</summary>
 public sealed record TicketTechnicianDto(int IdUsuario, string Nombre);
 

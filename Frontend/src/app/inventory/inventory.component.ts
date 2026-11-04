@@ -2,6 +2,8 @@ import { DatePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DigitsOnlyDirective } from '../shared/digits-only.directive';
+import { UppercaseDirective } from '../shared/uppercase.directive';
+import { HighlightInvalidDirective, RequiredIdDirective } from '../shared/required-fields.directive';
 import { EmployeeLookupComponent, EmployeeLookupResult, findEmployeeIndex } from '../shared/employee-lookup.component';
 import { PagePipe, TablePageSizeComponent, TablePaginatorComponent } from '../shared/table-paginator';
 import { Router } from '@angular/router';
@@ -11,12 +13,13 @@ import { AdminService } from '../admin/admin.service';
 import { Area, Building, CreateDevice, CreateReassignment, Device, DeviceOption, DeviceType, EmployeeOption, Reassignment } from '../admin/admin.models';
 import { EmployeeSearchDialogComponent } from '../admin/employee-search-dialog.component';
 import { apiErrorMessage } from '../shared/api-response';
+import { memoizeLast } from '../shared/memo';
 import { AppHeaderComponent } from '../shared/app-header.component';
 
 // Componente de inventario que permite consultar, filtrar, paginar y gestionar dispositivos y reasignaciones.
 @Component({
   selector: 'app-inventory',
-  imports: [DatePipe, FormsModule, EmployeeSearchDialogComponent, AppHeaderComponent, PagePipe, TablePageSizeComponent, TablePaginatorComponent, DigitsOnlyDirective, EmployeeLookupComponent],
+  imports: [DatePipe, FormsModule, EmployeeSearchDialogComponent, AppHeaderComponent, PagePipe, TablePageSizeComponent, TablePaginatorComponent, DigitsOnlyDirective, UppercaseDirective, HighlightInvalidDirective, RequiredIdDirective, EmployeeLookupComponent],
   templateUrl: './inventory.component.html',
   styleUrl: './inventory.component.css',
   // Angular 22 usa OnPush por defecto; este panel actualiza la vista al llegar cada respuesta HTTP
@@ -83,6 +86,10 @@ export class InventoryComponent {
   selectedReassignmentEmployeeIndex: number | null = null;
   isLoadingReassignmentEmployees = false;
   isSubmittingReassignment = false;
+  // Alta o edición de dispositivo en curso: bloquea el botón para no enviar dos veces con doble clic.
+  isSavingDevice = false;
+  // Refrescar en curso: la tabla muestra "Cargando..." mientras llegan los datos, igual que en Taller.
+  isRefreshing = false;
   private reassignmentEmployeeRequestId = 0;
   selectedInventoryCode = '';
   private deviceOptionSearchTimer: ReturnType<typeof setTimeout> | null = null;
@@ -174,12 +181,14 @@ export class InventoryComponent {
         this.totalDeviceCount = result.TotalCount;
         this.currentPage = result.Page;
         this.isLoadingDevices = false;
+        this.isRefreshing = false;
       },
       // Maneja los errores de la solicitud de dispositivos, mostrando un mensaje de error y deteniendo el estado de carga.
       error: () => {
         if (requestId !== this.deviceRequestId) return;
         this.errorMessage = 'No se pudo cargar el inventario. Verifica que la API esté activa.';
         this.isLoadingDevices = false;
+        this.isRefreshing = false;
       },
     });
   }
@@ -324,10 +333,6 @@ export class InventoryComponent {
     this.newDevice.NombreAsignado = employee?.NombreCompleto ?? null;
   }
 
-  onInventoryCodeInput(target: { CodigoInventario: string }): void {
-    target.CodigoInventario = (target.CodigoInventario || '').replace(/\D/g, '').slice(0, 7);
-  }
-
   onPaymentNumberInput(target: { NumeroPagoAsignado: string | null }): void {
     if (target.NumeroPagoAsignado) {
       target.NumeroPagoAsignado = target.NumeroPagoAsignado.replace(/\D/g, '').slice(0, 5);
@@ -374,7 +379,7 @@ export class InventoryComponent {
 
   loadReassignments(): void {
     // Carga el historial de reasignaciones que se cargan en la pestaña de reasignaciones
-    this.adminService.getReassignments().subscribe({
+    this.adminService.getReassignments().pipe(finalize(() => this.isRefreshing = false)).subscribe({
       next: (items) => this.reassignments = items,
       error: (error) => this.errorMessage = apiErrorMessage(error, 'No se pudieron cargar las reasignaciones.'),
     });
@@ -383,16 +388,15 @@ export class InventoryComponent {
   selectSection(section: 'devices' | 'reassignments'): void {
     // Cambia de pestaña y solicita únicamente los datos necesarios
     this.activeSection = section;
-    this.message = '';
-    this.errorMessage = '';
+    this.clearMessages();
     if (section === 'devices') this.loadDevices();
     else this.loadReassignments();
   }
 
   refreshPanel(): void {
     // Repite la carga de la pestaña activa y limpia mensajes anteriores
-    this.message = '';
-    this.errorMessage = '';
+    this.clearMessages();
+    this.isRefreshing = true;
     this.selectSection(this.activeSection);
   }
 
@@ -404,7 +408,9 @@ export class InventoryComponent {
       this.errorMessage = 'Indica el empleado asignado o selecciónalo de la lista.';
       return;
     }
-    this.adminService.createDevice(this.newDevice).subscribe({
+    if (this.isSavingDevice) return;
+    this.isSavingDevice = true;
+    this.adminService.createDevice(this.newDevice).pipe(finalize(() => this.isSavingDevice = false)).subscribe({
       next: () => {
         this.loadDevices();
         if (this.deviceBatchCount > 1 && this.deviceBatchCurrent < this.deviceBatchCount) {
@@ -483,8 +489,9 @@ export class InventoryComponent {
 
   // Método que guarda los cambios realizados en un dispositivo que ya existe
   saveEditedDevice(): void {
-    if (this.editingDeviceId === null) return;
-    this.adminService.updateDevice(this.editingDeviceId, this.newDevice).subscribe({
+    if (this.editingDeviceId === null || this.isSavingDevice) return;
+    this.isSavingDevice = true;
+    this.adminService.updateDevice(this.editingDeviceId, this.newDevice).pipe(finalize(() => this.isSavingDevice = false)).subscribe({
       next: () => {
         this.message = 'Dispositivo actualizado correctamente.';
         this.cancelEdit();
@@ -676,17 +683,21 @@ export class InventoryComponent {
     });
   }
 
+  get filteredReassignments(): Reassignment[] {
+    return this.filterReassignments(this.reassignments, this.reassignmentSearchTerm);
+  }
+
   // Busca por inventario y/o nombre (o No. de pago) del responsable anterior o actual;
   // con varias palabras, cada una debe aparecer en alguno de esos datos.
-  get filteredReassignments(): Reassignment[] {
-    const terms = this.reassignmentSearchTerm.trim().toLocaleLowerCase().split(/s+/).filter(Boolean);
-    if (terms.length === 0) return this.reassignments;
-    return this.reassignments.filter((item) => {
+  private readonly filterReassignments = memoizeLast((reassignments: Reassignment[], searchTerm: string) => {
+    const terms = searchTerm.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
+    if (terms.length === 0) return reassignments;
+    return reassignments.filter((item) => {
       const text = [item.CodigoInventario, item.NombreAnterior, item.NombreNuevo, item.NoPagoAnterior, item.NoPagoNuevo]
         .map((value) => String(value ?? '').toLocaleLowerCase()).join(' ');
       return terms.every((term) => text.includes(term));
     });
-  }
+  });
 
   updateReassignmentSearch(value: string): void {
     this.reassignmentSearchTerm = value;

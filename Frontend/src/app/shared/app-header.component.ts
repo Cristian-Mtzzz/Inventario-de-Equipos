@@ -5,16 +5,19 @@ import { UserRole } from '../auth/auth.models';
 
 // Ruta del logo institucional dentro de la carpeta public/ (por ejemplo 'logo-ihss.png').
 // Mientras sea null se muestra un espacio reservado con el mismo tamaño.
-const LOGO_SRC: string | null = 'logo.png';
+// Se usa la versión recortada (sin márgenes transparentes) para que el logo se vea más grande.
+const LOGO_SRC: string | null = 'logo-login.png';
 
 const ROLE_LABELS: Record<UserRole, string> = {
   Admin: 'Administrador general',
-  UsuarioComun: 'Usuario común',
+  UsuarioComun: 'Usuario',
   Taller: 'Taller',
   AdminTaller: 'Administrador de taller',
   RecepcionTaller: 'Recepción de taller',
-  TecnicoTaller: 'Técnico de taller',
+  TecnicoTaller: 'Técnico Taller',
   AdminTicket: 'Administrador de tickets',
+  TecnicoTicket: 'Técnico',
+  Permisos: 'Control de permisos',
 };
 
 @Component({
@@ -30,6 +33,7 @@ export class AppHeaderComponent {
 
   // Nombre del panel o módulo que se muestra junto al nombre del sistema.
   readonly moduleName = input.required<string>();
+  readonly systemName = input('Gestión de Equipos');
   readonly refresh = output<void>();
   readonly logout = output<void>();
 
@@ -48,4 +52,5 @@ export class AppHeaderComponent {
     .slice(0, 2)
     .map((part) => part.charAt(0).toUpperCase())
     .join(''));
+
 }

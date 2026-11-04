@@ -63,7 +63,7 @@ public sealed record UpdateMaintenanceAssessmentDto(
     string? Dictamen,
     string? PiezasSustituidas,
     string? Observaciones,
-    // SI o NO, lo indica quien hace el dictamen; si llega vacío se conserva el valor anterior.
+    // SI o NO, lo indica quien hace el dictamen.
     string? EquipoEnGarantia = null);
 
 public sealed record UpdateMaintenanceExitDto(
@@ -71,13 +71,6 @@ public sealed record UpdateMaintenanceExitDto(
     string ClienteRecibe,
     DateTime FechaEntrega);
 
-public sealed record UpdateMaintenanceDto(
-    int IdEquipo,
-    string? Dictamen,
-    string? TipoReparacion,
-    DateTime FechaIngreso,
-    string? DetalleReparacion,
-    DateTime? FechaSalida);
 // Usuario activo con rol TecnicoTaller que se puede asignar a una reparación.
 public sealed record WorkshopTechnicianDto(int IdUsuario, string Nombre);
 
