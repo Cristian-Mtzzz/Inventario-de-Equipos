@@ -37,6 +37,22 @@ public abstract class OracleRepository(InventoryDbContext dbContext)
         }
     }
 
+    // Técnicos activos y vigentes. Las reparaciones solo las recibe el técnico de taller
+    // (TecnicoTaller); los tickets también el técnico que solo atiende tickets (TecnicoTicket).
+    // El nombre es el de la persona o, si falta, el usuario.
+    protected Task<IReadOnlyList<T>> ReadActiveTechnicians<T>(
+        bool includeTicketOnly,
+        Func<int, string, T> create,
+        CancellationToken cancellationToken) =>
+        ReadList($"""
+            SELECT ID_USUARIO, NVL(TRIM(NOMBRE_PERSONA), USUARIO) AS NOMBRE
+            FROM USUARIOS
+            WHERE ROL IN ('TecnicoTaller'{(includeTicketOnly ? ", 'TecnicoTicket'" : string.Empty)})
+              AND UPPER(ESTADO) = 'ACTIVO'
+              AND (FECHA_EXPIRACION IS NULL OR FECHA_EXPIRACION >= TRUNC(SYSDATE))
+            ORDER BY NOMBRE
+            """, reader => create(ReadInt(reader, "ID_USUARIO"), ReadString(reader, "NOMBRE")), cancellationToken);
+
     // Ejecuta una sentencia fuera de transacción y devuelve las filas afectadas.
     protected async Task<int> Execute(
         string sql,

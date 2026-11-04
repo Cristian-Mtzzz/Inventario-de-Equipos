@@ -9,12 +9,22 @@ public sealed class ReassignmentService(InventoryDbContext dbContext) : Assignme
     public Task<IReadOnlyList<ReassignmentDto>> GetReassignments(CancellationToken cancellationToken) =>
         // Consulta el historial ordenado para que la interfaz muestre primero los cambios recientes.
         ReadList("""
+            -- Un renglón por No. de pago: EMPLEADOS_IHSS no impide que dos empleados lo compartan
+            -- y, unida directamente, cada número repetido duplicaba la fila del historial.
+            WITH EMPLEADOS_POR_PAGO AS (
+                SELECT TRIM(TO_CHAR(NPAGO)) AS NPAGO,
+                       MAX(NOMBRE_EMPLEADO) AS NOMBRE_EMPLEADO,
+                       MAX(DEPARTAMENTO_IHSS_ID) AS DEPARTAMENTO_IHSS_ID
+                FROM EMPLEADOS_IHSS
+                WHERE NPAGO IS NOT NULL
+                GROUP BY TRIM(TO_CHAR(NPAGO))
+            )
             SELECT r.ID_REASIGNACION, r.ID_EQUIPO, d.CODIGO_INVENTARIO,
                    TO_CHAR(r.NO_PAGO_ANTERIOR) AS NO_PAGO_ANTERIOR,
                    COALESCE(r.NOMBRE_ANTERIOR, e_ant.NOMBRE_EMPLEADO, TO_CHAR(r.NO_PAGO_ANTERIOR)) AS NOMBRE_ANTERIOR,
                    a_ant.DEPARTAMENTO_IHSS_DESC AS NOMBRE_AREA_ANTERIOR,
                    TO_CHAR(r.NO_PAGO_NUEVO) AS NO_PAGO_NUEVO,
-                   COALESCE(r.NOMBRE_NUEVO, e.NOMBRE_EMPLEADO, TO_CHAR(r.NO_PAGO_NUEVO), 'Sin asignar') AS NOMBRE_NUEVO,
+                   COALESCE(r.NOMBRE_NUEVO, r.NOMBRE_EMPLEADO_NUEVO, TO_CHAR(r.NO_PAGO_NUEVO), 'Sin asignar') AS NOMBRE_NUEVO,
                    -- Área de trabajo de quien quedó responsable en ESE cambio, no la del equipo:
                    -- cada fila del historial muestra el área de su propio responsable.
                    b_new.EDIFICIO_DESCRIPCION AS NOMBRE_EDIFICIO,
@@ -25,21 +35,20 @@ public sealed class ReassignmentService(InventoryDbContext dbContext) : Assignme
             FROM (
                 SELECT ra.ID_REASIGNACION, ra.ID_EQUIPO, ra.NO_PAGO_ANTERIOR, ra.NOMBRE_ANTERIOR,
                        ra.NO_PAGO_NUEVO, ra.NOMBRE_NUEVO, ra.FECHA_CAMBIO, ra.MOTIVO,
+                       p.NOMBRE_EMPLEADO AS NOMBRE_EMPLEADO_NUEVO,
                        -- Departamento del nuevo responsable: primero por No. de pago y, si ese
                        -- número no corresponde a ningún empleado (o el empleado no lo tiene
                        -- registrado), por nombre.
                        COALESCE(
-                           (SELECT MAX(emp.DEPARTAMENTO_IHSS_ID)
-                            FROM EMPLEADOS_IHSS emp
-                            WHERE TRIM(TO_CHAR(emp.NPAGO)) = TRIM(TO_CHAR(ra.NO_PAGO_NUEVO))),
+                           p.DEPARTAMENTO_IHSS_ID,
                            (SELECT MAX(emp.DEPARTAMENTO_IHSS_ID)
                             FROM EMPLEADOS_IHSS emp
                             WHERE UPPER(TRIM(emp.NOMBRE_EMPLEADO)) = UPPER(TRIM(ra.NOMBRE_NUEVO)))) AS ID_AREA_NUEVO
                 FROM REASIGNACIONES ra
+                LEFT JOIN EMPLEADOS_POR_PAGO p ON p.NPAGO = TRIM(TO_CHAR(ra.NO_PAGO_NUEVO))
             ) r
             LEFT JOIN DISPOSITIVOS d ON d.ID_EQUIPO = r.ID_EQUIPO
-            LEFT JOIN EMPLEADOS_IHSS e ON TRIM(TO_CHAR(e.NPAGO)) = TRIM(TO_CHAR(r.NO_PAGO_NUEVO))
-            LEFT JOIN EMPLEADOS_IHSS e_ant ON TRIM(TO_CHAR(e_ant.NPAGO)) = TRIM(TO_CHAR(r.NO_PAGO_ANTERIOR))
+            LEFT JOIN EMPLEADOS_POR_PAGO e_ant ON e_ant.NPAGO = TRIM(TO_CHAR(r.NO_PAGO_ANTERIOR))
             LEFT JOIN DEPARTAMENTO_IHSS a_ant ON a_ant.DEPARTAMENTO_IHSS_ID = e_ant.DEPARTAMENTO_IHSS_ID
             LEFT JOIN DEPARTAMENTO_IHSS a_new ON a_new.DEPARTAMENTO_IHSS_ID = r.ID_AREA_NUEVO
             LEFT JOIN EDIFICIO b_new ON b_new.EDIFICIO_ID = a_new.EDIFICIO_ID
@@ -66,6 +75,15 @@ public sealed class ReassignmentService(InventoryDbContext dbContext) : Assignme
     public Task CreateReassignment(CreateReassignmentDto reassignment, CancellationToken cancellationToken) =>
         InTransaction(async (connection, transaction) =>
         {
+            // Sin esta comprobación, un equipo borrado mientras el formulario seguía abierto no
+            // guardaba nada y la pantalla igual mostraba la reasignación como registrada.
+            if (!await Exists(connection, transaction,
+                "SELECT 1 FROM DISPOSITIVOS WHERE ID_EQUIPO = :idEquipo", cancellationToken,
+                ("idEquipo", reassignment.IdEquipo)))
+            {
+                throw new InvalidOperationException("El equipo seleccionado ya no existe. Búscalo de nuevo.");
+            }
+
             var areaBelongsToBuilding = await Exists(connection, transaction, """
                 SELECT 1
                 FROM DEPARTAMENTO_IHSS

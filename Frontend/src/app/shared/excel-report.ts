@@ -146,6 +146,20 @@ export function isInvalidDateRange(range: ReportDateRange): boolean {
   return !!range.desde && !!range.hasta && range.desde > range.hasta;
 }
 
+/**
+ * Aviso de los reportes que exigen el rango completo, igual que el reporte del Control de
+ * permisos: mientras devuelva texto, el botón de exportar queda deshabilitado.
+ */
+export function requiredDateRangeNotice(range: ReportDateRange): string {
+  if (!range.desde || !range.hasta) return 'Elige la fecha "desde" y la fecha "hasta" para exportar el reporte.';
+  return dateRangeError(range);
+}
+
+/** Único aviso que se muestra en pantalla: con fechas al revés el botón desactivado no se explica solo. */
+export function dateRangeError(range: ReportDateRange): string {
+  return isInvalidDateRange(range) ? 'La fecha "desde" no puede ser posterior a la fecha "hasta".' : '';
+}
+
 /** true si la fecha de la API cae en el rango (días completos). Sin rango entra todo; sin fecha, nada. */
 export function isInDateRange(value: string | null | undefined, range: ReportDateRange): boolean {
   if (!range.desde && !range.hasta) return true;

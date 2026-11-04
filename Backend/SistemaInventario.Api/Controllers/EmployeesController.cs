@@ -13,7 +13,7 @@ namespace SistemaInventario.Api.Controllers;
 public sealed class EmployeesController(IEmployeeService employeeService) : ControllerBase
 {
     private const string EmployeeNotFound = "No se encontró el empleado indicado.";
-    private const string EmployeeInUse = "No se puede eliminar el empleado porque tiene dispositivos o reasignaciones asociadas.";
+    private const string EmployeeInUse = "No se puede eliminar el empleado porque tiene dispositivos, reasignaciones o tickets asociados.";
 
     [HttpGet("employees/search")]
     [Authorize(Policy = ModulePolicies.AssignmentSupport)]

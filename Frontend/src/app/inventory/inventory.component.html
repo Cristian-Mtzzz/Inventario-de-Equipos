@@ -100,7 +100,7 @@
             }
             @if (employeeCatalogError) { <p class="feedback error" role="alert">{{ employeeCatalogError }}</p> }
 
-            <button type="submit">
+            <button type="submit" [disabled]="isSavingDevice">
                 {{ deviceBatchCount > 1 && deviceBatchCurrent < deviceBatchCount ? 'Guardar y siguiente (' + deviceBatchCurrent + '/' + deviceBatchCount + ')' : 'Agregar dispositivo' }}
             </button>
         </form>
@@ -163,7 +163,11 @@
 
                 <tbody>
                     <!-- Filas de la tabla de inventario -->
-                    @if (filteredDevices.length === 0) {
+                    @if (isRefreshing) {
+                    <tr>
+                        <td colspan="11" class="empty">Cargando dispositivos...</td>
+                    </tr>
+                    } @else if (filteredDevices.length === 0) {
                     <tr>
                         <td colspan="11">No se encontraron equipos con los filtros actuales.</td>
                     </tr>
@@ -295,7 +299,8 @@
                         <th>ACCIÓN</th>
                     </tr>
                 </thead>
-                <tbody>@for (item of filteredReassignments | page: reassignmentPage : reassignmentPageSize; track item.IdReasignacion) { <tr>
+                <tbody>@if (isRefreshing) { <tr><td colspan="11" class="empty">Cargando reasignaciones...</td></tr> } @else {
+                    @for (item of filteredReassignments | page: reassignmentPage : reassignmentPageSize; track item.IdReasignacion) { <tr>
                         <td>{{ item.NombreTipo || '-' }}</td>
                         <td>{{ item.Marca || '-' }}</td>
                         <td>{{ item.Modelo || '-' }}</td>
@@ -310,7 +315,7 @@
                             (click)="selectDeviceForReassignmentFromItem(item)">Reasignar</button></td>
                     </tr> } @empty { <tr>
                         <td colspan="11">{{ reassignmentSearchTerm.trim() ? 'No hay reasignaciones que coincidan con la búsqueda.' : 'Todavía no hay reasignaciones registradas.' }}</td>
-                    </tr> }</tbody>
+                    </tr> } }</tbody>
             </table>
         </div>
         <app-table-paginator [total]="filteredReassignments.length" [(page)]="reassignmentPage" [pageSize]="reassignmentPageSize" label="Paginación de reasignaciones" />
@@ -384,7 +389,7 @@
                     </select>
                 </label>
                 <div class="modal-actions"><button type="button" class="secondary"
-                        (click)="cancelEdit()">Cancelar</button><button type="submit">Guardar cambios</button></div>
+                        (click)="cancelEdit()">Cancelar</button><button type="submit" [disabled]="isSavingDevice">Guardar cambios</button></div>
             </form>
         </section>
     </div>

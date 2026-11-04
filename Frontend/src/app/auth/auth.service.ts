@@ -129,6 +129,7 @@ export class AuthService {
       case 'TecnicoTaller': return '/taller/tecnico';
       case 'AdminTaller': return '/taller';
       case 'AdminTicket': return '/tickets';
+      case 'TecnicoTicket': return '/tickets';
       default: return '/sin-acceso';
     }
   }

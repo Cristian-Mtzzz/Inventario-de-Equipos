@@ -61,8 +61,8 @@
   display: flex;
   align-items: center;
   gap: 1.25rem;
-  height: 72px;
-  padding: 0 10px;
+  height: 92px;
+  padding: 0 14px;
   color: #f7faf8;
   background: linear-gradient(120deg, #1f5857, #2f8683 55%, #276968);
   background-size: 200% 200%;
@@ -82,8 +82,8 @@
 
 .header-title {
   font-family: 'Space Grotesk', sans-serif;
-  font-size: 1.05rem;
-  font-weight: 600;
+  font-size: 1.6rem;
+  font-weight: 700;
   letter-spacing: .01em;
 }
 
@@ -93,7 +93,8 @@
   flex: none;
   width: auto;
   max-width: 45vw;
-  height: 56px;
+  /* Ocupa casi todo el alto de la franja verde (92px). */
+  height: 84px;
   object-fit: contain;
   filter: brightness(1.3) saturate(1.15)
     drop-shadow(0 1px 1px rgba(8, 30, 31, .55))
@@ -104,7 +105,7 @@
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  min-height: calc(100dvh - 72px);
+  min-height: calc(100dvh - 92px);
   padding: 3rem 1.5rem 1.5rem;
 }
 
@@ -289,7 +290,7 @@ footer span {
   }
 
   .header-title {
-    font-size: .7rem;
+    font-size: .95rem;
   }
 
   .form-panel {

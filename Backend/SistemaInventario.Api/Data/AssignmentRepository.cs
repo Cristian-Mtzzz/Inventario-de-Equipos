@@ -45,13 +45,8 @@ public abstract class AssignmentRepository(InventoryDbContext dbContext) : Oracl
         bool exists = false;
         if (numeroPago is not null && nombreAsignado is not null)
         {
-            exists = await Exists(connection, transaction, """
-                SELECT 1
-                FROM EMPLEADOS_IHSS
-                WHERE TRIM(NPAGO) = TRIM(:pago)
-                   OR UPPER(TRIM(NOMBRE_EMPLEADO)) = UPPER(TRIM(:nombre))
-                """, cancellationToken,
-                ("pago", numeroPago), ("nombre", nombreAsignado));
+            exists = await SavePaymentNumberOnEmployee(
+                connection, transaction, numeroPago, nombreAsignado, cancellationToken);
         }
         else if (numeroPago is not null)
         {
@@ -90,6 +85,60 @@ public abstract class AssignmentRepository(InventoryDbContext dbContext) : Oracl
         }
 
         return (numeroPago, nombreAsignado);
+    }
+
+    // El No. de pago escrito en el formulario queda guardado en el empleado elegido cuando este
+    // todavía no lo tiene. Devuelve false si no hay ningún empleado con ese nombre (hay que registrarlo).
+    private static async Task<bool> SavePaymentNumberOnEmployee(
+        DbConnection connection,
+        DbTransaction transaction,
+        string numeroPago,
+        string nombreAsignado,
+        CancellationToken cancellationToken)
+    {
+        if (await Exists(connection, transaction, """
+            SELECT 1
+            FROM EMPLEADOS_IHSS
+            WHERE TRIM(NPAGO) = TRIM(:pago)
+              AND UPPER(TRIM(NOMBRE_EMPLEADO)) = UPPER(TRIM(:nombre))
+            """, cancellationToken, ("pago", numeroPago), ("nombre", nombreAsignado)))
+        {
+            return true;
+        }
+
+        // EMPLEADOS_IHSS no tiene restricción única sobre NPAGO: se evita repetirlo en otro empleado.
+        var takenBy = await GetScalar<string?>(connection, transaction, """
+            SELECT MAX(NOMBRE_EMPLEADO)
+            FROM EMPLEADOS_IHSS
+            WHERE TRIM(NPAGO) = TRIM(:pago)
+            """, cancellationToken, ("pago", numeroPago));
+        if (!string.IsNullOrWhiteSpace(takenBy))
+        {
+            throw new InvalidOperationException($"El No. de pago {numeroPago} ya pertenece a {takenBy.Trim()}.");
+        }
+
+        var updated = await Execute(connection, transaction, """
+            UPDATE EMPLEADOS_IHSS
+            SET NPAGO = :pago
+            WHERE UPPER(TRIM(NOMBRE_EMPLEADO)) = UPPER(TRIM(:nombre))
+              AND TRIM(NPAGO) IS NULL
+              AND ROWNUM = 1
+            """, cancellationToken, ("pago", numeroPago), ("nombre", nombreAsignado));
+        if (updated > 0) return true;
+
+        // El empleado ya tiene otro número: se cambia desde Empleados para no sobrescribirlo sin querer.
+        var currentPayment = await GetScalar<string?>(connection, transaction, """
+            SELECT MAX(TRIM(NPAGO))
+            FROM EMPLEADOS_IHSS
+            WHERE UPPER(TRIM(NOMBRE_EMPLEADO)) = UPPER(TRIM(:nombre))
+            """, cancellationToken, ("nombre", nombreAsignado));
+        if (!string.IsNullOrWhiteSpace(currentPayment))
+        {
+            throw new InvalidOperationException(
+                $"{nombreAsignado} ya tiene el No. de pago {currentPayment}. Si cambió, actualízalo en Empleados.");
+        }
+
+        return false;
     }
 
     // Saca del combo la pieza que se asignó por separado: pasa a ser un dispositivo individual

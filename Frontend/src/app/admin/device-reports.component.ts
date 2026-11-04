@@ -1,7 +1,7 @@
 import { ChangeDetectorRef, Component, inject, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize, forkJoin, from, map, mergeMap, of, switchMap, toArray } from 'rxjs';
-import { ReportColumn, ReportDateRange, addReportSheet, cellText, createReportWorkbook, dateRangeLabel, downloadReportWorkbook, emptyReportDateRange, excelDate, generatedAt, isInDateRange, isInvalidDateRange, reportFileName } from '../shared/excel-report';
+import { ReportColumn, ReportDateRange, addReportSheet, cellText, createReportWorkbook, dateRangeLabel, downloadReportWorkbook, emptyReportDateRange, excelDate, generatedAt, isInDateRange, reportFileName, dateRangeError as dateRangeErrorText, requiredDateRangeNotice } from '../shared/excel-report';
 import { UppercaseDirective } from '../shared/uppercase.directive';
 import { AdminService } from './admin.service';
 import { Area, Building, Device, DevicePageQuery, DeviceType, RegionalOption } from './admin.models';
@@ -10,7 +10,8 @@ import { Area, Building, Device, DevicePageQuery, DeviceType, RegionalOption } f
 const REPORT_PAGE_SIZE = 500;
 // Valor del filtro de tipo que exporta solo las piezas de combos de escritorio.
 const COMBO_TYPE = 'COMBOS';
-type ReportType = 'all' | 'type' | 'brand' | 'state' | 'regional' | 'building' | 'area';
+// '' = todavía no se eligió: como en el reporte de Permisos, no se exporta sin una instrucción.
+type ReportType = '' | 'all' | 'type' | 'brand' | 'state' | 'regional' | 'building' | 'area';
 
 /**
  * Genera reportes XLSX de dispositivos para usuarios con permiso DISPOSITIVOS.
@@ -31,7 +32,7 @@ export class DeviceReportsComponent {
   regionals: RegionalOption[] = [];
   buildings: Building[] = [];
   areas: Area[] = [];
-  reportType: ReportType = 'all';
+  reportType: ReportType = '';
   dateRange: ReportDateRange = emptyReportDateRange();
   brand = '';
   typeId: number | typeof COMBO_TYPE | null = null;
@@ -89,15 +90,28 @@ export class DeviceReportsComponent {
   }
 
   get canExport(): boolean {
-    if (this.isLoadingFilters || this.isExporting) return false;
+    return !this.isLoadingFilters && !this.isExporting && !this.exportNotice;
+  }
+
+  // Fechas al revés: es lo único que se avisa en pantalla; lo demás solo deja el botón desactivado.
+  get dateRangeError(): string {
+    return dateRangeErrorText(this.dateRange);
+  }
+
+  // Qué falta elegir para poder exportar; vacío cuando el reporte ya tiene su instrucción.
+  get exportNotice(): string {
+    // Como en los demás reportes, el rango de fechas es obligatorio para cualquier tipo de reporte.
+    const dates = requiredDateRangeNotice(this.dateRange);
+    if (dates) return dates;
     switch (this.reportType) {
-      case 'type': return this.typeId !== null;
-      case 'brand': return this.brand.trim().length > 0;
-      case 'state': return this.state.length > 0;
-      case 'regional': return this.regionalId !== null;
-      case 'building': return this.regionalId !== null && this.buildingId !== null;
-      case 'area': return this.regionalId !== null && this.buildingId !== null && this.areaId !== null;
-      default: return true;
+      case '': return 'Elige el tipo de reporte para exportarlo.';
+      case 'type': return this.typeId !== null ? '' : 'Elige el tipo de dispositivo.';
+      case 'brand': return this.brand.trim().length > 0 ? '' : 'Escribe la marca.';
+      case 'state': return this.state.length > 0 ? '' : 'Elige el estado.';
+      case 'regional': return this.regionalId !== null ? '' : 'Elige la regional.';
+      case 'building': return this.regionalId !== null && this.buildingId !== null ? '' : 'Elige la regional y el edificio.';
+      case 'area': return this.regionalId !== null && this.buildingId !== null && this.areaId !== null ? '' : 'Elige la regional, el edificio y el área.';
+      default: return '';
     }
   }
 
@@ -174,8 +188,8 @@ export class DeviceReportsComponent {
     // Aplica el criterio elegido, descarga todas las páginas en lotes de cuatro y genera un solo XLSX.
     this.errorMessage = '';
     this.message = '';
-    if (isInvalidDateRange(this.dateRange)) {
-      this.errorMessage = 'La fecha "desde" no puede ser posterior a la fecha "hasta".';
+    if (this.exportNotice) {
+      this.errorMessage = this.exportNotice;
       return;
     }
     this.isExporting = true;
@@ -304,6 +318,7 @@ export class DeviceReportsComponent {
 
   private reportTypeLabel(): string {
     return {
+      '': '',
       all: 'Todos los dispositivos',
       type: 'Por tipo de dispositivo',
       brand: 'Por marca',

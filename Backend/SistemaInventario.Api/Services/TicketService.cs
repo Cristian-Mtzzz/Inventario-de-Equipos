@@ -51,19 +51,9 @@ public sealed class TicketService(InventoryDbContext dbContext) : OracleReposito
             cancellationToken,
             idTecnico is null ? [] : [("idTecnico", (object?)idTecnico.Value)]);
 
-    // Los tickets los atienden los técnicos de taller: el mismo rol que ya existía.
+    // Los tickets los atienden el técnico de taller y el técnico que solo atiende tickets.
     public Task<IReadOnlyList<TicketTechnicianDto>> GetTechnicians(CancellationToken cancellationToken) =>
-        ReadList("""
-            SELECT ID_USUARIO, NVL(TRIM(NOMBRE_PERSONA), USUARIO) AS NOMBRE
-            FROM USUARIOS
-            WHERE ROL = 'TecnicoTaller'
-              AND UPPER(ESTADO) = 'ACTIVO'
-              AND (FECHA_EXPIRACION IS NULL OR FECHA_EXPIRACION >= TRUNC(SYSDATE))
-            ORDER BY NOMBRE
-            """, reader => new TicketTechnicianDto(
-                ReadInt(reader, "ID_USUARIO"),
-                ReadString(reader, "NOMBRE")),
-            cancellationToken);
+        ReadActiveTechnicians(includeTicketOnly: true, (id, nombre) => new TicketTechnicianDto(id, nombre), cancellationToken);
 
     // Minutos que definen el color del ticket pendiente. Si la tabla todavía no existe o
     // le falta algún valor, se usan los de referencia para que la tabla siga funcionando.

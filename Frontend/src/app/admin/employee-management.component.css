@@ -5,7 +5,7 @@
 
 /* Buscador a la izquierda; el selector de registros y Refrescar cierran la fila. */
 .filter-bar.employee-filter-bar {
-    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
 }
 

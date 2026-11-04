@@ -17,7 +17,7 @@ import { ModuleTabsComponent } from '../shared/module-tabs.component';
 import { Area, Building, DeviceType, RegionalOption } from '../admin/admin.models';
 import { Maintenance, MaintenanceAssessmentRequest, MaintenanceEntryRequest, MaintenanceExitRequest, ReceptionDefaults, ReceptionEntryRequest, WorkshopDevice, WorkshopTechnician } from './taller.models';
 import { TallerService } from './taller.service';
-import { ReportColumn, ReportDateRange, addReportSheet, createReportWorkbook, dateRangeLabel, downloadReportWorkbook, emptyReportDateRange, excelDate, generatedAt, isInDateRange, isInvalidDateRange, reportFileName } from '../shared/excel-report';
+import { ReportColumn, ReportDateRange, addReportSheet, createReportWorkbook, dateRangeLabel, downloadReportWorkbook, emptyReportDateRange, excelDate, generatedAt, isInDateRange, reportFileName, requiredDateRangeNotice, dateRangeError } from '../shared/excel-report';
 
 @Component({
   selector: 'app-taller',
@@ -46,6 +46,8 @@ export class TallerComponent {
   selectedReceptionRegionalId: number | null = null;
   selectedReceptionOriginId: number | null = null;
   selectedMaintenance: Maintenance | null = null;
+  // Dictamen abierto en modo consulta porque la reparación ya tiene la salida registrada.
+  assessmentReadOnly = false;
   pendingDeleteMaintenance: Maintenance | null = null;
   activeWindow: 'reception' | 'entry' | 'exit' | 'assessment' | 'assign' | 'report' | null = null;
   // Filtros de la ventana "Exportar reporte": rango de fecha de ingreso y tipo de equipo ('' = todos).
@@ -94,7 +96,7 @@ export class TallerComponent {
     // Refresca en paralelo las tablas y datos de equipos, reparaciones y tipos disponibles.
     this.errorMessage = '';
     if (this.canWorkOnRepairs) this.loadMaintenances();
-    if (this.isWorkshopAdmin) this.loadDevices();
+    // La lista completa de equipos solo la usa "Registrar ingreso": se pide al abrir esa ventana.
     if (this.canReceive) {
       this.loadDeviceTypes();
       this.loadRegionals();
@@ -213,14 +215,23 @@ export class TallerComponent {
   loadDevices(): void {
     // Obtiene equipos disponibles para asociarlos a reparaciones.
     this.tallerService.getDevices().subscribe({
-      next: (devices) => this.devices = devices,
-      error: () => this.errorMessage = 'No se pudieron cargar los dispositivos desde la base de datos.',
+      next: (devices) => {
+        this.devices = devices;
+        this.changeDetector.markForCheck();
+      },
+      error: () => {
+        this.errorMessage = 'No se pudieron cargar los dispositivos desde la base de datos.';
+        this.changeDetector.markForCheck();
+      },
     });
   }
 
   loadMaintenances(): void {
     // Consulta reparaciones y actualiza el estado de carga de la tabla.
     this.isLoading = true;
+    // Avisa a la vista para que la tabla muestre "Cargando..." también cuando la recarga la pide el
+    // panel (por ejemplo, su botón Refrescar); si no, solo se redibuja al llegar los datos.
+    this.changeDetector.markForCheck();
     this.tallerService.getMaintenances().subscribe({
       next: (maintenances) => {
         this.maintenances = maintenances;
@@ -284,19 +295,37 @@ export class TallerComponent {
     this.activeWindow = 'report';
   }
 
+  // Igual que el reporte de Permisos: sin el rango completo no se puede exportar.
+  get reportNotice(): string {
+    return requiredDateRangeNotice(this.reportDateRange);
+  }
+
+  get reportRangeError(): string {
+    return dateRangeError(this.reportDateRange);
+  }
+
+  // Conteo previo con las reparaciones ya cargadas en la tabla; al exportar se vuelven a pedir.
+  get reportCount(): number {
+    return this.maintenances.filter((item) => this.matchesReportFilters(item)).length;
+  }
+
+  // Rango sobre la fecha de ingreso al taller; el tipo se compara sin importar mayúsculas.
+  private matchesReportFilters(item: Maintenance): boolean {
+    return isInDateRange(item.FechaIngreso, this.reportDateRange)
+      && (!this.reportDeviceType || item.TipoDispositivo?.trim().toUpperCase() === this.reportDeviceType);
+  }
+
   async exportWorkshopReport(): Promise<void> {
     if (!this.isWorkshopAdmin) return;
     this.clearMessages();
-    if (isInvalidDateRange(this.reportDateRange)) {
-      this.errorMessage = 'La fecha "desde" no puede ser posterior a la fecha "hasta".';
+    if (this.reportNotice) {
+      this.errorMessage = this.reportNotice;
       return;
     }
     this.isSaving = true;
     try {
-      // Rango sobre la fecha de ingreso al taller; el tipo se compara sin importar mayúsculas.
-      const maintenances = (await firstValueFrom(this.tallerService.getMaintenances())).filter((item) =>
-        isInDateRange(item.FechaIngreso, this.reportDateRange)
-        && (!this.reportDeviceType || item.TipoDispositivo?.trim().toUpperCase() === this.reportDeviceType));
+      const maintenances = (await firstValueFrom(this.tallerService.getMaintenances()))
+        .filter((item) => this.matchesReportFilters(item));
       await this.createWorkshopWorkbook(maintenances);
       this.activeWindow = null;
       this.message = `Reporte del taller exportado: ${maintenances.length} reparaciones.`;
@@ -423,6 +452,7 @@ export class TallerComponent {
     this.clearMessages();
     this.entry = { IdEquipo: 0, Dictamen: '', TipoReparacion: '', FechaIngreso: this.getCurrentDateTime() };
     this.activeWindow = 'entry';
+    this.loadDevices();
   }
 
   // Guarda la información de ingreso 
@@ -496,6 +526,8 @@ export class TallerComponent {
     if (!this.canWorkOnRepairs) return;
     this.clearMessages();
     this.selectedMaintenance = item;
+    // Con la salida registrada el dictamen ya es constancia: se muestra pero no se puede cambiar.
+    this.assessmentReadOnly = !this.isOpenMaintenance(item);
     this.assessment = {
       // "PENDIENTE" es solo la marca interna de "sin dictamen": el campo se abre vacío.
       Dictamen: this.display(item.Dictamen) === '-' ? '' : (item.Dictamen ?? ''),
@@ -507,7 +539,7 @@ export class TallerComponent {
   }
 
   saveAssessment(): void {
-    if (!this.selectedMaintenance) return;
+    if (!this.selectedMaintenance || this.assessmentReadOnly) return;
     // Todos los campos del dictamen son obligatorios.
     if (!this.assessment.EquipoEnGarantia || !this.assessment.Dictamen?.trim()
       || !this.assessment.PiezasSustituidas?.trim() || !this.assessment.Observaciones?.trim()) {

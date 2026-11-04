@@ -171,6 +171,9 @@ export class CatalogManagementComponent {
   //metodo para cargar los catalogos de regionals, buildings, departments y empleados 
   loadCatalogs(): void {
     this.isLoading = true;
+    // Avisa a la vista para que la tabla muestre "Cargando..." también cuando la recarga la pide el
+    // panel (por ejemplo, su botón Refrescar); si no, solo se redibuja al llegar los datos.
+    this.changeDetector.markForCheck();
     this.errorMessage = '';
     forkJoin({
       regionals: this.adminService.getRegionals(),

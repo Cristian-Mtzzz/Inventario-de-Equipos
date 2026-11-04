@@ -16,8 +16,8 @@
     align-items: center;
     justify-content: space-between;
     gap: 1.25rem;
-    min-height: 4.5rem;
-    padding: .7rem var(--shell-gutter, 2rem);
+    min-height: 5.5rem;
+    padding: .3rem var(--shell-gutter, 2rem);
     border-bottom: 1px solid #d8e4e0;
     background: rgba(255, 255, 255, .96);
     box-shadow: 0 2px 14px rgba(23, 63, 67, .07);
@@ -58,13 +58,14 @@
     border-radius: 0;
 }
 
-/* La imagen fija su propio alto (56px, unos 115px de ancho) y el ancho sale de su proporción.
-   El filtro aclara el dorado y le pone un contorno oscuro fino para separarlo del fondo. */
+/* La imagen fija su propio alto (80px, casi todo el alto de la cabecera; unos 165px de ancho)
+   y el ancho sale de su proporción. El filtro aclara el dorado y le pone un contorno oscuro
+   fino para separarlo del fondo. */
 .brand-logo img {
     display: block;
     width: auto;
-    height: 56px;
-    max-width: min(8rem, 40vw);
+    height: 80px;
+    max-width: min(11rem, 40vw);
     object-fit: contain;
     filter: brightness(1.15) saturate(1.1) drop-shadow(0 0 1px rgba(0, 0, 0, .55));
 }
@@ -97,7 +98,7 @@
 .brand-name {
     color: #18383b;
     font-family: 'Space Grotesk', 'Segoe UI', sans-serif;
-    font-size: 1.05rem;
+    font-size: 1.5rem;
     font-weight: 800;
     white-space: nowrap;
 }
@@ -105,7 +106,7 @@
 .brand-module {
     overflow: hidden;
     color: #617573;
-    font-size: .78rem;
+    font-size: .95rem;
     font-weight: 600;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -187,6 +188,14 @@
 @media (max-width: 900px) {
     .user-text {
         display: none;
+    }
+
+    .brand-logo img {
+        height: 64px;
+    }
+
+    .brand-name {
+        font-size: 1.2rem;
     }
 }
 

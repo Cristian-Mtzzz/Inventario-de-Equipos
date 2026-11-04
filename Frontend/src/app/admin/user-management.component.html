@@ -29,7 +29,11 @@
           </tr>
         </thead>
         <tbody>
-          @if (filteredUsers.length === 0) {
+          @if (isLoadingUsers) {
+          <tr>
+            <td colspan="8">Cargando usuarios...</td>
+          </tr>
+          } @else if (filteredUsers.length === 0) {
           <tr>
             <td colspan="8">No se encontraron usuarios con los filtros actuales.</td>
           </tr>
@@ -143,9 +147,10 @@
           <label for="modalRol">Rol:</label>
           <select id="modalRol" [(ngModel)]="newUser.Rol" (ngModelChange)="selectUserRole($event)" name="modalRol">
             <option value="Admin">Administrador general</option>
-            <option value="UsuarioComun">Usuario común</option>
+            <option value="UsuarioComun">Usuario</option>
             <option value="RecepcionTaller">Recepción de taller</option>
-            <option value="TecnicoTaller">Técnico de taller</option>
+            <option value="TecnicoTaller">Técnico Taller</option>
+            <option value="TecnicoTicket">Técnico</option>
             <option value="AdminTaller">Administrador de taller</option>
             <option value="AdminTicket">Administrador de tickets</option>
           </select>

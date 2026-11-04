@@ -158,9 +158,16 @@ public sealed partial class DevicesController(IDeviceService deviceService) : Co
             return BadRequest(new { Message = validationMessage });
         }
 
-        return await deviceService.UpdateDevice(idEquipo, device, applyToCombo, cancellationToken)
-            ? NoContent()
-            : NotFound(new { Message = DeviceNotFound });
+        try
+        {
+            return await deviceService.UpdateDevice(idEquipo, device, applyToCombo, cancellationToken)
+                ? NoContent()
+                : NotFound(new { Message = DeviceNotFound });
+        }
+        catch (InvalidOperationException exception)
+        {
+            return Conflict(new { Message = exception.Message });
+        }
     }
 
     [HttpDelete("devices/{idEquipo:int}")]

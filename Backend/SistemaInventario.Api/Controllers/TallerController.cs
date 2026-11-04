@@ -144,15 +144,22 @@ public sealed class TallerController(ITallerService tallerService) : ControllerB
             assignedTechnician = userId;
         }
 
-        return await tallerService.UpdateMaintenanceAssessment(
-                idMantenimiento, assessment with { EquipoEnGarantia = garantia }, assignedTechnician, cancellationToken)
-            ? NoContent()
-            : NotFound(new
-            {
-                Message = assignedTechnician is null
-                    ? MaintenanceNotFound
-                    : "No se encontró una reparación asignada a ti con ese número.",
-            });
+        try
+        {
+            return await tallerService.UpdateMaintenanceAssessment(
+                    idMantenimiento, assessment with { EquipoEnGarantia = garantia }, assignedTechnician, cancellationToken)
+                ? NoContent()
+                : NotFound(new
+                {
+                    Message = assignedTechnician is null
+                        ? MaintenanceNotFound
+                        : "No se encontró una reparación asignada a ti con ese número.",
+                });
+        }
+        catch (InvalidOperationException exception)
+        {
+            return Conflict(new { Message = exception.Message });
+        }
     }
 
     private bool IsWorkshopManager =>

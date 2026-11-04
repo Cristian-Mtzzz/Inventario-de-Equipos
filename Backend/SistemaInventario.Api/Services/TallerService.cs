@@ -144,15 +144,28 @@ public sealed class TallerService(InventoryDbContext dbContext, IConfiguration c
         // Oracle rechaza parámetros que no aparecen en el SQL: el del técnico solo se agrega si se filtra por él.
         if (idTecnico is not null) parameters.Add(("idTecnico", idTecnico));
 
-        return await Execute($"""
+        // Con la salida registrada la reparación está finalizada y su dictamen ya no se modifica.
+        var updated = await Execute($"""
             UPDATE REPARACION
             SET DICTAMEN = :dictamen,
                 PIEZAS_SUSTITUIDAS = :piezasSustituidas,
                 OBSERVACIONES = :observaciones,
                 EQUIPO_EN_GARANTIA = COALESCE(:equipoEnGarantia, EQUIPO_EN_GARANTIA)
             WHERE ID_REPARACION = :idReparacion
+              AND FECHA_SALIDA IS NULL
             {(idTecnico is null ? string.Empty : "AND ID_TECNICO = :idTecnico")}
-            """, cancellationToken, parameters.ToArray()) > 0;
+            """, cancellationToken, parameters.ToArray());
+        if (updated > 0) return true;
+
+        var finished = await ReadList("""
+            SELECT 1 AS FINALIZADA
+            FROM REPARACION
+            WHERE ID_REPARACION = :idReparacion
+              AND FECHA_SALIDA IS NOT NULL
+            """, reader => true, cancellationToken, ("idReparacion", idMantenimiento));
+        return finished.Count > 0
+            ? throw new InvalidOperationException("La reparación ya tiene la salida registrada: su dictamen no se puede modificar.")
+            : false;
     }
 
     public async Task<bool> RegisterMaintenanceExit(
@@ -178,18 +191,8 @@ public sealed class TallerService(InventoryDbContext dbContext, IConfiguration c
             WHERE ID_REPARACION = :idReparacion
             """, cancellationToken, ("idReparacion", idMantenimiento)) > 0;
 
-    // Usuarios activos y vigentes con rol de técnico; el nombre es el de la persona o, si falta, el usuario.
     public Task<IReadOnlyList<WorkshopTechnicianDto>> GetTechnicians(CancellationToken cancellationToken) =>
-        ReadList("""
-            SELECT ID_USUARIO, NVL(TRIM(NOMBRE_PERSONA), USUARIO) NOMBRE
-            FROM USUARIOS
-            WHERE ROL = 'TecnicoTaller'
-              AND UPPER(ESTADO) = 'ACTIVO'
-              AND (FECHA_EXPIRACION IS NULL OR FECHA_EXPIRACION >= TRUNC(SYSDATE))
-            ORDER BY NOMBRE
-            """, reader => new WorkshopTechnicianDto(
-            ReadInt(reader, "ID_USUARIO"),
-            ReadString(reader, "NOMBRE")), cancellationToken);
+        ReadActiveTechnicians(includeTicketOnly: false, (id, nombre) => new WorkshopTechnicianDto(id, nombre), cancellationToken);
 
     // Guarda en la reparación el nombre del técnico (columna TECNICO, la que muestran la tabla y el reporte)
     // y su ID de usuario. Como quien entrega el equipo en la salida es el mismo técnico asignado, también

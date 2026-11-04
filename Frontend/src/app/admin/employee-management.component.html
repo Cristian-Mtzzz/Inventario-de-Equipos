@@ -9,9 +9,6 @@
         placeholder="Buscar por empleado, No. de pago, departamento, edificio o región"
         aria-label="Buscar empleados" />
       <app-table-page-size [(page)]="employeePage" [(pageSize)]="employeePageSize" />
-      <button type="button" class="secondary" (click)="reload()" [disabled]="isLoading">
-        {{ isLoading ? 'Cargando...' : 'Refrescar' }}
-      </button>
     </div>
     <p class="employee-hint">Escribe el No. de pago y presiona <strong>Enter</strong> para guardarlo.</p>
     <div class="table-wrap employees-table-wrap">
@@ -26,7 +23,7 @@
           </tr>
         </thead>
         <tbody>
-          @if (isLoading && employees.length === 0) {
+          @if (isLoading) {
           <tr>
             <td colspan="5">Cargando empleados...</td>
           </tr>

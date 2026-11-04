@@ -23,6 +23,30 @@ input {
     font: inherit;
 }
 
+/* Botones desactivados de las ventanas (por ejemplo, "Exportar a Excel" sin rango de fechas):
+   el tema rojo del panel no los distinguía y parecían habilitados. */
+:is(.admin-shell, .inventory-shell, .workshop-shell) :is(.modal-actions, .workshop-modal) button:disabled {
+    /* !important: los estilos de botón del tema (más específicos) ponen la manito aunque esté desactivado. */
+    cursor: not-allowed !important;
+    opacity: .5;
+}
+
+/* Aviso bajo los filtros de los reportes (cuántos registros saldrán o un error de fechas). */
+.field-hint {
+    margin: .25rem 0 0;
+    color: #718080;
+    font-size: .8rem;
+}
+
+/* Campos bloqueados (deshabilitados o de solo lectura) en gris, igual que el buscador de los
+   combos deshabilitado: así se distingue lo que todavía no se puede llenar o no se puede cambiar. */
+:is(.admin-shell, .inventory-shell, .workshop-shell)
+    :is(input:not([type=checkbox]):not([type=radio]), select, textarea):is(:disabled, [readonly]) {
+    color: #718080;
+    background: #f0f4f3;
+    cursor: not-allowed;
+}
+
 .table-id-column {
     width: 4.25rem;
     min-width: 4.25rem;

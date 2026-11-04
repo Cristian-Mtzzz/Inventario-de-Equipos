@@ -16,15 +16,15 @@
     <button type="button" [class.active]="activeSection === 'reassignments'"
       (click)="selectSection('reassignments')">Reasignaciones</button>
     }
+    @if (canAccessAdminSection('tickets')) {
+    <button type="button" [class.active]="activeSection === 'tickets'" (click)="selectSection('tickets')">Tickets</button>
+    }
     @if (canAccessAdminSection('workshop')) {
     <button type="button" [class.active]="activeSection === 'workshop'"
       (click)="selectSection('workshop')">Taller</button>
     }
     @if (canAccessAdminSection('employees')) {
     <button type="button" [class.active]="activeSection === 'employees'" (click)="selectSection('employees')">Empleados</button>
-    }
-    @if (canAccessAdminSection('tickets')) {
-    <button type="button" [class.active]="activeSection === 'tickets'" (click)="selectSection('tickets')">Tickets</button>
     }
     @if (canAccessAdminSection('catalogs')) {
     <button type="button" [class.active]="activeSection === 'catalogs'" (click)="selectSection('catalogs')">Mantenimiento</button>
@@ -113,7 +113,9 @@
           </tr>
         </thead>
         <tbody>
-          @if (comboGroups.length === 0) {
+          @if (isRefreshing) {
+          <tr><td colspan="11" class="empty">Cargando dispositivos...</td></tr>
+          } @else if (comboGroups.length === 0) {
           <tr><td colspan="11">No se encontraron combos de escritorio con los filtros actuales.</td></tr>
           } @else {
           @for (group of comboGroups; track group.NCombo; let comboIndex = $index) {
@@ -170,7 +172,11 @@
 
         <!-- tabla de dispositivos-->
         <tbody>
-          @if (!hasDeviceQuery) {
+          @if (isRefreshing) {
+          <tr>
+            <td colspan="11" class="empty">Cargando dispositivos...</td>
+          </tr>
+          } @else if (!hasDeviceQuery) {
           <tr>
             <td colspan="11" class="empty">Busca un dispositivo o selecciona un filtro para mostrar resultados.</td>
           </tr>
@@ -328,7 +334,8 @@
             <th>ACCIÓN</th>
           </tr>
         </thead>
-        <tbody>@for (item of filteredReassignments | page: reassignmentCurrentPage : reassignmentPageSize; track item.IdReasignacion) { <tr>
+        <tbody>@if (isRefreshing) { <tr><td colspan="11" class="empty">Cargando reasignaciones...</td></tr> } @else {
+          @for (item of filteredReassignments | page: reassignmentCurrentPage : reassignmentPageSize; track item.IdReasignacion) { <tr>
             <td>{{ item.NombreTipo || '-' }}</td>
             <td>{{ item.Marca || '-' }}</td>
             <td>{{ item.Modelo || '-' }}</td>
@@ -343,7 +350,7 @@
                 (click)="selectDeviceForReassignmentFromItem(item)">Reasignar</button></td>
           </tr> } @empty { <tr>
             <td colspan="11">{{ reassignmentSearchTerm.trim() ? 'No hay reasignaciones que coincidan con la búsqueda.' : 'Todavía no hay reasignaciones registradas.' }}</td>
-          </tr> }</tbody>
+          </tr> } }</tbody>
       </table>
     </div>
     <app-table-paginator [total]="filteredReassignments.length" [(page)]="reassignmentCurrentPage" [pageSize]="reassignmentPageSize" label="Paginación de reasignaciones" />
@@ -473,7 +480,7 @@
         @if (employeeCatalogError) { <p class="feedback error modal-feedback" role="alert">{{ employeeCatalogError }}</p> }
         @if (errorMessage) { <p class="feedback error modal-feedback" role="alert">{{ errorMessage }}</p> }
         <div class="modal-actions"><button type="button" class="secondary"
-            (click)="cancelEdit()">Cancelar</button><button type="submit">{{ isAssignMode ? 'Asignar' : 'Guardar cambios' }}</button></div>
+            (click)="cancelEdit()">Cancelar</button><button type="submit" [disabled]="isSavingDevice">{{ isAssignMode ? 'Asignar' : 'Guardar cambios' }}</button></div>
       </form>
     </section>
   </div>
@@ -621,7 +628,7 @@
         @if (errorMessage) { <p class="feedback error modal-feedback" role="alert">{{ errorMessage }}</p> }
         <div class="modal-actions">
           <button type="button" class="secondary" (click)="closeDeviceCreateDialog()">Cancelar</button>
-          <button type="submit">
+          <button type="submit" [disabled]="isSavingDevice">
             {{ deviceBatchCount > 1 && deviceBatchCurrent < deviceBatchCount ? 'Guardar y siguiente (' + deviceBatchCurrent + '/' + deviceBatchCount + ')' : 'Agregar' }}
           </button>
         </div>
@@ -647,15 +654,20 @@
       <form class="modal-form" (ngSubmit)="exportReassignmentReport()">
         <div class="user-field">
           <label for="reassignment-report-from">Desde</label>
-          <input id="reassignment-report-from" type="date" [(ngModel)]="reassignmentReportRange.desde" name="reportFrom" />
+          <input id="reassignment-report-from" type="date" [(ngModel)]="reassignmentReportRange.desde" name="reportFrom" required />
         </div>
         <div class="user-field">
           <label for="reassignment-report-to">Hasta</label>
-          <input id="reassignment-report-to" type="date" [(ngModel)]="reassignmentReportRange.hasta" name="reportTo" />
+          <input id="reassignment-report-to" type="date" [(ngModel)]="reassignmentReportRange.hasta" name="reportTo" required />
         </div>
+        @if (!reassignmentReportNotice) {
+        <p class="field-hint">{{ reassignmentReportCount }} reasignación(es) cumplen los filtros.</p>
+        } @else if (reassignmentReportRangeError) {
+        <p class="field-hint" aria-live="polite">{{ reassignmentReportRangeError }}</p>
+        }
         <div class="modal-actions">
           <button type="button" class="secondary" (click)="isReassignmentReportOpen = false">Cancelar</button>
-          <button type="submit" [disabled]="isExportingReassignments">
+          <button type="submit" [disabled]="isExportingReassignments || !!reassignmentReportNotice">
             {{ isExportingReassignments ? 'Generando...' : 'Exportar a Excel' }}</button>
         </div>
       </form>

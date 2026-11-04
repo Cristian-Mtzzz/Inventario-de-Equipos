@@ -139,10 +139,6 @@ public sealed class UserAdminService(InventoryDbContext dbContext) : OracleRepos
         {
             assignedModules = [AppModules.Tickets];
         }
-        else if (AppRoles.IsTicketRole(role))
-        {
-            assignedModules = [AppModules.Tickets];
-        }
         else if (isSuperAdmin)
         {
             assignedModules = [AppModules.SuperAdmin];

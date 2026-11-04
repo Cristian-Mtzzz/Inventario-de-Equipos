@@ -102,6 +102,9 @@ export class UserManagementComponent {
 
     this.usersRequestInFlight = true;
     this.isLoadingUsers = true;
+    // Avisa a la vista para que la tabla muestre "Cargando..." también cuando la recarga la pide el
+    // panel (por ejemplo, su botón Refrescar); si no, solo se redibuja al llegar los datos.
+    this.changeDetector.markForCheck();
     this.adminService.getUsers().pipe(
       retry({ count: 3, delay: 1000 }),
       finalize(() => {
@@ -134,7 +137,7 @@ export class UserManagementComponent {
 
   // Roles de tickets: su módulo lo fija el rol, no las casillas.
   isTicketRole(role: string): boolean {
-    return role === 'AdminTicket';
+    return role === 'AdminTicket' || role === 'TecnicoTicket';
   }
 
   // Los roles con módulo fijo no permiten marcar módulos a mano.

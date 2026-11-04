@@ -309,6 +309,7 @@ public sealed class DeviceService(InventoryDbContext dbContext) : AssignmentRepo
         {
             var assignment = await ResolveAssignment(connection, transaction, device, cancellationToken);
             var newArea = assignment.IsAvailable ? null : device.IdArea;
+            await EnsureEditedInventoryCodeIsFree(connection, transaction, idEquipo, device.CodigoInventario, cancellationToken);
 
             var comboNumber = await GetScalar<string?>(connection, transaction,
                 "SELECT NCOMBO FROM DISPOSITIVOS WHERE ID_EQUIPO = :idEquipo", cancellationToken,
@@ -323,10 +324,11 @@ public sealed class DeviceService(InventoryDbContext dbContext) : AssignmentRepo
             foreach (var previous in previousAssignments)
             {
                 var wasAssigned = string.Equals(previous.Estado, "ASIGNADO", StringComparison.OrdinalIgnoreCase);
+                // Igual que en AssignmentChanged: espacios o mayúsculas distintas no son otro responsable.
                 if (!assignment.IsAvailable
                     && (!wasAssigned
-                        || previous.Pago != assignment.NumeroPago
-                        || previous.Nombre != assignment.NombreAsignado))
+                        || Clean(previous.Pago) != Clean(assignment.NumeroPago)
+                        || !Clean(previous.Nombre).Equals(Clean(assignment.NombreAsignado), StringComparison.OrdinalIgnoreCase)))
                 {
                     await Execute(connection, transaction, """
                         INSERT INTO REASIGNACIONES
@@ -389,12 +391,13 @@ public sealed class DeviceService(InventoryDbContext dbContext) : AssignmentRepo
         (bool IsAvailable, string Estado, string? NumeroPago, string? NombreAsignado) assignment,
         int? newArea)
     {
-        static string Clean(string? value) => value?.Trim() ?? string.Empty;
         return !Clean(previous.Estado).Equals(Clean(assignment.Estado), StringComparison.OrdinalIgnoreCase)
             || Clean(previous.Pago) != Clean(assignment.NumeroPago)
             || !Clean(previous.Nombre).Equals(Clean(assignment.NombreAsignado), StringComparison.OrdinalIgnoreCase)
             || previous.IdArea != newArea;
     }
+
+    private static string Clean(string? value) => value?.Trim() ?? string.Empty;
 
     public Task<bool> DeleteDevice(int idEquipo, CancellationToken cancellationToken) =>
         InTransaction(async (connection, transaction) =>
@@ -451,6 +454,32 @@ public sealed class DeviceService(InventoryDbContext dbContext) : AssignmentRepo
             {
                 throw new InvalidOperationException($"El inventario {code} ya está registrado.");
             }
+        }
+    }
+
+    // Al editar solo se valida si el código cambió: así un equipo que ya compartía código con
+    // otro (datos anteriores a la validación) se puede seguir editando sin tocar su inventario.
+    private static async Task EnsureEditedInventoryCodeIsFree(
+        DbConnection connection,
+        DbTransaction transaction,
+        int idEquipo,
+        string inventoryCode,
+        CancellationToken cancellationToken)
+    {
+        var code = inventoryCode.Trim();
+        var currentCode = await GetScalar<string?>(connection, transaction,
+            "SELECT TRIM(CODIGO_INVENTARIO) FROM DISPOSITIVOS WHERE ID_EQUIPO = :idEquipo", cancellationToken,
+            ("idEquipo", idEquipo));
+        if (string.Equals(currentCode, code, StringComparison.OrdinalIgnoreCase)) return;
+
+        if (await Exists(connection, transaction, """
+            SELECT 1
+            FROM DISPOSITIVOS
+            WHERE UPPER(TRIM(CODIGO_INVENTARIO)) = UPPER(:codigo)
+              AND ID_EQUIPO <> :idEquipo
+            """, cancellationToken, ("codigo", code), ("idEquipo", idEquipo)))
+        {
+            throw new InvalidOperationException($"El inventario {code} ya está registrado.");
         }
     }
 

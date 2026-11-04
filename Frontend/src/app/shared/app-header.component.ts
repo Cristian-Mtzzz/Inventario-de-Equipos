@@ -10,12 +10,13 @@ const LOGO_SRC: string | null = 'logo-login.png';
 
 const ROLE_LABELS: Record<UserRole, string> = {
   Admin: 'Administrador general',
-  UsuarioComun: 'Usuario común',
+  UsuarioComun: 'Usuario',
   Taller: 'Taller',
   AdminTaller: 'Administrador de taller',
   RecepcionTaller: 'Recepción de taller',
-  TecnicoTaller: 'Técnico de taller',
+  TecnicoTaller: 'Técnico Taller',
   AdminTicket: 'Administrador de tickets',
+  TecnicoTicket: 'Técnico',
   Permisos: 'Control de permisos',
 };
 
